@@ -9,8 +9,8 @@
 - UTERM-001
 - UTERM-015: app-level opening and Cmd-O, and the type declarations its router reads. A later remote open command
   would use its path-reading power
-- UTERM-006: M1 builds its document helper the way UTERM-006's image helper is built, and whichever lands first
-  builds the shared helper bundling
+- UTERM-006: M1 builds its document helper the way UTERM-006's image helper is built. UTERM-006 landed first, so M1
+  built the shared helper code. Amended 2026-11-08; see Decision Log.
 - UTERM-013, and UTERM-002's command registry: the find, contents, open, and reload commands are registry entries the
   viewer declares
 - UTERM-004 M2 and M3: M5's remote commands need remote-controlled panes and the applet command hook
@@ -50,10 +50,12 @@ RTF and Word documents load through `NSAttributedString`'s document readers and 
 The readers run in a sandboxed helper process, not in the app. The helper returns the attributed string through secure
 coding, with embedded images already decoded to bitmaps, and the app shows it in its own text view. A helper crash or
 hang ends that load, and the pane says so. The helper is built the way UTERM-006's image helper is: its own
-executable with its own sandbox entitlements, a file descriptor the app opens and passes at spawn, a private
-decode-only protocol with a version handshake, and a footprint cap the app enforces. It is a separate executable from
-the image helper, since the document readers need sandbox operations, such as the font service, that the image
-decoders' sandbox denies. Whichever of the two proposals lands first builds the shared helper bundling. Amended 2026-11-03; see Decision Log.
+executable with its own sandbox entitlements, a file descriptor the app opens and passes with each decode request, a
+private decode-only protocol with a version handshake, and a footprint cap the app enforces. It is a separate
+executable from the image helper, since the document readers need sandbox operations, such as the font service, that
+the image decoders' sandbox denies. UTERM-006 landed first. This proposal's first milestone factored the framing, the
+process supervision, and the liveness rules out of the image helper into code both helpers share. Amended 2026-11-08;
+see Decision Log.
 
 PDFs are the exception. `PDFView`'s selection, find, links, and accessibility work only on an in-process
 `PDFDocument`, and no supported API remotes it. Rendering pages in a helper would mean rebuilding all of those over
@@ -155,10 +157,11 @@ applet contract decision.
 - Every description, the empty one included, holds the directory the pane started in. The factory passes it. An empty
   pane reports it as `currentDirectory`. With a file open, the pane reports the file's folder. The open panel always
   starts in `currentDirectory`, never in AppKit's remembered folder.
-- Every format loads from bytes read in full off the main thread: a PDF through `PDFDocument(data:)`, RTF and Word
-  through `NSAttributedString`'s readers in the sandboxed helper with the document type set from the file type, and
-  Markdown through the scheme handler. The loaded document is a snapshot. A later change to the file, such as pdflatex rewriting its output in
-  place, never reaches a view that is already showing.
+- Every format loads from a file read in full off the main thread: a PDF through `PDFDocument(data:)` from bytes the
+  app reads, RTF and Word through `NSAttributedString`'s readers in the sandboxed helper, which reads the whole file
+  from the descriptor the app opened, with the document type set from the file type, and Markdown through the scheme
+  handler. The loaded document is a snapshot. A later change to the file, such as pdflatex rewriting its output in
+  place, never reaches a view that is already showing. Amended 2026-11-08; see Decision Log.
 - RTF and Word are decoded in the helper, and the decoded text's length and table cell count are checked against caps
   off the main thread, before the text view lays anything out. A document past a cap shows a message naming the limit.
   This is the bound ADR-08 asks for on the text view's main-thread layout.
@@ -313,7 +316,7 @@ None.
 
 ### M1: PDF and RTF
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - A pane can run the text viewer and open a PDF
 - The viewer opens RTF and Word documents
@@ -351,9 +354,9 @@ None.
   the app and the pane running, and the pane shows a message
 - The app decodes the helper's reply only through secure coding of the expected classes, and embedded images arrive as
   bitmaps within the pixel caps
-- The document helper is its own executable, built the way UTERM-006's image helper is, and whichever proposal's
-  milestone lands first builds the shared helper bundling and handshake. The sandbox operations the readers need are
-  recorded, and the image helper's sandbox stays as narrow as before
+- The document helper is its own executable, built the way UTERM-006's image helper is, sharing its framing, process
+  supervision, and liveness rules, with a protocol version handshake of its own. The sandbox operations the readers
+  need are recorded, and the image helper's sandbox stays as narrow as before. Amended 2026-11-08; see Decision Log.
 - The document helper cannot open a file by path or make a network connection. It reads only the descriptor the app
   passes
 - Embedded images cross as raw pixel buffers in one fixed format, outside the archive, and the app builds images from
@@ -364,6 +367,50 @@ None.
   has to. No helper outlives its pane, a PDF or Markdown pane starts none, and undo-reopen starts a fresh one
 - The app enforces the helper's memory limit and kills it past the limit, which is what bounds `.docx` inflation
 - A link in an RTF, Word, or PDF document opens only `http`, `https`, or `mailto`
+
+**As built:**
+
+- Shared helper code now lives in two targets that the image viewer was rebased onto.
+  `HelperWire` holds the framed socket with descriptor passing, big-endian field coding, and page buffers.
+  `HelperHost` holds the helper location, spawn and reap, footprint reads, the end reasons, and a pure liveness state
+  machine that tells a hung helper from a slow one. Each helper keeps its own protocol, handshake, and entitlements.
+  The image viewer's tests changed in imports and in the reader-start call's signature only, and no assertion changed.
+  `SourceAccess` gained `RegularFile`, the one open, `fstat`, and counted capped read. The table loader, the GeoJSON
+  reader, and the image opener use it.
+- The document helper is a native Xcode tool target with sandbox-only entitlements, embedded in `Contents/Helpers`, plus
+  a SwiftPM twin for the package tests. The tests prove crash, stop, spin, over-footprint, supersede, and close against
+  the twin with faults read from a marker at the start of a file. Codesigning the built debug helper showed
+  `com.apple.security.app-sandbox` and `get-task-allow`, and `check-sandbox-off.sh` passed on the built app for both
+  helpers.
+- The sandbox operations the readers need are none beyond the default App Sandbox profile on this macOS. The
+  coordinator ran `make test-helper-sandbox` outside the agent sandbox: 6 tests, 0 failures, including the shipped
+  helper's denied file open and network connection, and RTF, `.doc`, `.docx`, link, and table samples decoding under the
+  sandbox. The unified log for that window showed "AppSandbox request successful" for each document helper spawn and no
+  deny lines for the reader decodes. The only denials were the probe's intended file read and outbound connection. A
+  plain `make test-package` skips the shipped-helper tests, since they need the built app's helper.
+  `scripts/check-sandbox-off.sh` passed on the built app for both helpers.
+- On the macOS this was built on, the RTF, Word 97, and Word XML readers returned no attachment for a picture in any
+  sample, hand-built `.docx` included. The helper's raster path, the placeholder archive, and the app's rebuild from raw
+  pixels are proved with attachments built in code. No reader-made picture was run through it.
+- Each decode starts its own helper process and ends it when the decode ends. No process outlives a load, a pane, or a
+  superseding open, and a PDF pane starts none. An undo-reopen therefore starts a fresh one.
+- The text view uses TextKit 1, since only that layout draws `NSTextTable`. The document page stays white with the
+  document's own colors, and the theme colors the surround and the messages.
+- Markdown shows the unsupported-type message, and the viewer declares no Markdown type yet. The format rule already
+  maps `README` and the Markdown extensions to Markdown.
+- A PDF URL link opens through `PDFViewDelegate`'s link hook. The SDK header says a delegate that implements it handles
+  the click, and the default `NSWorkspace` open does not run. The PDF view also refuses every action that is not page
+  navigation or a link to a safe scheme: a remote go-to, a form reset, a print command, and a URL with another
+  scheme. Whether PDFKit's own click path calls the view's `perform` method for each of these was not driven with a
+  real click, so the filter is proved at the method, not through a click.
+- Fuzzing: `PDFFuzzTests` loads mutated PDFs through the shipped path, and `DocumentWireFuzzTests` mutates the helper
+  protocol. Both ran at 500 inputs in `make fuzz` and at 20,000 inputs each under the address sanitizer. The run found
+  no crash, hang, or sanitizer report. The corpus is two generated PDFs and one hand-written one, so it says little
+  about a PDF that resembles none of them.
+- A restored file behind macOS privacy protection reads like the data viewer's: the open fails with a permission
+  message and `start()` shows no prompt of uniterm's own. The system's own consent dialog for a protected folder was
+  not exercised.
+- Caps: see Decision Log.
 
 ### M2: Markdown
 
@@ -562,6 +609,34 @@ None.
   file is told by "the pane". A failed load now posts a warning. A moved or deleted file posts one warning and shows a
   "Moved or deleted" warning segment until the file is back. This follows the rule the user set for the map and data
   viewers: a notice about content still shown posts once, with a segment while it holds.
+- 2026-11-08: Amended "RTF and Word use the system readers", "The applet contract", and M1's helper bullet. The text
+  said the helper receives its file descriptor at spawn, that RTF and Word load from bytes the app reads in full, and
+  that a later milestone builds the shared helper bundling and handshake. The shipped design passes the descriptor with
+  each decode request over `SCM_RIGHTS`, as the image helper does, so the app never reads an RTF or Word file's bytes.
+  It starts one helper for each decode. UTERM-006 landed first, so this milestone factored its framing, supervision,
+  and liveness rules into shared targets, and each helper keeps its own protocol and handshake. The Dependencies line
+  for UTERM-006 said whichever proposal lands first builds the shared helper bundling, and now says M1 built it.
+  (work-queue best guess)
+- 2026-11-08: M1 caps. A PDF reads up to 256 MiB, since PDFKit's decoded pages use more memory than the file. An RTF or
+  Word file passes up to 64 MiB to the helper. A decoded document may hold 4,000,000 UTF-16 characters, 20,000 table
+  cells, and 64 images, each up to 16,000,000 pixels and 64,000,000 together. The helper's archive may be 32 MiB. The
+  app ends the helper at a 1 GiB footprint and at 10 seconds, following UTERM-006. The numbers rest on the data
+  viewer's per-file cap and on UTERM-006's helper limits. A document past a cap shows a message that names it.
+  (work-queue best guess)
+- 2026-11-08: The format rule reads names only: `README` with no extension and the Markdown extensions are Markdown, and
+  other extensions go through the system type database. Markdown shows the unsupported-type message and is not declared
+  as an opened type until M2, so Cmd-O does not route a Markdown file to a viewer that cannot show it. (work-queue best
+  guess)
+- 2026-11-08: The document page stays white with the document's own text colors in every theme, since an RTF or Word
+  file names black text for white paper. The theme colors the surround, the PDF background, and the messages. (work-queue
+  best guess)
+- 2026-11-08: Each decode starts its own helper and ends it when the decode ends. Keeping one helper for the pane's
+  life would need a refcount of what it holds and would leave a process behind an idle pane. The cost is one spawn for
+  each RTF or Word load. (work-queue best guess)
+- 2026-11-08: Unowned finding. The system RTF, Word 97, and Word XML readers returned no picture attachments for any
+  sample on the macOS used. Embedded pictures therefore do not appear in this run, though the path for them is built
+  and tested with attachments made in code. Revisit when a reader that does return attachments is found on a supported
+  macOS.
 
 ## References
 

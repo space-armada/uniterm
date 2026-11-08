@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// One end of the private socketpair between the app and an image helper.
+/// One end of the private socketpair between the app and a helper.
 ///
 /// It sends and reads whole frames, and it carries file descriptors beside a frame with
 /// `SCM_RIGHTS`. One thread reads. Any thread may send, and sends take a lock so frames never
@@ -69,7 +69,7 @@ public final class FramedSocket: @unchecked Sendable {
   }
 
   /// Sends `prefix` and `trailer` as one frame, without joining them in memory. The helper uses it
-  /// for an image, so the pixels are written from the buffer they were drawn into.
+  /// for an image or a bitmap, so the pixels are written from the buffer they were drawn into.
   public func send(prefix: Data, trailer: Data) throws {
     writeLock.lock()
     defer { writeLock.unlock() }

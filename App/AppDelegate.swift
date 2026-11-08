@@ -13,6 +13,7 @@ import SettingsKit
 import StatusKit
 import TerminalApplet
 import TerminalSurface
+import TextViewerApplet
 import WindowKit
 
 @MainActor
@@ -245,6 +246,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       case ImageViewerDescription.typeID:
         return try ImageViewerApplet(restoring: description)
 
+      case TextViewerDescription.typeID:
+        return try TextViewerApplet(restoring: description)
+
       case BrowserApplet.descriptionTypeID:
         return try BrowserApplet(
           restoring: description, dataStore: websiteData.store, services: browserServices)
@@ -274,6 +278,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       case .imageViewer:
         return ImageViewerApplet(startDirectory: directory)
+
+      case .textViewer:
+        return TextViewerApplet(startDirectory: directory)
       }
     }
 
@@ -314,6 +321,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       },
       ImageViewerDescription.typeID: { file, startDirectory in
         try ImageViewerApplet.opening(file, startDirectory: startDirectory)
+      },
+      TextViewerDescription.typeID: { file, startDirectory in
+        try TextViewerApplet.opening(file, startDirectory: startDirectory)
       },
     ]
 

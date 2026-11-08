@@ -9,6 +9,7 @@ struct LauncherEntry: Equatable {
     case mapViewer
     case browser
     case imageViewer
+    case textViewer
   }
 
   let kind: Kind
@@ -38,6 +39,9 @@ struct LauncherEntry: Equatable {
     LauncherEntry(
       kind: .imageViewer, name: "Image viewer",
       detail: "Shows an image, or the first image of a folder", symbol: "photo"),
+    LauncherEntry(
+      kind: .textViewer, name: "Text viewer",
+      detail: "Shows a PDF, RTF, or Word document", symbol: "doc.text"),
   ]
 }
 
@@ -161,6 +165,9 @@ struct LauncherModel: Equatable {
     case .imageViewer:
       return .success(.imageViewer)
 
+    case .textViewer:
+      return .success(.textViewer)
+
     case nil:
       return .failure(LauncherRefusal(reason: "No applet matches."))
     }
@@ -176,6 +183,7 @@ extension LauncherEntry.Kind {
     case .mapViewer: return "launcher-map-viewer"
     case .browser: return "launcher-browser"
     case .imageViewer: return "launcher-image-viewer"
+    case .textViewer: return "launcher-text-viewer"
     }
   }
 }

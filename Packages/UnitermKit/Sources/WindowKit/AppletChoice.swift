@@ -19,6 +19,9 @@ public enum AppletChoice: Sendable, Equatable {
   /// An image viewer with nothing open, started in the pane's directory.
   case imageViewer
 
+  /// A text viewer with nothing open, started in the pane's directory.
+  case textViewer
+
   /// A browser with no page loaded. It has no directory, so the pane's directory goes unused.
   case browser
 }

@@ -38,6 +38,12 @@ let package = Package(
     .library(name: "PlaceSearch", targets: ["PlaceSearch"]),
     .library(name: "BrowserModel", targets: ["BrowserModel"]),
     .library(name: "BrowserApplet", targets: ["BrowserApplet"]),
+    .library(name: "HelperWire", targets: ["HelperWire"]),
+    .library(name: "HelperHost", targets: ["HelperHost"]),
+    .library(name: "DocumentWire", targets: ["DocumentWire"]),
+    .library(name: "DocumentDecoding", targets: ["DocumentDecoding"]),
+    .library(name: "TextViewerModel", targets: ["TextViewerModel"]),
+    .library(name: "TextViewerApplet", targets: ["TextViewerApplet"]),
     .library(name: "ImageDecoding", targets: ["ImageDecoding"]),
     .library(name: "ImageViewerApplet", targets: ["ImageViewerApplet"]),
   ],
@@ -111,10 +117,16 @@ let package = Package(
     .target(
       name: "BrowserApplet",
       dependencies: ["AppletKit", "BrowserModel", "Preferences", "StatusKit", "Theme"]),
-    // The image helper's decode-only wire format: framing, the protocol version, the named output
-    // color spaces, and the checks on sizes. It has no AppKit and no ImageIO, so the app and the
-    // helper share one codec and the fuzzers can reach it alone.
-    .target(name: "ImageWire"),
+    // What every helper's wire shares: frame headers, the framed socket with descriptor passing,
+    // big-endian field coding, and zero-filled page buffers. It has no AppKit.
+    .target(name: "HelperWire"),
+    // What the app shares in supervising any helper: where the executable is, spawning and reaping
+    // it, reading its footprint, and the rules that tell a hung helper from a slow one.
+    .target(name: "HelperHost", dependencies: ["HelperWire"]),
+    // The image helper's decode-only wire format: the protocol version, the named output color
+    // spaces, the messages, and the checks on sizes. It has no AppKit and no ImageIO, so the app
+    // and the helper share one codec and the fuzzers can reach it alone.
+    .target(name: "ImageWire", dependencies: ["HelperWire"]),
     // The helper side of image viewing. It is the only code that calls ImageIO.
     .target(name: "ImageDecoding", dependencies: ["ImageWire"]),
     // A thin main over ImageDecoding, so the supervisor's tests can run a helper without the App
@@ -126,13 +138,31 @@ let package = Package(
     .target(
       name: "ImageViewerApplet",
       dependencies: [
-        "AppletKit", "ImageViewerModel", "ImageWire", "SourceAccess", "StatusKit", "Theme",
+        "AppletKit", "HelperHost", "ImageViewerModel", "ImageWire", "SourceAccess", "StatusKit",
+        "Theme",
+      ]),
+    // The document helper's decode-only wire format: the protocol version, the messages, the
+    // reader kinds, and the checks on a reply. It has no AppKit, so the app and the helper share
+    // one codec and the fuzzers can reach it alone.
+    .target(name: "DocumentWire", dependencies: ["HelperWire"]),
+    // The helper side of RTF and Word. It is the only code that calls the system document readers.
+    .target(name: "DocumentDecoding", dependencies: ["DocumentWire"]),
+    // A thin main over DocumentDecoding, so the supervisor's tests can run a helper without the
+    // App Sandbox. The shipped helper is the Xcode target of the same name.
+    .executableTarget(name: "DocumentDecoderHelper", dependencies: ["DocumentDecoding"]),
+    // The text viewer's pure rules: the description, the format rule, and the caps.
+    .target(name: "TextViewerModel", dependencies: ["AppletKit", "DocumentWire"]),
+    .target(
+      name: "TextViewerApplet",
+      dependencies: [
+        "AppletKit", "BrowserApplet", "DocumentWire", "HelperHost", "SourceAccess", "StatusKit",
+        "TextViewerModel", "Theme",
       ]),
     .target(
       name: "AppletCatalog",
       dependencies: [
         "AppletKit", "BrowserApplet", "DataViewerApplet", "ImageViewerApplet", "MapViewerApplet",
-        "TerminalApplet",
+        "TerminalApplet", "TextViewerApplet",
       ]),
     .testTarget(name: "StatusKitTests", dependencies: ["StatusKit"]),
     .testTarget(name: "FileRoutingTests", dependencies: ["FileRouting", "AppletKit"]),
@@ -183,7 +213,7 @@ let package = Package(
       name: "ImageViewerAppletTests",
       dependencies: [
         "ImageViewerApplet", "ImageViewerModel", "ImageWire", "ImageDecoding", "ImageDecoderHelper",
-        "AppletKit",
+        "HelperHost", "AppletKit",
         "StatusKit", "Theme", "SourceAccess", "AppletTestSupport", "ImageTestSupport",
       ]),
     .testTarget(
@@ -191,6 +221,25 @@ let package = Package(
       dependencies: [
         "BrowserApplet", "BrowserModel", "AppletKit", "Preferences", "StatusKit", "Theme",
         "BrowserTestSupport", "AppletTestSupport",
+      ]),
+    // Generates document files in code for the text viewer's tests, and finds the unsandboxed
+    // helper that SwiftPM builds beside the test bundle.
+    .target(
+      name: "DocumentTestSupport", dependencies: ["TableTestSupport"],
+      path: "Tests/DocumentTestSupport"),
+    .testTarget(name: "HelperHostTests", dependencies: ["HelperHost"]),
+    .testTarget(
+      name: "DocumentDecodingTests",
+      dependencies: ["DocumentDecoding", "DocumentWire", "DocumentTestSupport"]),
+    .testTarget(name: "DocumentWireTests", dependencies: ["DocumentWire", "TableTestSupport"]),
+    .testTarget(name: "TextViewerModelTests", dependencies: ["TextViewerModel", "AppletKit"]),
+    .testTarget(
+      name: "TextViewerAppletTests",
+      dependencies: [
+        "TextViewerApplet", "TextViewerModel", "DocumentWire", "DocumentDecoderHelper",
+        "HelperHost",
+        "BrowserApplet", "AppletKit", "StatusKit", "Theme", "AppletTestSupport",
+        "DocumentTestSupport", "TableTestSupport",
       ]),
     .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
     .testTarget(name: "AppletKitTests", dependencies: ["AppletKit", "AppletTestSupport"]),

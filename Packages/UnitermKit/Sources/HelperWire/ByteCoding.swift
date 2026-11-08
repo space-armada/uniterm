@@ -1,6 +1,6 @@
 import Foundation
 
-/// Why bytes from the other side of the image socket were refused. The app treats the helper as
+/// Why bytes from the other side of a helper socket were refused. The app treats the helper as
 /// untrusted, so every case is an ordinary failure and never a trap.
 public enum WireError: Error, Equatable, Sendable {
   case truncated
@@ -14,19 +14,21 @@ public enum WireError: Error, Equatable, Sendable {
 }
 
 /// Appends big-endian fields to a buffer.
-struct ByteWriter {
-  private(set) var bytes = Data()
+public struct ByteWriter {
+  public private(set) var bytes = Data()
 
-  mutating func put(_ value: UInt8) {
+  public init() {}
+
+  public mutating func put(_ value: UInt8) {
     bytes.append(value)
   }
 
-  mutating func put(_ value: UInt16) {
+  public mutating func put(_ value: UInt16) {
     bytes.append(UInt8(value >> 8))
     bytes.append(UInt8(value & 0xFF))
   }
 
-  mutating func put(_ value: UInt32) {
+  public mutating func put(_ value: UInt32) {
     for shift in stride(from: 24, through: 0, by: -8) {
       bytes.append(UInt8((value >> UInt32(shift)) & 0xFF))
     }
@@ -34,7 +36,7 @@ struct ByteWriter {
 
   /// A string as a 16-bit length and its UTF-8 bytes. A string past `limit` bytes is cut at a
   /// character boundary, so the writer never produces a field the reader refuses.
-  mutating func put(string: String, limit: Int) {
+  public mutating func put(string: String, limit: Int) {
     var utf8: [UInt8] = []
 
     for scalar in string.unicodeScalars {
@@ -49,23 +51,23 @@ struct ByteWriter {
     bytes.append(contentsOf: utf8)
   }
 
-  mutating func put(raw: Data) {
+  public mutating func put(raw: Data) {
     bytes.append(raw)
   }
 }
 
 /// Reads big-endian fields from a buffer, refusing anything that runs past its end.
-struct ByteReader {
+public struct ByteReader {
   private let bytes: Data
-  private(set) var offset = 0
+  public private(set) var offset = 0
 
-  init(_ bytes: Data) {
+  public init(_ bytes: Data) {
     self.bytes = bytes
   }
 
-  var remaining: Int { bytes.count - offset }
+  public var remaining: Int { bytes.count - offset }
 
-  mutating func u8() throws -> UInt8 {
+  public mutating func u8() throws -> UInt8 {
     guard remaining >= 1 else { throw WireError.truncated }
 
     defer { offset += 1 }
@@ -73,14 +75,14 @@ struct ByteReader {
     return bytes[bytes.startIndex + offset]
   }
 
-  mutating func u16() throws -> UInt16 {
+  public mutating func u16() throws -> UInt16 {
     let high = UInt16(try u8())
     let low = UInt16(try u8())
 
     return high << 8 | low
   }
 
-  mutating func u32() throws -> UInt32 {
+  public mutating func u32() throws -> UInt32 {
     var value: UInt32 = 0
 
     for _ in 0..<4 {
@@ -90,7 +92,7 @@ struct ByteReader {
     return value
   }
 
-  mutating func string(limit: Int) throws -> String {
+  public mutating func string(limit: Int) throws -> String {
     let count = Int(try u16())
 
     guard count <= limit else { throw WireError.tooLong(declared: count, limit: limit) }
@@ -107,13 +109,13 @@ struct ByteReader {
     return text
   }
 
-  mutating func rest() -> Data {
+  public mutating func rest() -> Data {
     defer { offset = bytes.count }
 
     return bytes.suffix(from: bytes.startIndex + offset)
   }
 
-  func finished() throws {
+  public func finished() throws {
     guard remaining == 0 else { throw WireError.trailingBytes }
   }
 }

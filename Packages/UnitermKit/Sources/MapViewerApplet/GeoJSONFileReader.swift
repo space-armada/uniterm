@@ -114,52 +114,16 @@ enum GeoJSONFileReader {
   }
 
   private static func bytes(of file: URL, limit: Int) -> Result<Data, GeoJSONFileError> {
-    let path = file.path
-    let descriptor = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
+    switch RegularFile.readAll(path: file.path, limit: limit) {
+    case .success(let data):
+      return .success(data)
 
-    guard descriptor >= 0 else {
-      return .failure(.access(.posix(errno, path: path)))
+    case .failure(.access(let error)):
+      return .failure(.access(error))
+
+    case .failure(.tooLarge(let path, let bytes, let limit)):
+      return .failure(.tooLarge(path: path, bytes: bytes, limit: limit))
     }
-
-    defer { close(descriptor) }
-
-    var info = stat()
-
-    guard fstat(descriptor, &info) == 0 else {
-      return .failure(.access(.posix(errno, path: path)))
-    }
-
-    guard info.st_mode & S_IFMT == S_IFREG else {
-      return .failure(
-        .access(.notARegularFile(path: path, kind: SourceAccessError.kind(of: info.st_mode))))
-    }
-
-    guard info.st_size <= limit else {
-      return .failure(.tooLarge(path: path, bytes: Int(info.st_size), limit: limit))
-    }
-
-    var data = Data()
-    var chunk = [UInt8](repeating: 0, count: 1 << 16)
-
-    while true {
-      let count = chunk.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, $0.count) }
-
-      if count < 0 {
-        if errno == EINTR { continue }
-
-        return .failure(.access(.posix(errno, path: path)))
-      }
-
-      if count == 0 { break }
-
-      data.append(contentsOf: chunk[0..<count])
-
-      if data.count > limit {
-        return .failure(.tooLarge(path: path, bytes: data.count, limit: limit))
-      }
-    }
-
-    return .success(data)
   }
 
   /// The plain values of one decoded object. At most `room` points are copied, one more than the

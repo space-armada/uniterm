@@ -1,4 +1,5 @@
 import Darwin
+import HelperHost
 import ImageTestSupport
 import ImageViewerModel
 import ImageWire
@@ -330,7 +331,8 @@ final class HelperClientTests: XCTestCase {
     let exited = ExitFlag()
 
     process.startReading(
-      limit: { 0 },
+      threadName: "test.reader", bodyLimit: { _ in 0 },
+      decode: HelperMessage.decode(type:body:),
       deliver: { if case .exited = $0 { exited.set() } })
     process.socket.shutdownAndClose()
 

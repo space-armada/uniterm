@@ -145,26 +145,20 @@ struct LoadRun {
     let path = url.path
     let ext = url.pathExtension.lowercased()
 
-    let descriptor = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
+    let descriptor: Int32
+    let info: RegularFile.Info
 
-    guard descriptor >= 0 else {
-      finish(.failed(.posix(errno, path: path)))
+    switch RegularFile.open(path: path) {
+    case .failure(let error):
+      finish(.failed(TableLoadError(error)))
       return
+
+    case .success(let opened):
+      descriptor = opened.descriptor
+      info = opened.info
     }
 
     defer { close(descriptor) }
-
-    var info = stat()
-
-    guard fstat(descriptor, &info) == 0 else {
-      finish(.failed(.posix(errno, path: path)))
-      return
-    }
-
-    guard info.st_mode & S_IFMT == S_IFREG else {
-      finish(.failed(.notARegularFile(path: path, kind: SourceAccessError.kind(of: info.st_mode))))
-      return
-    }
 
     switch Format.of(extension: ext) {
     case .unsupported(let description):
@@ -172,17 +166,17 @@ struct LoadRun {
       return
 
     case .csv:
-      progress.totalBytes = Int(info.st_size)
+      progress.totalBytes = info.size
       readCSV(from: descriptor, fileExtension: ext, path: path)
 
     case .json:
-      progress.totalBytes = Int(info.st_size)
+      progress.totalBytes = info.size
       readJSON(from: descriptor, fileExtension: ext, path: path)
 
     case .spreadsheet:
-      progress.totalBytes = Int(info.st_size)
+      progress.totalBytes = info.size
       readSpreadsheet(
-        from: descriptor, fileSize: Int(info.st_size), path: path, sheet: sheet)
+        from: descriptor, fileSize: info.size, path: path, sheet: sheet)
     }
   }
 

@@ -123,10 +123,14 @@ final class InfoPlistDriftTests: XCTestCase {
     XCTAssertEqual(
       DocumentTypeManifest.problems(in: plist, declarations: declarations),
       [
+        .undeclared(type: "com.adobe.pdf"),
+        .undeclared(type: "com.microsoft.word.doc"),
         .undeclared(type: "org.openxmlformats.spreadsheetml.sheet"),
+        .undeclared(type: "org.openxmlformats.wordprocessingml.document"),
         .undeclared(type: "public.comma-separated-values-text"),
         .undeclared(type: "public.folder"), .undeclared(type: "public.geojson"),
         .undeclared(type: "public.image"), .undeclared(type: "public.json"),
+        .undeclared(type: "public.rtf"),
         .unclaimed(type: "public.png"),
       ])
   }
@@ -135,11 +139,15 @@ final class InfoPlistDriftTests: XCTestCase {
     XCTAssertEqual(
       DocumentTypeManifest.problems(in: [:], declarations: declarations),
       [
+        .undeclared(type: "com.adobe.pdf"),
+        .undeclared(type: "com.microsoft.word.doc"),
         .undeclared(type: "org.openxmlformats.spreadsheetml.sheet"),
+        .undeclared(type: "org.openxmlformats.wordprocessingml.document"),
         .undeclared(type: "public.comma-separated-values-text"),
         .undeclared(type: "public.folder"), .undeclared(type: "public.geojson"),
         .undeclared(type: "public.image"),
         .undeclared(type: "public.json"),
+        .undeclared(type: "public.rtf"),
       ])
   }
 

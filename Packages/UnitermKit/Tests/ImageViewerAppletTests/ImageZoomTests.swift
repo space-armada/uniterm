@@ -1,6 +1,7 @@
 import AppKit
 import AppletKit
 import AppletTestSupport
+import HelperHost
 import ImageIO
 import ImageTestSupport
 import ImageViewerModel
