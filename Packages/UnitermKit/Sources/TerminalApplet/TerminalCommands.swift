@@ -19,13 +19,13 @@ extension TerminalApplet {
         isAvailable: { ($0 as? TerminalApplet)?.canOpenTab == true },
         run: { ($0 as? TerminalApplet)?.openTab() }),
       AppletCommand(
-        name: "next-tab", title: "Select Next Tab", key: KeyChord("}", [.command, .shift]),
+        name: "next-tab", title: "Select Next Tab", key: KeyChord("\t", .control),
         home: .window, section: 1,
         isAvailable: hasSeveralTabs,
         run: { ($0 as? TerminalApplet)?.step(by: 1) }),
       AppletCommand(
         name: "previous-tab", title: "Select Previous Tab",
-        key: KeyChord("{", [.command, .shift]), home: .window, section: 1,
+        key: KeyChord("\t", [.control, .shift]), home: .window, section: 1,
         isAvailable: hasSeveralTabs,
         run: { ($0 as? TerminalApplet)?.step(by: -1) }),
     ]
