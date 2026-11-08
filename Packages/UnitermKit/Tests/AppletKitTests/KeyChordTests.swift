@@ -12,6 +12,8 @@ final class KeyChordTests: XCTestCase {
     XCTAssertEqual(KeyChord("+", .command), KeyChord("=", [.command, .shift]))
     XCTAssertEqual(KeyChord("T", .command), KeyChord("t", [.command, .shift]))
     XCTAssertEqual(KeyChord("\u{7F}", .command), KeyChord("\u{8}", .command))
+    XCTAssertEqual(KeyChord("\u{19}", .control), KeyChord("\t", [.control, .shift]))
+    XCTAssertEqual(KeyChord("\u{19}", [.control, .shift]), KeyChord("\t", [.control, .shift]))
   }
 
   /// Catches a canonical form that is too loose. A different key, a different modifier, and a
