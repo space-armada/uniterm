@@ -9,7 +9,7 @@ allow:
   - exact: [caffeinate, -dimsu, make, test-app]
   - exact: [caffeinate, -dimsu, make, test-package]
   - prefix: [caffeinate, -dimsu, ./scripts/run-ui-tests.sh]
-  - prefix: [caffeinate, -dimsu, swift, test]
+  - wrapper: [caffeinate, -dimsu]
   - prefix: [codesign, -d]
   - prefix: [cp]
   - prefix: [date]
