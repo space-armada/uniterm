@@ -19,7 +19,7 @@ work is stashed. No commands need the user's credentials.
 |---|---|---|
 | UTERM-003 M1: Embedded Janet and the first host function | DONE | "Embed Janet in a script helper and post status from scripts" |
 | UTERM-003 M2: Host API v1 | DONE | "Let scripts list, open, and send to panes" |
-| UTERM-003 M3: `uniterm run` | QUEUED | |
+| UTERM-003 M3: `uniterm run` | DONE | "Run scripts against uniterm from the command line" |
 | UTERM-003 M4: REPL applet | QUEUED | |
 | UTERM-003 M5: Sandbox and limits | QUEUED | |
 
@@ -229,3 +229,91 @@ budget. The package suite grew from 152 s to 155 s.
 ### Left open
 
 - No UI test drives the host API in the real app yet. M3's `uniterm run` UI test covers it.
+
+## UTERM-003 M3: `uniterm run`
+
+### Commits
+
+- "Run scripts against uniterm from the command line"
+
+### What landed
+
+`uniterm run [--allow CAP]... [--socket PATH] file.janet [args...]` runs a script against the running app. The first
+instance claims `run/uniterm.sock` under an `flock`ed `run/uniterm.lock`, and later instances never take it over.
+`--socket` wins over `UNITERM_SOCKET`, which wins over the well-known address. The command refuses to run unless it
+resolves to a bundle's `Contents/Helpers/uniterm`. Only the package twin's own `main` bypasses that check. The exit
+statuses are 64 for usage, 69 for no app reachable, 74 for a lost connection, and 78 for not the bundle's own
+command. "Install Command Line Tool…" links the command into a folder the user picks, `~/.local/bin` by default. It
+claims the place atomically, and refuses when uniterm runs translocated or from a read-only volume. Each connection's
+outbound queue is capped at 64 messages or 1 MiB, and a peer that stops reading is disconnected. A watchdog thread in
+the helper ends it when the app's side closes, even while the VM spins. `open-tab` now honors the window's modal
+gate, as `open-pane` and `send` already did.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | GX68C3, W7CC2K, PAWCJD, then ZZB5ZP | pass |
+| `make build`, then `check-sandbox-off.sh` on the built app | 9VH1S9, SY5VB6 | pass |
+| `make test-helper-sandbox` | 7JNNPZ | pass |
+| `caffeinate -dimsu make test-package` | 3Z852D | pass, 156 s |
+| Script classes after the final message fix | VGFGQ9 | 28 tests, 0 failures |
+| Installer mutation run with plain `rename` | PZE0M6 | 5 failures, as it should |
+| `ScriptRunUITests`, first run, launched from the test runner | BHZ80H | 2 failures: the sandboxed runner cannot reach the socket |
+| `ScriptRunUITests`, through the terminal, second run | 1RX5Z3 | 1 failure: the fixture passed an integer where a reference belongs |
+| `ScriptRunUITests`, final | PN2XTW | 2 tests, 0 failures |
+| `proposals.py check`, `proposals.py freeze` | | no UTERM-003 finding; freeze empty |
+
+The crash folder held only image and document decoder reports, in the same pattern as before.
+
+### Best guesses
+
+1. Takeover is literal. A later instance never takes the well-known address, even after its owner quits.
+2. `--socket` wins over `UNITERM_SOCKET`, which wins over the well-known address. An empty value counts as unset.
+3. Script arguments arrive in `(dyn :args)`, with the script's path first, as in Janet's own convention.
+4. The well-known address is a second listening socket, not a symlink.
+5. A `<pid>.sock` is stale when its process is gone, or when the process started after the file's birth time.
+6. Exit statuses 64, 69, 74, and 78 are new public contract.
+7. A lost connection ends the helper. The VM thread flushes stdout first. The watchdog does not, since it cannot know
+   whether the VM thread holds the stdio lock. Piped output may be cut off when the app quits mid-run.
+8. The installer checks a fixed list of `PATH` folders and gives a hint for any folder outside it.
+9. The helper checks the peer's uid after it connects, so it never sends a script's name to another user's socket.
+10. `--allow` takes Janet's capability names, minus `all`. It refuses a name the default already allows, with status 64,
+    since granting it does nothing. The default denies file, network, process, and FFI access, as "Sandboxing" says.
+11. The UI tests drive the command from the instance's own terminal. The XCUITest runner is sandboxed, and anything it
+    launches inherits that sandbox.
+
+### Review findings
+
+| Finding | Disposition |
+|---|---|
+| PLAUSIBLE: the installer's `lstat` then `rename` could replace a regular file | Confirmed. Fixed with `RENAME_EXCL` and `RENAME_SWAP`, plus an undo. A mutation run failed without it. A brief window remains during the undo, recorded in As built |
+| PLAUSIBLE: `_exit` dropped buffered stdout on a lost connection | Confirmed by reading the code. The VM-thread path now flushes. The watchdog path cannot flush safely, which is recorded |
+| PLAUSIBLE: a translocated launch would leave a dangling link | Confirmed. Fixed: the installer refuses and asks the user to move uniterm to Applications |
+| PLAUSIBLE, coordinator's UI run: the UI test could not launch the command from the runner | Confirmed. Fixed by driving the command through the terminal |
+| UI test waited on `fileExists`, which is true at bind, before listen | Fixed. The shell retries while the command exits 69 |
+| `--allow net` read like a grant | Traced. The default already denied net, subprocess, and FFI. Fixed: `--allow` now refuses names that are always allowed. New fixtures cover a denied net call and a denied subprocess call |
+| Comment craft: `stop()` doc | Fixed |
+| Coordinator: the M1 footprint test used an unbounded `for await` | Fixed. It is now bounded at 60 s |
+| A UI test fixture passed an integer to `list-panes`. The shim's error message did not mention tables | Fixed |
+| ADR-impact ADVISORY: ADR-09, `--allow` and a uid-only peer check | Recorded as the planned gap that UTERM-004 M1-M2 close |
+| ADR-impact borderline: "the command is a symlink into the bundle" as an ADR | Dismissed as an ADR candidate. The proposal's skew rule already records it |
+
+The run cancelled one hung package run, H4XYC7. A new test waited on listener events with no bound. Every listener
+wait now goes through a bounded `drive(timeout:)`.
+
+### Test cost
+
+| Class | Time alone |
+|---|---|
+| `ScriptRunCommandTests`, 7 tests | 1.23 s |
+| `ScriptRunAppQuitTests`, 2 tests | 0.10 s |
+| `ScriptListenerTests`, 11 tests | 0.43 s |
+| `ScriptCommandInstallerTests` and `ScriptCommandTests`, 12 tests | about 0.02 s |
+| `ScriptRunUITests`, 2 UI tests | about 12 s |
+
+The package suite ran in 156 s.
+
+### Left open
+
+- The REPL half of the second-instance check moves to M4, by amendment.

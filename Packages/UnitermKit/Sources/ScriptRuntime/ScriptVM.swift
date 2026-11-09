@@ -30,8 +30,12 @@ public struct ScriptFailure: Error, Equatable, Sendable {
 enum ScriptVM {
   /// The host functions call back into `session`. A callback never throws or traps across the C
   /// boundary. It turns a failure into the message that the shim raises to the script.
+  ///
+  /// `sandbox` holds the bits of every capability still denied. `arguments` reach the script
+  /// through `(dyn :args)`, the script's own path first, as under Janet's command.
   static func run(
-    name: String, source: Data, session: ScriptSession
+    name: String, source: Data, session: ScriptSession,
+    sandbox: UInt32 = uniterm_janet_default_sandbox, arguments: [String] = []
   ) -> ScriptFailure? {
     var failure = uniterm_script_failure()
 
@@ -40,10 +44,12 @@ enum ScriptVM {
       var host = uniterm_host(
         userdata: userdata, post_status: postStatusCallback, call: callCallback)
 
-      return source.withUnsafeBytes { raw in
-        uniterm_janet_run(
-          &host, name, raw.bindMemory(to: UInt8.self).baseAddress, raw.count,
-          uniterm_janet_default_sandbox, &failure)
+      return withCStrings(arguments) { pointers in
+        source.withUnsafeBytes { raw in
+          uniterm_janet_run(
+            &host, name, raw.bindMemory(to: UInt8.self).baseAddress, raw.count, sandbox,
+            pointers, pointers.count, &failure)
+        }
       }
     }
 
@@ -65,6 +71,23 @@ enum ScriptVM {
     return ScriptFailure(
       name: name, line: Int(failure.line), column: Int(failure.column), kind: kind,
       message: message)
+  }
+}
+
+/// Calls `body` with each string as a C string. The pointers last for the call.
+private func withCStrings<Result>(
+  _ strings: [String], _ body: ([UnsafePointer<CChar>?]) -> Result
+) -> Result {
+  var copies: [UnsafeMutablePointer<CChar>?] = strings.map { strdup($0) }
+
+  defer {
+    for copy in copies {
+      free(copy)
+    }
+  }
+
+  return copies.withUnsafeMutableBufferPointer { buffer in
+    body(buffer.map { UnsafePointer($0) })
   }
 }
 
@@ -94,8 +117,6 @@ private let postStatusCallback:
 
       return 0
     } catch ScriptSessionError.failed(_, let message) {
-      writeError(message, to: errorBuffer, capacity: capacity)
-    } catch ScriptSessionError.connectionLost(let message) {
       writeError(message, to: errorBuffer, capacity: capacity)
     } catch {
       writeError("the call failed: \(error)", to: errorBuffer, capacity: capacity)
@@ -147,8 +168,6 @@ private let callCallback:
 
       return 0
     } catch ScriptSessionError.failed(_, let message) {
-      writeError(message, to: errorBuffer, capacity: capacity)
-    } catch ScriptSessionError.connectionLost(let message) {
       writeError(message, to: errorBuffer, capacity: capacity)
     } catch {
       writeError("the call failed: \(error)", to: errorBuffer, capacity: capacity)

@@ -262,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       app: AppCommandHooks(
         newWindow: { [weak self] in self?.openWindow() },
         showSettings: { [weak self] in self?.presentSettings() },
+        installCommandLineTool: { [weak self] in self?.installCommandLineTool() },
         openFile: { [weak self] anchor in
           Task { await self?.fileOpens?.open(from: anchor) }
         },
@@ -616,6 +617,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       alert.runModal()
       return false
     }
+  }
+
+  /// Asks where to put the `uniterm` command, then links it into this bundle. The panel opens in
+  /// `~/.local/bin`, which is made first so the panel has somewhere to start.
+  private func installCommandLineTool() {
+    let installer = ScriptCommandInstaller(
+      command: ScriptCommandInstaller.command(in: Bundle.main.bundleURL))
+
+    installer.prepareDefaultDirectory()
+
+    let panel = NSSavePanel()
+    panel.title = "Install Command Line Tool"
+    panel.message = "uniterm links its command here, so a shell can run uniterm by name."
+    panel.prompt = "Install"
+    panel.directoryURL = installer.defaultDirectory
+    panel.nameFieldStringValue = "uniterm"
+    panel.canCreateDirectories = true
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+
+    let alert = NSAlert()
+
+    do {
+      let installed = try installer.install(at: url)
+
+      alert.messageText = "The uniterm command is installed"
+      alert.informativeText = installed.message
+    } catch {
+      alert.alertStyle = .warning
+      alert.messageText = "The uniterm command was not installed"
+      alert.informativeText = "\(error)"
+    }
+
+    alert.runModal()
   }
 
   private func presentSettings() {

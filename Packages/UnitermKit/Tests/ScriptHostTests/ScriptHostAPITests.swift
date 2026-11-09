@@ -45,7 +45,7 @@ final class ScriptHostAPITests: XCTestCase {
     async throws
   {
     let run = try await ScriptFixtures.run(
-      socket: host.socketPath, script: ScriptFixtures.script(fixture))
+      socket: host.instanceAddress, script: ScriptFixtures.script(fixture))
 
     XCTAssertEqual(run.status, 0, "\(fixture): \(run.standardError)", file: file, line: line)
   }
@@ -194,7 +194,7 @@ final class ScriptHostAPITests: XCTestCase {
     defer { bare.stop() }
 
     let run = try await ScriptFixtures.run(
-      socket: bare.socketPath, script: ScriptFixtures.script("list-windows"))
+      socket: bare.instanceAddress, script: ScriptFixtures.script("list-windows"))
 
     XCTAssertEqual(run.status, 1)
     XCTAssertTrue(run.standardError.contains("no windows to script"), run.standardError)

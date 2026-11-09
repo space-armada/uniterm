@@ -14,61 +14,73 @@ public final class ScriptListener: @unchecked Sendable {
   /// How long a peer may take to send its hello before it is turned away.
   static let helloTimeout: TimeInterval = 5
 
+  /// This instance's own address, `<pid>.sock`.
   public let path: String
+
+  /// The well-known address, when this instance owns it. Only the first instance to start does.
+  public let wellKnownPath: String?
+
   public let events: AsyncStream<ScriptEvent>
 
   private let continuation: AsyncStream<ScriptEvent>.Continuation
-  private let listenDescriptor: Int32
+  private let listenDescriptors: [Int32]
+  private let wellKnown: ScriptSocketFiles.WellKnown?
   private let wakeRead: Int32
   private let wakeWrite: Int32
+  private let readPeer: @Sendable (Int32) throws -> ScriptPeer
   private let lock = NSLock()
   private var connections: [UInt64: ScriptConnection] = [:]
   private var serving = 0
   private var nextConnectionID: UInt64 = 1
   private var stopped = false
 
-  private init(path: String, listenDescriptor: Int32, wake: (Int32, Int32)) {
+  private init(
+    path: String, listenDescriptor: Int32, wellKnown: ScriptSocketFiles.WellKnown?,
+    wake: (Int32, Int32), readPeer: @escaping @Sendable (Int32) throws -> ScriptPeer
+  ) {
     let (events, continuation) = AsyncStream<ScriptEvent>.makeStream()
 
     self.path = path
+    self.wellKnownPath = wellKnown?.path
     self.events = events
     self.continuation = continuation
-    self.listenDescriptor = listenDescriptor
+    self.listenDescriptors = [listenDescriptor] + (wellKnown.map { [$0.descriptor] } ?? [])
+    self.wellKnown = wellKnown
     self.wakeRead = wake.0
     self.wakeWrite = wake.1
+    self.readPeer = readPeer
   }
 
   /// Listens at `<directory>/<pid>.sock`. Each running instance has its own address, named by its
   /// process ID. The folder is created private to this user.
-  public static func start(directory: URL) throws -> ScriptListener {
+  ///
+  /// The first instance to start also listens at the well-known address, and holds the lock that
+  /// owns it until it stops. A later instance leaves the address alone. A socket file that a
+  /// crashed instance left is removed first.
+  ///
+  /// `readPeer` reads who is on the other end of a connection. Only a test replaces it, so it can
+  /// play a peer of another user.
+  public static func start(
+    directory: URL, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil
+  ) throws -> ScriptListener {
+    try start(directory: directory, instanceName: String(getpid()), readPeer: readPeer)
+  }
+
+  /// Starts with a name other than the process ID. Only a test uses it, to stand two instances in
+  /// one process.
+  static func start(
+    directory: URL, instanceName: String, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil
+  ) throws -> ScriptListener {
     try ScriptSocketDirectory.prepare(directory)
 
-    let path = directory.appendingPathComponent("\(getpid()).sock").path
-    let length = path.utf8.count
+    ScriptSocketFiles.removeStaleSockets(in: directory)
 
-    guard length <= UnixSocket.maxPathBytes else {
-      throw ScriptListenerError.pathTooLong(path, length)
-    }
-
-    let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
-
-    guard descriptor >= 0 else { throw ScriptListenerError.socket(path, errno) }
-
-    _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
-
-    // A socket file left by an earlier process with this ID is stale, since this process is the
-    // only one that owns the ID now.
-    unlink(path)
+    let path = directory.appendingPathComponent("\(instanceName).sock").path
+    let descriptor = try ScriptSocketFiles.bindListening(path: path)
+    let wellKnown: ScriptSocketFiles.WellKnown?
 
     do {
-      try UnixSocket.withAddress(path: path) { address, size in
-        guard bind(descriptor, address, size) == 0 else {
-          throw ScriptListenerError.socket(path, errno)
-        }
-      }
-
-      guard chmod(path, 0o600) == 0 else { throw ScriptListenerError.socket(path, errno) }
-      guard listen(descriptor, 16) == 0 else { throw ScriptListenerError.socket(path, errno) }
+      wellKnown = try ScriptSocketFiles.WellKnown.claim(directory: directory)
     } catch {
       Darwin.close(descriptor)
       unlink(path)
@@ -80,8 +92,10 @@ public final class ScriptListener: @unchecked Sendable {
 
     guard pipe(&wake) == 0 else {
       let code = errno
+
       Darwin.close(descriptor)
       unlink(path)
+      wellKnown?.release()
 
       throw ScriptListenerError.socket(path, code)
     }
@@ -91,7 +105,8 @@ public final class ScriptListener: @unchecked Sendable {
     }
 
     let listener = ScriptListener(
-      path: path, listenDescriptor: descriptor, wake: (wake[0], wake[1]))
+      path: path, listenDescriptor: descriptor, wellKnown: wellKnown, wake: (wake[0], wake[1]),
+      readPeer: readPeer ?? { try ScriptPeer.read(descriptor: $0) })
     let thread = Thread { listener.acceptLoop() }
 
     thread.name = "uniterm.script.accept"
@@ -101,10 +116,12 @@ public final class ScriptListener: @unchecked Sendable {
     return listener
   }
 
-  /// Stops listening, removes the socket file, ends every connection, and finishes `events`. The
-  /// file is gone when this returns, since the app may exit right after. This is the one owner of
-  /// the wake pipe's write end, so a stop that follows the accept loop's own exit never touches a
-  /// closed descriptor. Safe to call twice.
+  /// Stops listening and ends every connection. Safe to call twice.
+  ///
+  /// The socket files are gone when this returns, since the app may exit right after.
+  ///
+  /// This is the one owner of the wake pipe's write end, so a stop after the accept loop's own
+  /// exit never touches a closed descriptor.
   public func stop() {
     lock.lock()
 
@@ -116,6 +133,7 @@ public final class ScriptListener: @unchecked Sendable {
 
     stopped = true
     unlink(path)
+    wellKnown?.release()
 
     var byte: UInt8 = 1
     _ = write(wakeWrite, &byte, 1)
@@ -142,29 +160,32 @@ public final class ScriptListener: @unchecked Sendable {
   private func acceptLoop() {
     defer {
       stop()
-      Darwin.close(listenDescriptor)
+
+      for descriptor in listenDescriptors {
+        Darwin.close(descriptor)
+      }
+
       Darwin.close(wakeRead)
     }
 
     while !isStopped {
-      var polls = [
-        pollfd(fd: listenDescriptor, events: Int16(POLLIN), revents: 0),
-        pollfd(fd: wakeRead, events: Int16(POLLIN), revents: 0),
-      ]
+      var polls = listenDescriptors.map { pollfd(fd: $0, events: Int16(POLLIN), revents: 0) }
 
-      guard poll(&polls, 2, -1) >= 0 || errno == EINTR else { return }
+      polls.append(pollfd(fd: wakeRead, events: Int16(POLLIN), revents: 0))
 
-      if polls[1].revents != 0 { return }
+      guard poll(&polls, nfds_t(polls.count), -1) >= 0 || errno == EINTR else { return }
 
-      guard polls[0].revents & Int16(POLLIN) != 0 else { continue }
+      if polls[polls.count - 1].revents != 0 { return }
 
-      let accepted = accept(listenDescriptor, nil, nil)
+      for ready in polls.dropLast() where ready.revents & Int16(POLLIN) != 0 {
+        let accepted = accept(ready.fd, nil, nil)
 
-      guard accepted >= 0 else { continue }
+        guard accepted >= 0 else { continue }
 
-      _ = fcntl(accepted, F_SETFD, FD_CLOEXEC)
+        _ = fcntl(accepted, F_SETFD, FD_CLOEXEC)
 
-      admit(accepted)
+        admit(accepted)
+      }
     }
   }
 
@@ -205,7 +226,7 @@ public final class ScriptListener: @unchecked Sendable {
   private func serve(descriptor: Int32, id: UInt64) {
     let socket = FramedSocket(descriptor: descriptor)
 
-    guard let peer = try? ScriptPeer.read(descriptor: descriptor) else {
+    guard let peer = try? readPeer(descriptor) else {
       continuation.yield(
         .refused(nil, .protocolViolation("the peer's credentials were unreadable")))
       socket.shutdownAndClose()
@@ -238,7 +259,11 @@ public final class ScriptListener: @unchecked Sendable {
 
     setReadTimeout(0, on: descriptor)
 
-    let connection = ScriptConnection(id: id, peer: peer, socket: socket)
+    let connection = ScriptConnection(
+      id: id, peer: peer, socket: socket,
+      onOverflow: { [continuation] connection in
+        continuation.yield(.refused(connection.peer, .peerNotReading))
+      })
 
     lock.lock()
     connections[id] = connection

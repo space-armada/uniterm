@@ -200,13 +200,17 @@ Decision: the CLI runs the script's VM in its own process, and connects to the a
   protocol serve both entry points.
 - The running app listens on a socket in a per-user directory that only the user can read. The app reads each peer's
   audit token and PID from the socket, for UTERM-004.
-- The script's output, input, arguments, working directory, and exit status are the CLI process's own. Ctrl-C or a
-  kill on the CLI stops the VM and closes its connection. Nothing is relayed through the app.
+- The script's output, input, arguments, working directory, and exit status are the CLI process's own. The
+  arguments after the script's file reach the script through `(dyn :args)`, the script's own path first, as under
+  Janet's own command. Ctrl-C or a kill on the CLI stops the VM and closes its connection. Nothing is relayed through
+  the app. Amended 2026-11-09; see Decision Log.
 - REPL helpers connect to the same listener, per "REPL features".
 - Each running instance listens at its own address, and passes that address to its REPL helpers. The first instance to
   start also claims the well-known per-user address, under a lock that tells a live owner from a stale socket.
-  `uniterm run` connects to the well-known address. A second instance, such as one a UI test starts, never takes it
-  over.
+  `uniterm run` connects to the well-known address, unless `--socket PATH` or the environment variable
+  `UNITERM_SOCKET` names another, and the flag wins. A second instance, such as one a UI test starts, never takes it
+  over, and it does not take it over after the owner quits either. Once the owner quits, `uniterm run` reports that no
+  app is reachable until a new instance starts with the address free. Amended 2026-11-09; see Decision Log.
 - Skew: the `uniterm` command on `PATH` is a symlink into the app bundle, never a copy, so it is always the bundle's
   helper and the version handshake in "Where scripts run" covers it. A command that is not the bundle's own is refused
   with a message that says to reinstall the command. M3 builds the way to install the symlink.
@@ -411,7 +415,7 @@ Amended 2026-11-09; see Decision Log.
 
 ### M3: `uniterm run`
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - `uniterm run file.janet` runs the script against the running app
 - With no app running, the command reports that clearly
@@ -421,7 +425,8 @@ Amended 2026-11-09; see Decision Log.
 - A `uniterm` command that is not the bundle's own is refused with a message to reinstall the command
 - The listener rejects a peer that runs as a different user
 - A second uniterm instance, such as one a UI test launches, neither takes over nor breaks the first one's socket,
-  and its REPLs reach it, not the first instance
+  and each instance hands its own address to the helpers it starts, through an API the REPL applet calls. M4 proves
+  that the REPL reaches its own instance. Amended 2026-11-09; see Decision Log.
 - A peer that never reads replies cannot grow the app's memory
 - A run whose app quits exits nonzero with a message naming the cause
 - A capability is granted to a run only when its command line names it
@@ -430,6 +435,79 @@ Amended 2026-11-09; see Decision Log.
 - Tests can point `uniterm run` at a test instance's own address, so a UI test never runs scripts against the user's
   uniterm
 - A helper busy in a loop still exits when its connection to the app closes
+
+**As built:**
+
+- The first instance to start owns the well-known address, `run/uniterm.sock` in the same private folder as the
+  instance sockets. The address is a second listening socket that the same accept thread polls, not a link to the
+  instance's own socket. Owning it means holding an exclusive `flock` on `run/uniterm.lock` for the instance's life.
+  The lock descriptor is close-on-exec. When the lock is free, any file at the address is stale and is replaced. A
+  later instance fails to take the lock, binds nothing at the address, and serves only its own `<pid>.sock`. On stop,
+  the owner unlinks the address while it still holds the lock, then releases the lock. A later instance does not take
+  the address over once the owner has quit. Tests cover the owner, a second instance, the owner quitting, a stale file,
+  and the lock's release and close-on-exec.
+- A start removes the `<pid>.sock` files that earlier instances left. The file's name has only the process ID, so the
+  process's start time from the identity M2 introduced decides: a process that is gone, or one that started after the
+  file's birth time, cannot own it, and its file is removed. A file of the current process, a running owner, a
+  non-socket, or another user stays.
+- `uniterm run [--allow CAPABILITY]... [--socket PATH] file.janet [argument...]`. Everything after the file belongs
+  to the script and reaches it as `(dyn :args)`, the file's path first. The address is the flag, else `UNITERM_SOCKET`,
+  else the well-known address under the home folder from the user database, never `HOME`. An empty value counts as not
+  set. For the well-known address, the command checks that the file is a socket this user owns and not a link before it
+  connects. A missing file, a refused connection, and a path that is not a folder all print `no uniterm is reachable at
+  PATH` and exit 69. After connecting, the helper checks the peer's user ID, so it never sends a script's name to
+  another user's socket. `--help` prints usage and exits 0. A usage error prints usage and exits 64.
+- `--allow` takes the names Janet's `sandbox` accepts, from a table in the shim that mirrors Janet's own, and clears
+  only that name's bits. A group name such as `fs` clears its members. `all` and any other name are refused with exit
+  64 before the command connects. The default sandbox denies file, network, process, FFI, module, environment, signal,
+  thread, and chroot access. It leaves `asm`, `compile`, `exit`, `hrtime`, `locale`, and `unmarshal` open, so
+  `--allow` refuses those names too, since it would grant nothing. The usage text lists both sets. Fixtures show that
+  a process call and a network listen are forbidden with no flag and pass the sandbox with `--allow subprocess` and
+  `--allow net`. A script run does not drive Janet's event loop, so a connect or a child's exit status cannot be
+  observed from a fixture. Fixtures show that a read fails with no flag, that `--allow fs-read` reads, and that
+  a write stays denied under it.
+- Each run has its own helper process. The helper starts a watchdog thread after the hello. The thread holds a kqueue
+  on the connection's descriptor and never reads it, so only the VM thread consumes frames. On the app's end closing,
+  it prints `uniterm quit, or closed the connection, while the script was running` and ends the process with status
+  74. A call on the VM thread that finds the connection closed or broken ends the helper the same way, so a script that
+  catches errors cannot go on. The VM thread flushes standard output before it ends the process. The watchdog does
+  not, since it cannot know whether the VM thread holds the stdio lock, and a blocked flush would leave the helper
+  running after the app quit. A run that the app's quit cuts off may therefore lose the end of its output, and all of
+  what was buffered when the watchdog ends it. The two threads race, and no test pins which one wins.
+  `ScriptWatchdog` is where Ctrl-C and the app's stop request become more event sources. A fixture loop that never
+  yields exits within the test's bound once the listener closes.
+- The command refuses to run unless its resolved path is `<name>.app/Contents/Helpers/uniterm` in a bundle whose
+  `CFBundleExecutable` exists and is executable. It resolves the path with `_NSGetExecutablePath` and `realpath`, so a
+  link is judged by where it leads. A refusal prints a message to reinstall the command and exits 78. The package
+  twin passes `identity: .unchecked` from its own `main`, and nothing a user sets can turn the check off. Tests cover
+  fake bundles, links, a copy, and a bundle with no main executable. The UI test runs a copy of the built command.
+- The app menu has Install Command Line Tool, a registry command. A save panel opens in `~/.local/bin`, made first,
+  with the name `uniterm`. `ScriptCommandInstaller` writes a symlink to `Contents/Helpers/uniterm` through a temporary
+  link and `renamex_np`. An empty place is claimed with `RENAME_EXCL`, so a file that appears after the look is never
+  replaced. A symlink is replaced with `RENAME_SWAP`, and when the entry that comes out is not a symlink, the swap is
+  undone and the install is refused. A regular file, a folder, or anything else is refused and left alone. The app
+  must not be translocated or on a read-only volume, since a link to such a path would dangle after the app quits. The
+  install is refused with a message to move uniterm to the Applications folder. Tests cover both races and both
+  locations. The success text says when the folder is not in a fixed list of usual `PATH` folders:
+  `/usr/local/bin`, `/opt/homebrew/bin`, `/opt/local/bin`, `/usr/bin`, `/bin`, `~/.local/bin`, and `~/bin`. The app's
+  environment is scrubbed, so it cannot read the real `PATH`.
+- A connection's writer queue holds at most 64 messages and 1 MiB. A message past either bound closes the
+  connection and reports `peerNotReading` to the status bar and the log. A test with a raw peer that sends 200,000
+  calls and never reads sees the disconnect. A second test fills each bound alone.
+- A test replaces the credential reader to play a peer of another user, and the listener refuses it.
+- `ScriptHost.instanceAddress` is this instance's own `<pid>.sock`, which M4's REPL applet passes to its helper.
+  `wellKnownAddress` is the owner's address, or nil. No test starts two app processes. A package test starts two
+  listeners in one process, and the lock separates them.
+- `open-tab` now refuses while the window has a sheet up, as `open-pane` and `send` do. The test failed on the
+  unfixed code.
+- A UI test, `ScriptRunUITests`, runs the bundled command against the test instance's well-known address in the
+  test's own folder. The UI test runner is sandboxed and so is anything it starts, so the tests write a shell script
+  into their scratch folder, type its path into the instance's terminal, and read the files the script writes. The
+  shell is the unsandboxed app's child. One test checks the status bar message, a second pane, and the listing on
+  standard output. The shell retries the command while it exits 69, so the wait for the app to listen is a real
+  connect. A second test checks the no-app message and status, and that a copy of the command, made by the shell, is
+  refused. The tests were built and not run by this milestone.
+- The wire is unchanged, so its protocol version stays 2. The shim's run call gained an argument list.
 
 ### M4: REPL applet
 
@@ -447,6 +525,8 @@ Amended 2026-11-09; see Decision Log.
 - Ctrl-C stops a running evaluation and returns to the prompt
 - A script's send to a REPL pane is refused with an error to the script, through the property M2 built. Amended
   2026-11-09; see Decision Log.
+- With two uniterm instances running, each REPL's helper reaches the instance that started it, not the other one.
+  Amended 2026-11-09; see Decision Log.
 
 ### M5: Sandbox and limits
 
@@ -571,6 +651,56 @@ Amended 2026-11-09; see Decision Log.
   lets a script tell a reference to something gone from its own mistake. The version moves because the app and helper
   now speak new calls, a new frame type, and the new kind, and an old peer would read them as a protocol violation. The
   API version stays 1.
+- 2026-11-09: A later instance never takes over the well-known address, even after the owner quits (work-queue best
+  guess). The proposal says a second instance "never takes it over", and the check only needs `uniterm run` to never
+  connect to a stale socket. Keeping the literal reading means a user who quits the first instance while a second one
+  runs gets "no uniterm is reachable" from `uniterm run` until a new instance starts. If wrong, a later instance would
+  retry the lock when the owner stops, which needs a wake-up from the owner's quit.
+- 2026-11-09: The address is chosen by `--socket`, else `UNITERM_SOCKET`, else the well-known address, and the flag wins
+  (work-queue best guess). The check asked for a way to point tests at an instance and left precedence open. A flag is
+  the more specific and visible choice. If wrong, swapping the order changes only the resolution function.
+- 2026-11-09: Script arguments reach the script as `(dyn :args)`, with the script's own path first (work-queue best
+  guess). The text left the convention open. This is Janet's own convention for `janet file.janet args`. Everything
+  after the file belongs to the script, so a script's own `--allow` is never read as the command's.
+- 2026-11-09: Split the REPL half of the second-instance check (work-queue best guess). A REPL applet is M4's, so M3
+  cannot show a REPL reaching its own instance. M3 proves the hand-off: `ScriptHost.instanceAddress` is the instance's
+  own address and never the well-known one. M4 proves the REPL passes it and reaches its instance, and gains that
+  check.
+- 2026-11-09: The well-known address is a second listening socket under a lock, not a symlink to the instance socket
+  (work-queue best guess). A link left by a crash could point at a socket of an unrelated process that reused the ID.
+  A separate socket file at the address fails to connect once its owner is gone. The cost is a second descriptor in the
+  accept loop.
+- 2026-11-09: Leftover `<pid>.sock` files are removed by comparing the file's birth time to the process's start time
+  (work-queue best guess). The socket's name carries no start time, so the identity M2 used in the sent folder's name
+  does not fit as is. A gone process, or one that started after the file was made, cannot own the file. If wrong, a
+  start time in the name would need a change to the instance address.
+- 2026-11-09: A lost connection ends the helper with status 74, and a refused location ends it with status 78
+  (work-queue best guess). The statuses are new public contract, beside 64, 66, 69, and 70, from sysexits.h. A script
+  cannot catch a lost connection, since a script that survives its app would run without the host API it depends on.
+- 2026-11-09: The command's bundle check is a parameter of the helper's entry point, which only the package twin's own
+  `main` sets (work-queue best guess). An environment variable or a flag would let a user turn the check off. If wrong,
+  a build flag in the twin could do the same job.
+- 2026-11-09: The installer's `PATH` heuristic is a fixed list of common folders plus `~/.local/bin` and `~/bin`
+  (work-queue best guess). The app's environment is scrubbed, so it cannot read the real `PATH`. A folder off the
+  list gets a hint, not an error, since it may still be on the path.
+- 2026-11-09: A connection's writer queue holds at most 64 messages and 1 MiB, and overflow disconnects the peer
+  (work-queue best guess). A helper runs one call at a time, so a well behaved one never has more than one reply
+  waiting, and the limits leave room for sixteen of the largest replies.
+- 2026-11-09: `open-tab` joins `open-pane` and `send` in refusing while the window has a sheet up (work-queue best
+  guess, from the M2 review). The sheet can be the pane's own Save question, so the pane must not change under it.
+- 2026-11-09: `--allow` refuses a name the default sandbox already leaves open (work-queue best guess, from the M3
+  review). `--allow hrtime` would read like a grant and do nothing. The default already denies network, process, and
+  FFI access, which matches "Sandboxing", so nothing there changed. The refused names are `asm`, `compile`, `exit`,
+  `hrtime`, `locale`, and `unmarshal`, and the usage text lists them beside the grantable names.
+- 2026-11-09: Output may be cut off when the app quits mid-run (work-queue best guess, from the M3 review). The helper
+  ends with `_exit`, which drops what stdio buffered. The VM thread flushes first. The watchdog does not, since a flush
+  that blocks on the stdio lock or a full pipe would keep the helper alive after the app quit, which the check forbids.
+- 2026-11-09: The installer refuses a translocated or read-only app (work-queue best guess, from the M3 review). A
+  link to such a path dangles after the app quits, so a warning is not enough. The message says to move uniterm to the
+  Applications folder.
+- 2026-11-09: The UI tests run the command from the instance's terminal (work-queue best guess, from the M3 review).
+  The runner is sandboxed, and a process it starts inherits that. The app's shell is unsandboxed, so it can connect,
+  and the tests read the files the shell writes.
 
 ## References
 

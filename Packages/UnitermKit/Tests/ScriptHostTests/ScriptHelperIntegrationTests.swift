@@ -48,7 +48,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
   /// uniterm instead of as the script, or a script label that is not the script's name.
   func testAScriptPostsAStatusThatArrivesAsTheScript() async throws {
     let run = try await ScriptFixtures.run(
-      socket: host.socketPath, script: ScriptFixtures.script("post-status"))
+      socket: host.instanceAddress, script: ScriptFixtures.script("post-status"))
 
     XCTAssertEqual(run.status, 0, run.standardError)
     XCTAssertEqual(center.history.count, 1)
@@ -75,7 +75,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
 
     for (fixture, expected) in cases {
       let run = try await ScriptFixtures.run(
-        socket: host.socketPath, script: ScriptFixtures.script(fixture))
+        socket: host.instanceAddress, script: ScriptFixtures.script(fixture))
 
       XCTAssertEqual(run.status, 1, "\(fixture): \(run.standardError)")
 
@@ -87,7 +87,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
     }
 
     let after = try await ScriptFixtures.run(
-      socket: host.socketPath, script: ScriptFixtures.script("post-status"))
+      socket: host.instanceAddress, script: ScriptFixtures.script("post-status"))
 
     XCTAssertEqual(after.status, 0, after.standardError)
     XCTAssertEqual(center.history.last?.text, "synthetic status from a script")
@@ -97,7 +97,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
   /// error, and nothing is posted.
   func testABadArgumentFailsTheScriptAndPostsNothing() async throws {
     let run = try await ScriptFixtures.run(
-      socket: host.socketPath, script: ScriptFixtures.script("bad-argument"))
+      socket: host.instanceAddress, script: ScriptFixtures.script("bad-argument"))
 
     XCTAssertEqual(run.status, 1)
     XCTAssertTrue(run.standardError.contains("the level must be"), run.standardError)
@@ -108,7 +108,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
   /// command line grants it, so a plain read fails.
   func testAScriptCannotReadAFileByDefault() async throws {
     let run = try await ScriptFixtures.run(
-      socket: host.socketPath, script: ScriptFixtures.script("denied-read"))
+      socket: host.instanceAddress, script: ScriptFixtures.script("denied-read"))
 
     XCTAssertEqual(run.status, 1)
     XCTAssertTrue(run.standardError.contains("sandbox"), run.standardError)
@@ -121,7 +121,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
 
     self.refused = refused
 
-    let socket = try ScriptFixtures.connectPeer(path: host.socketPath)
+    let socket = try ScriptFixtures.connectPeer(path: host.instanceAddress)
     let other = ScriptProtocol.version + 1
 
     try socket.send(ScriptHelperMessage.hello(version: other).frame())
@@ -149,7 +149,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
 
     self.refused = refused
 
-    let socket = try ScriptFixtures.connectPeer(path: host.socketPath)
+    let socket = try ScriptFixtures.connectPeer(path: host.instanceAddress)
 
     try socket.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
     _ = try socket.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
@@ -187,7 +187,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
   /// Catches a status text that reaches the bar with its control characters. Newlines and escapes
   /// become spaces and the text is bounded, whatever a script sends.
   func testStatusTextFromAScriptIsNeutralized() async throws {
-    let socket = try ScriptFixtures.connectPeer(path: host.socketPath)
+    let socket = try ScriptFixtures.connectPeer(path: host.instanceAddress)
 
     try socket.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
     _ = try socket.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
@@ -260,43 +260,71 @@ final class ScriptHelperIntegrationTests: XCTestCase {
       socket: listener.path, script: ScriptFixtures.script("post-status"),
       onExit: { listener.stop() })
 
-    var startup: Duration?
-    var footprint: Int?
-
-    for await event in listener.events {
+    let measured = MeasureBox()
+    let finished = await listener.drive(timeout: .seconds(60)) { event in
       switch event {
       case .begun(_, _):
-        startup = clock.now - launch
+        measured.startup = clock.now - launch
 
       case .request(let connection, let id, _):
-        XCTAssertEqual(connection.peer.pid, process.processIdentifier)
-        XCTAssertEqual(connection.peer.uid, getuid())
-        XCTAssertEqual(connection.peer.token?.pid, process.processIdentifier)
-
-        footprint = ScriptFixtures.footprint(of: process.processIdentifier)
+        measured.footprint = ScriptFixtures.footprint(of: connection.peer.pid)
+        measured.peer = connection.peer
         connection.reply(id: id, result: .ok(Data()))
 
       case .closed:
-        break
+        return true
 
       case .refused(_, let refusal):
         XCTFail("the helper was refused: \(refusal)")
       }
+
+      return false
     }
+
+    XCTAssertTrue(finished, "the helper never finished")
+
+    let peer = try XCTUnwrap(measured.peer)
+
+    XCTAssertEqual(peer.pid, process.processIdentifier)
+    XCTAssertEqual(peer.uid, getuid())
+    XCTAssertEqual(peer.token?.pid, process.processIdentifier)
 
     let run = await ScriptFixtures.finish(process)
 
     XCTAssertEqual(run.status, 0, run.standardError)
 
-    let measured = try XCTUnwrap(footprint)
+    let footprint = try XCTUnwrap(measured.footprint)
 
     print(
       "script helper \(ScriptFixtures.helper().lastPathComponent): resting footprint "
-        + "\(measured) bytes (\(measured / 1024) KiB), startup to the first message "
-        + "\(try XCTUnwrap(startup))")
+        + "\(footprint) bytes (\(footprint / 1024) KiB), startup to the first message "
+        + "\(try XCTUnwrap(measured.startup))")
 
-    XCTAssertGreaterThan(measured, 0)
-    XCTAssertLessThan(measured, 1 << 30)
+    XCTAssertGreaterThan(footprint, 0)
+    XCTAssertLessThan(footprint, 1 << 30)
+  }
+}
+
+/// What the footprint test reads from the listener's events, which arrive on another thread.
+private final class MeasureBox: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedStartup: Duration?
+  private var storedFootprint: Int?
+  private var storedPeer: ScriptPeer?
+
+  var startup: Duration? {
+    get { lock.withLock { storedStartup } }
+    set { lock.withLock { storedStartup = newValue } }
+  }
+
+  var footprint: Int? {
+    get { lock.withLock { storedFootprint } }
+    set { lock.withLock { storedFootprint = newValue } }
+  }
+
+  var peer: ScriptPeer? {
+    get { lock.withLock { storedPeer } }
+    set { lock.withLock { storedPeer = newValue } }
   }
 }
 

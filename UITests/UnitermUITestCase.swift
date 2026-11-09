@@ -18,7 +18,7 @@ class UnitermUITestCase: XCTestCase {
 
   /// The folder for the app's script socket. A socket path holds 104 bytes, and `scratch` is too
   /// long to hold one, so this sits directly under `/tmp`. The app creates it.
-  private var scriptDirectory = ""
+  private(set) var scriptDirectory = ""
   private var launched: [XCUIApplication] = []
 
   override func setUpWithError() throws {

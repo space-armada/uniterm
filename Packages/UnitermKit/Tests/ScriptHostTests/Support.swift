@@ -3,6 +3,8 @@ import Foundation
 import ScriptWire
 import XCTest
 
+@testable import ScriptHost
+
 /// What a helper process left behind.
 struct HelperRun {
   let status: Int32
@@ -52,9 +54,12 @@ enum ScriptFixtures {
     return socket
   }
 
-  /// Starts the helper on `script` against the socket at `socket`.
+  /// Starts the helper on `script`. `socket` is the `--socket` flag, and nil leaves it out. The
+  /// environment is the test's own without `UNITERM_SOCKET`, plus `environment`, so a variable the
+  /// developer has set never decides where a test connects.
   static func start(
-    socket: String, script: URL, onExit: (@Sendable () -> Void)? = nil
+    socket: String?, script: URL, allow: [String] = [], arguments: [String] = [],
+    environment: [String: String] = [:], onExit: (@Sendable () -> Void)? = nil
   ) throws -> Process {
     let process = Process()
 
@@ -62,8 +67,15 @@ enum ScriptFixtures {
       process.terminationHandler = { _ in onExit() }
     }
 
+    var inherited = ProcessInfo.processInfo.environment
+
+    inherited["UNITERM_SOCKET"] = nil
+
+    process.environment = inherited.merging(environment) { _, new in new }
     process.executableURL = helper()
-    process.arguments = ["run", "--socket", socket, script.path]
+    process.arguments =
+      ["run"] + allow.flatMap { ["--allow", $0] } + (socket.map { ["--socket", $0] } ?? [])
+      + [script.path] + arguments
     process.standardInput = FileHandle.nullDevice
     process.standardOutput = Pipe()
     process.standardError = Pipe()
@@ -101,8 +113,14 @@ enum ScriptFixtures {
     }
   }
 
-  static func run(socket: String, script: URL) async throws -> HelperRun {
-    await finish(try start(socket: socket, script: script))
+  static func run(
+    socket: String?, script: URL, allow: [String] = [], arguments: [String] = [],
+    environment: [String: String] = [:]
+  ) async throws -> HelperRun {
+    await finish(
+      try start(
+        socket: socket, script: script, allow: allow, arguments: arguments,
+        environment: environment))
   }
 
   /// The footprint of a process in bytes, or nil when it cannot be read.
@@ -116,5 +134,36 @@ enum ScriptFixtures {
     }
 
     return result == 0 ? Int(info.ri_phys_footprint) : nil
+  }
+}
+
+extension ScriptListener {
+  /// Hands each event to `handler` until it returns true, or until `timeout` passes. Returns
+  /// whether the handler finished. A test that waits on the listener uses this, so a missing event
+  /// fails the test and never hangs it.
+  func drive(
+    timeout: Duration = .seconds(30), _ handler: @escaping @Sendable (ScriptEvent) -> Bool
+  ) async -> Bool {
+    let events = self.events
+
+    return await withTaskGroup(of: Bool.self) { group in
+      group.addTask {
+        for await event in events where handler(event) { return true }
+
+        return false
+      }
+
+      group.addTask {
+        try? await Task.sleep(for: timeout)
+
+        return false
+      }
+
+      let finished = await group.next() ?? false
+
+      group.cancelAll()
+
+      return finished
+    }
   }
 }

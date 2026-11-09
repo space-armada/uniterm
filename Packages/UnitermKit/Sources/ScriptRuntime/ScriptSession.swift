@@ -1,11 +1,9 @@
+import Darwin
 import Foundation
 import ScriptWire
 
 /// Why a call to the app did not complete.
 enum ScriptSessionError: Error, Equatable {
-  /// The app closed the connection, or it failed.
-  case connectionLost(String)
-
   /// The app answered the call with a failure.
   case failed(ScriptFailureKind, String)
 }
@@ -13,20 +11,67 @@ enum ScriptSessionError: Error, Equatable {
 /// The helper's end of one connection to the app.
 ///
 /// The helper runs one script at a time on one thread, so a call sends its request and waits for
-/// the reply on that thread. Nothing else reads the socket. A later change that lets another
-/// thread interrupt the script moves the read to its own thread.
+/// the reply on that thread. Nothing else reads the socket. The watchdog thread only watches the
+/// descriptor for a hangup, and a later thread that handles Ctrl-C does the same.
+///
+/// A connection that is lost ends the helper. A script cannot go on without the app, and a script
+/// that catches the error must not be able to keep running either.
 final class ScriptSession {
   private let socket: FramedSocket
+  private let lost: @Sendable (String) -> Never
   private var nextRequest: UInt32 = 1
 
-  init(socket: FramedSocket) {
+  /// `lost` runs when the app closes the connection or it fails. It must not return.
+  init(
+    socket: FramedSocket,
+    lost: @escaping @Sendable (String) -> Never = ScriptSession.endFlushing
+  ) {
     self.socket = socket
+    self.lost = lost
   }
+
+  /// The descriptor the watchdog watches.
+  var descriptor: Int32 { socket.rawDescriptor }
+
+  /// Says why on stderr and ends the process with a status of its own. It must not return.
+  ///
+  /// `flushingOutput` is for the VM thread, which owns standard output. A script writes through
+  /// stdio, so the text it printed sits in a buffer that `_exit` drops. The watchdog thread passes
+  /// false. It cannot know whether the VM thread holds the stdio lock, and a blocked flush there
+  /// would leave the helper running after the app quit. A run cut off by the app quitting may
+  /// therefore lose the end of its output, and when the watchdog ends it, all of what was buffered.
+  static func endHelper(_ reason: String, flushingOutput: Bool) -> Never {
+    if flushingOutput {
+      fflush(stdout)
+    }
+
+    let text = "uniterm: \(reason)\n"
+
+    _ = text.withCString { write(STDERR_FILENO, $0, strlen($0)) }
+    _exit(ScriptHelperMain.Exit.connectionLost)
+  }
+
+  /// What the VM thread does when the connection is lost.
+  static let endFlushing: @Sendable (String) -> Never = { reason in
+    endHelper(reason, flushingOutput: true)
+  }
+
+  /// What the helper says when the app's end of the connection closes.
+  static let appQuitText = "uniterm quit, or closed the connection, while the script was running"
 
   /// Connects, exchanges the protocol version, and names the script. Throws
   /// `WireError.versionMismatch` when the app is another version.
   static func open(path: String, name: String) throws -> ScriptSession {
-    let session = ScriptSession(socket: try UnixSocket.connect(path: path))
+    let socket = try UnixSocket.connect(path: path)
+
+    // A socket that another user made could read the script's name and what the script asks for.
+    guard try UnixSocket.peerUserID(of: socket.rawDescriptor) == geteuid() else {
+      socket.shutdownAndClose()
+
+      throw ScriptSessionError.failed(.refused, "the socket at \(path) belongs to another user")
+    }
+
+    let session = ScriptSession(socket: socket)
 
     try session.socket.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
 
@@ -69,9 +114,9 @@ final class ScriptSession {
     } catch let error as ScriptSessionError {
       throw error
     } catch WireError.closed {
-      throw ScriptSessionError.connectionLost("uniterm closed the connection")
+      lost(Self.appQuitText)
     } catch {
-      throw ScriptSessionError.connectionLost("the connection to uniterm failed: \(error)")
+      lost("the connection to uniterm failed while the script was running: \(error)")
     }
   }
 

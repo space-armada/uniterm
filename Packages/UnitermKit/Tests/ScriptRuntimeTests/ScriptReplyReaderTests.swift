@@ -55,7 +55,8 @@ final class ScriptReplyReaderTests: XCTestCase {
 
       return source.withUnsafeBufferPointer {
         uniterm_janet_run(
-          &host, "reply-test", $0.baseAddress, $0.count, uniterm_janet_default_sandbox, &failure)
+          &host, "reply-test", $0.baseAddress, $0.count, uniterm_janet_default_sandbox, nil, 0,
+          &failure)
       }
     }
 

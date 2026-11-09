@@ -544,6 +544,42 @@ final class WindowScriptingTests: XCTestCase {
     window.endSheet(sheet)
   }
 
+  /// Catches an open-tab that adds a tab while a sheet is up. The sheet can be the pane's own Save
+  /// question, so open-tab waits as open-pane and send do. Without the gate the tab opens.
+  func testOpenTabIsRefusedWhileASheetIsUp() async throws {
+    let fixture = makeFixture()
+    fixture.make = {
+      let applet = FakeApplet()
+      applet.canOpenTab = true
+      return applet
+    }
+
+    let (controller, pane) = try fixture.openWindow()
+    let applet = try XCTUnwrap(fixture.made.first)
+    let window = try XCTUnwrap(controller.window)
+
+    window.orderFrontRegardless()
+
+    let sheet = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 100, height: 100), styleMask: [.titled],
+      backing: .buffered, defer: false)
+
+    window.beginSheet(sheet, completionHandler: nil)
+    XCTAssertNotNil(window.attachedSheet)
+
+    await assertError(.refused, "waiting for an answer") {
+      try await fixture.scripting.openTab(pane: pane, directory: nil)
+    }
+
+    XCTAssertEqual(applet.tabCount, 1)
+
+    window.endSheet(sheet)
+
+    _ = try await fixture.scripting.openTab(pane: pane, directory: nil)
+
+    XCTAssertEqual(applet.tabCount, 2, "the tab did not open once the sheet was answered")
+  }
+
   // MARK: Directory check
 
   private final class ThreadProbe: @unchecked Sendable {

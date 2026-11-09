@@ -57,4 +57,16 @@ public enum UnixSocket {
 
     return FramedSocket(descriptor: descriptor)
   }
+
+  /// The user ID of the process at the other end of a connected socket.
+  public static func peerUserID(of descriptor: Int32) throws -> uid_t {
+    var credentials = xucred()
+    var size = socklen_t(MemoryLayout<xucred>.size)
+
+    guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERCRED, &credentials, &size) == 0,
+      credentials.cr_version == XUCRED_VERSION
+    else { throw WireError.io(errno) }
+
+    return credentials.cr_uid
+  }
 }

@@ -77,6 +77,52 @@ const uint32_t uniterm_janet_default_sandbox =
     JANET_SANDBOX_FS | JANET_SANDBOX_DYNAMIC_MODULES | JANET_SANDBOX_ENV | JANET_SANDBOX_SIGNAL |
     JANET_SANDBOX_CHROOT | JANET_SANDBOX_THREADS;
 
+typedef struct capability_name {
+    const char *name;
+    uint32_t flags;
+} capability_name;
+
+/* The names Janet's `sandbox` accepts, minus "all". janet.c keeps its own table private. */
+static const capability_name capability_names[] = {
+    {"asm", JANET_SANDBOX_ASM},
+    {"chroot", JANET_SANDBOX_CHROOT},
+    {"compile", JANET_SANDBOX_COMPILE},
+    {"env", JANET_SANDBOX_ENV},
+    {"exit", JANET_SANDBOX_EXIT},
+    {"ffi", JANET_SANDBOX_FFI},
+    {"ffi-define", JANET_SANDBOX_FFI_DEFINE},
+    {"ffi-jit", JANET_SANDBOX_FFI_JIT},
+    {"ffi-use", JANET_SANDBOX_FFI_USE},
+    {"fs", JANET_SANDBOX_FS},
+    {"fs-read", JANET_SANDBOX_FS_READ},
+    {"fs-temp", JANET_SANDBOX_FS_TEMP},
+    {"fs-write", JANET_SANDBOX_FS_WRITE},
+    {"hrtime", JANET_SANDBOX_HRTIME},
+    {"locale", JANET_SANDBOX_LOCALE},
+    {"modules", JANET_SANDBOX_DYNAMIC_MODULES},
+    {"net", JANET_SANDBOX_NET},
+    {"net-connect", JANET_SANDBOX_NET_CONNECT},
+    {"net-listen", JANET_SANDBOX_NET_LISTEN},
+    {"sandbox", JANET_SANDBOX_SANDBOX},
+    {"signal", JANET_SANDBOX_SIGNAL},
+    {"subprocess", JANET_SANDBOX_SUBPROCESS},
+    {"threads", JANET_SANDBOX_THREADS},
+    {"unmarshal", JANET_SANDBOX_UNMARSHAL},
+};
+
+int uniterm_janet_capability_flags(const char *name, uint32_t *flags) {
+    for (size_t index = 0; index < sizeof(capability_names) / sizeof(capability_names[0]);
+         index++) {
+        if (strcmp(capability_names[index].name, name) == 0) {
+            *flags = capability_names[index].flags;
+
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
 /*
  * The host is per thread, like Janet's own VM. Janet calls a host function with no way to carry a
  * pointer, so the running script's host is found here.
@@ -231,7 +277,7 @@ static uint64_t checked_id(Janet value, const char *what) {
 
 static void require_reference(Janet reference) {
     if (!janet_checktype(reference, JANET_STRUCT) && !janet_checktype(reference, JANET_TABLE)) {
-        janet_panic("a reference must be a struct such as {:window 1 :pane 2}");
+        janet_panic("a reference must be a struct or a table such as {:window 1 :pane 2}");
     }
 }
 
@@ -860,7 +906,8 @@ static uniterm_script_status evaluate(JanetTable *env, const char *name, const u
  */
 uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *name,
                                         const uint8_t *source, size_t length,
-                                        uint32_t sandbox_flags, uniterm_script_failure *failure) {
+                                        uint32_t sandbox_flags, const char *const *arguments,
+                                        size_t argument_count, uniterm_script_failure *failure) {
     memset(failure, 0, sizeof(*failure));
 
     if (janet_init() != 0) {
@@ -878,6 +925,14 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
 
         active_host = host;
         register_module(env);
+
+        JanetArray *args = janet_array((int32_t)argument_count);
+
+        for (size_t index = 0; index < argument_count; index++) {
+            janet_array_push(args, janet_cstringv(arguments[index]));
+        }
+
+        janet_table_put(env, janet_ckeywordv("args"), janet_wrap_array(args));
         janet_sandbox(sandbox_flags);
 
         evaluating = 1;

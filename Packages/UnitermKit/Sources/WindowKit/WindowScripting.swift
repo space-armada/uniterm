@@ -150,6 +150,8 @@ public final class WindowScripting: ScriptWindowAPI {
 
     let (controller, pane, applet) = try resolve(reference)
 
+    guard controller.paneActionsEnabled else { throw Self.waitingForAnAnswer }
+
     guard let opener = applet as? any TabOpening else {
       throw ScriptCallError.refused("the pane's applet has no tabs to open")
     }

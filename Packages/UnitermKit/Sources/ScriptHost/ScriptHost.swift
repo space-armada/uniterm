@@ -54,7 +54,12 @@ public final class ScriptHost {
     self.onRefusal = onRefusal
   }
 
-  public var socketPath: String { listener.path }
+  /// The address of this instance, which no other instance shares. A REPL's helper takes it, so
+  /// the helper reaches the instance that started it and not another one that is running.
+  public var instanceAddress: String { listener.path }
+
+  /// The well-known address, when this instance owns it.
+  public var wellKnownAddress: String? { listener.wellKnownPath }
 
   public func start() {
     guard task == nil else { return }

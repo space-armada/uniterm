@@ -72,14 +72,23 @@ typedef struct uniterm_script_failure {
 extern const uint32_t uniterm_janet_default_sandbox;
 
 /*
+ * Looks up a capability by the name Janet's `sandbox` accepts, such as "fs-read". On success it
+ * stores the capability's bits in `flags` and returns 0. It returns -1 for a name Janet does not
+ * accept, and for "all", which forbids everything and is never something to grant.
+ */
+int uniterm_janet_capability_flags(const char *name, uint32_t *flags);
+
+/*
  * Runs one script in a fresh VM on the calling thread, then tears the VM down. The thread must
- * not run another VM at the same time. `name` is the script's name in errors. On any status other
+ * not run another VM at the same time. `name` is the script's name in errors. The script reads
+ * `arguments` through `(dyn :args)`, as it would under Janet's own command. On any status other
  * than OK, `failure` holds the line, column, and message. Line and column are zero when Janet
  * gave none.
  */
 uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *name,
                                         const uint8_t *source, size_t length,
-                                        uint32_t sandbox_flags, uniterm_script_failure *failure);
+                                        uint32_t sandbox_flags, const char *const *arguments,
+                                        size_t argument_count, uniterm_script_failure *failure);
 
 /* The bytes the VM holds now, as counted by the allocator wrapper. */
 uint64_t uniterm_janet_live_bytes(void);

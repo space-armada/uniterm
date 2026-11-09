@@ -15,6 +15,9 @@ public enum ScriptRefusal: Sendable, Equatable {
   /// The app already serves as many peers as it allows.
   case tooManyConnections
 
+  /// The peer stopped reading replies, so the app ended the connection.
+  case peerNotReading
+
   /// What the user is told.
   public var text: String {
     switch self {
@@ -23,6 +26,7 @@ public enum ScriptRefusal: Sendable, Equatable {
     case .versionMismatch: return ScriptProtocol.mismatchText
     case .protocolViolation(let detail): return "A script connection broke the protocol: \(detail)"
     case .tooManyConnections: return "Too many scripts are connected to uniterm."
+    case .peerNotReading: return "A script stopped reading uniterm's replies and was disconnected."
     }
   }
 }
