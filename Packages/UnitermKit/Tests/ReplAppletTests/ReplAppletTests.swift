@@ -3,7 +3,6 @@ import AppletKit
 import AppletTestSupport
 import Darwin
 import Preferences
-import ScriptHost
 import ScriptWire
 import StatusKit
 import TerminalSurface
@@ -11,6 +10,7 @@ import Theme
 import XCTest
 
 @testable import ReplApplet
+@testable import ScriptHost
 @testable import WindowKit
 
 @MainActor
@@ -232,6 +232,23 @@ final class ReplAppletTests: XCTestCase {
     XCTAssertNil(applet.currentDirectory)
   }
 
+  /// Catches the trace flag being read from the scrubbed process environment. The app hands it over
+  /// through its services, and a launch carries it only when they say so. It cannot show that the
+  /// app reads the right snapshot key.
+  func testALaunchPassesTheTraceFlagOnlyWhenTheServicesAskForIt() throws {
+    var traced = services
+    traced.traceSigint = true
+
+    _ = makeApplet(services: traced)
+    _ = makeApplet(services: services)
+
+    let programs = engine.sessions.compactMap { $0.launch.program }
+
+    XCTAssertEqual(programs.count, 2)
+    XCTAssertTrue(programs[0].contains("--trace-sigint"))
+    XCTAssertFalse(programs[1].contains("--trace-sigint"))
+  }
+
   /// Catches two panes sharing a token, which would let one helper take the other's pane. Each
   /// pane has its own channel, token, and session.
   func testEachPaneHasItsOwnTokenAndSession() throws {
@@ -323,7 +340,9 @@ final class ReplAppletTests: XCTestCase {
     XCTAssertFalse(recorder.exited, "the pane asked to close when the helper died")
     XCTAssertEqual(applet.segments.first?.text, "Ended")
 
-    try await Task.sleep(for: .milliseconds(200))
+    // The only path that starts a helper is `restart`, and it is synchronous. A turn of the main
+    // actor is enough for a restart that something scheduled.
+    await Task.yield()
 
     XCTAssertEqual(engine.sessions.count, 1, "the REPL restarted without the user")
     XCTAssertEqual(applet.historyLines, ["(+ 1 2)"])
@@ -356,7 +375,7 @@ final class ReplAppletTests: XCTestCase {
     XCTAssertEqual(applet.historyLines, ["(+ 1 2)"])
     XCTAssertFalse(session.closed, "the helper's last output must stay on screen")
 
-    try await Task.sleep(for: .milliseconds(100))
+    await Task.yield()
 
     XCTAssertEqual(engine.sessions.count, 1)
 
@@ -751,7 +770,7 @@ extension ReplAppletTests {
     knobs.footprint = 10
 
     await local.sampleRepls()
-    try await Task.sleep(for: .milliseconds(300))
+    await Task.yield()
 
     XCTAssertEqual(engine.sessions.count, 1, "a restored pane retried on its own")
     XCTAssertEqual(restored.historyLines, ["(+ 1 2)"])
@@ -861,5 +880,28 @@ extension ReplAppletTests {
 
     XCTAssertTrue(message.contains("1 GiB"), message)
     XCTAssertTrue(message.contains("Restart"), message)
+  }
+
+  /// Catches the pty's exit reaching the pane before the helper's memory notice, which would show
+  /// a generic message and drop the reason. The later notice upgrades the message. It cannot prove
+  /// the order a real helper's two reports arrive in, since the test sets the order.
+  func testAMemoryLimitNoticeAfterThePtyExitedStillGivesThePaneItsReason() async throws {
+    let knobs = Knobs()
+    let services = try makeLimitedHost(knobs: knobs, budget: 1 << 40)
+    let applet = makeApplet(services: services)
+    let session = try XCTUnwrap(engine.sessions.first)
+    let (peer, _) = try await attach(session)
+
+    session.onEvent?(.exited)
+
+    XCTAssertEqual(applet.endedMessage, "The REPL ended.")
+
+    try peer.send(ScriptHelperMessage.memoryLimit.frame())
+    peer.shutdownAndClose()
+
+    let upgraded = await waitUntil { applet.endedMessage?.contains("1 GiB") == true }
+
+    XCTAssertTrue(upgraded, "the pane kept \(String(describing: applet.endedMessage))")
+    XCTAssertTrue(try XCTUnwrap(applet.endedMessage).contains("Restart"))
   }
 }

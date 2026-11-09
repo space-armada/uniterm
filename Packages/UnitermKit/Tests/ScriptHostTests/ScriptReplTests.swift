@@ -309,6 +309,8 @@ final class ScriptReplTests: XCTestCase {
     repl.interrupt()
     repl.interrupt()
 
+    // An idle Ctrl-C leaves no trace to wait for. A helper that the signal killed would show in
+    // `isRunning` within moments, so this is a bounded sleep.
     try await Task.sleep(for: .milliseconds(200))
 
     XCTAssertTrue(repl.process.isRunning, "an idle Ctrl-C ended the helper")
@@ -391,34 +393,29 @@ final class ScriptReplTests: XCTestCase {
       return XCTFail("the token was accepted")
     }
 
+    // A refused connection reports no event for a call that was dropped, so this wait is a bounded
+    // sleep that lets a smuggled call reach the host if it were going to.
     try await Task.sleep(for: .milliseconds(200))
 
     XCTAssertTrue(center.history.isEmpty, "a refused connection posted a status")
   }
 
-  /// Catches a connection that attaches after it has already called the host, or begins as a
-  /// script and then presents a token.
-  func testATokenAfterABeginOrACallIsAProtocolViolation() async throws {
+  /// Catches a connection that begins as a script and then presents a token. A call before any
+  /// declaration is refused on its own, in the listener tests.
+  func testATokenAfterABeginIsAProtocolViolation() async throws {
     let channel = host.openRepl(history: [])
     let token = try XCTUnwrap(ReplEnvironmentHex.decode(channel.launch.token))
     let events = ReplEvents(channel)
+    let peer = try ScriptFixtures.connectPeer(path: host.instanceAddress)
 
-    for first in [
-      ScriptHelperMessage.begin(name: "script.janet"),
-      ScriptHelperMessage.request(id: 1, call: .listWindows),
-    ] {
-      let peer = try ScriptFixtures.connectPeer(path: host.instanceAddress)
+    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
+    _ = try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
+    try peer.send(ScriptHelperMessage.begin(name: "script.janet").frame())
+    try peer.send(ScriptHelperMessage.attach(token: token).frame())
 
-      try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
-      _ = try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
-      try peer.send(first.frame())
-      try peer.send(ScriptHelperMessage.attach(token: token).frame())
+    _ = try? peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
 
-      _ = try? peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
-
-      XCTAssertThrowsError(try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:)))
-    }
-
+    XCTAssertThrowsError(try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:)))
     XCTAssertNil(events.attachedProcess, "a token was spent by a connection that had begun")
 
     channel.end()
@@ -640,7 +637,7 @@ final class ScriptReplTests: XCTestCase {
       guard case .history(let chunk, let final) = message else { return XCTFail("\(message)") }
 
       XCTAssertEqual(final, index == messages.count - 1)
-      XCTAssertLessThanOrEqual(chunk.count, ScriptProtocol.maxHistoryLines)
+      XCTAssertLessThanOrEqual(chunk.count, ScriptProtocol.historyLinesPerMessage)
       XCTAssertLessThanOrEqual(message.frame().count, ScriptProtocol.maxControlBody)
 
       sent += chunk

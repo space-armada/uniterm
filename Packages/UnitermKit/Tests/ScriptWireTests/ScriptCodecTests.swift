@@ -393,7 +393,7 @@ extension ScriptCodecTests {
 
     var many = ByteWriter()
     many.put(UInt8(1))
-    many.put(UInt16(ScriptProtocol.maxHistoryLines + 1))
+    many.put(UInt16(ScriptProtocol.historyLinesPerMessage + 1))
 
     XCTAssertThrowsError(try ScriptAppMessage.decode(type: 4, body: many.bytes))
     XCTAssertThrowsError(try ScriptAppMessage.decode(type: 4, body: Data([2, 0, 0])))
@@ -404,7 +404,7 @@ extension ScriptCodecTests {
   func testAFullHistoryMessageFitsTheControlFrame() {
     let line = String(repeating: "x", count: ScriptProtocol.maxReplLineBytes)
     let message = ScriptAppMessage.history(
-      lines: Array(repeating: line, count: ScriptProtocol.maxHistoryLines), final: true)
+      lines: Array(repeating: line, count: ScriptProtocol.historyLinesPerMessage), final: true)
 
     XCTAssertLessThanOrEqual(
       message.frame().count - FrameHeader.size, ScriptProtocol.maxControlBody)

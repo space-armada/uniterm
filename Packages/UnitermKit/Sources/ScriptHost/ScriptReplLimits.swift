@@ -161,7 +161,7 @@ public enum ScriptReplRefusal: Equatable, Sendable {
 
 extension ScriptHost {
   /// The footprints the last look read, added up over the helpers that are attached now.
-  public var replFootprintTotal: Int {
+  var replFootprintTotal: Int {
     attachedRepls().reduce(0) { $0 + $1.lastFootprint }
   }
 
@@ -235,7 +235,7 @@ extension ScriptHost {
   /// helper past the cap and its margin is killed, and a helper that left a ping unanswered past the
   /// grace is killed as hung. A helper that answers is never killed for working too long, and the
   /// total is never a reason to kill anything.
-  public func sampleRepls() async {
+  func sampleRepls() async {
     let now = replProbes.now()
     let stalled = lastSample.map { now - $0 > replLimits.sampleInterval * 4 } ?? false
 

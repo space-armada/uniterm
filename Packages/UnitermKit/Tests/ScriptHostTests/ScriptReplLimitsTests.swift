@@ -154,6 +154,8 @@ final class ScriptReplLimitsTests: XCTestCase {
       channel.requestStop()
     }
 
+    // A stop request has no reply, and the signal it raises lands on another thread. Nothing
+    // marks the moment the idle helper has dropped all three, so this wait stays a bounded sleep.
     try await Task.sleep(for: .milliseconds(300))
 
     repl.write("(var n 0)\n")
@@ -454,6 +456,9 @@ final class ScriptReplLimitsTests: XCTestCase {
 
     XCTAssertEqual(channel.interruptPressed(), .stop)
 
+    // Cost: this 1 s wait proves a negative. A helper stuck in C survives one interrupt, and no
+    // event marks that nothing happened. Only a real helper blocked in a real read shows that the
+    // signal does not end the call, so no cheaper layer can prove it.
     try await Task.sleep(for: .seconds(1))
 
     XCTAssertTrue(repl.process.isRunning, "the first interrupt ended a call it cannot reach")
@@ -594,6 +599,8 @@ final class ScriptReplLimitsTests: XCTestCase {
 
     expect(await repl.waitForOutput("2\n"), repl.standardOutput)
 
+    // Not a negative. The helper's startup allocations settle before the resting footprint is read,
+    // and nothing reports the moment they have.
     try await Task.sleep(for: .milliseconds(300))
 
     let footprint = try XCTUnwrap(ScriptFixtures.footprint(of: repl.pid))

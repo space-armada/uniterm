@@ -12,8 +12,8 @@ public final class ScriptHost {
   /// Issues a script producer, or nil when no window can show one.
   public typealias ProducerIssuer = @MainActor (_ name: String) -> StatusProducer?
 
-  /// The longest producer name shown, in characters.
-  static let maxLabelLength = 64
+  /// The longest producer name shown, in UTF-8 bytes.
+  static let maxLabelBytes = 64
 
   struct Session {
     var name = "script"
@@ -83,9 +83,6 @@ public final class ScriptHost {
   /// The address of this instance, which no other instance shares. A REPL's helper takes it, so
   /// the helper reaches the instance that started it and not another one that is running.
   public var instanceAddress: String { listener.path }
-
-  /// The well-known address, when this instance owns it.
-  public var wellKnownAddress: String? { listener.wellKnownPath }
 
   public func start() {
     guard task == nil else { return }
@@ -323,11 +320,8 @@ public final class ScriptHost {
 
   /// The script names its own label, so the label is cleaned like any text from outside.
   static func label(for name: String) -> String {
-    let printable = name.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F }
-    let cleaned = String(String.UnicodeScalarView(printable)).trimmingCharacters(in: .whitespaces)
+    let cleaned = StatusText.bounded(name, maximumBytes: maxLabelBytes)
 
-    guard !cleaned.isEmpty else { return "script" }
-
-    return String(cleaned.prefix(maxLabelLength))
+    return cleaned.isEmpty ? "script" : cleaned
   }
 }

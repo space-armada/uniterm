@@ -901,7 +901,11 @@ static int runtime_position(JanetFiber *fiber, int32_t *line, int32_t *column) {
  *
  * Ctrl-C and the app's stop request meet here. The app's request arrives on the helper's reader
  * thread, which signals the VM's own thread with pthread_kill. The handler is then the only code
- * that raises the interrupt, so the gate and the count are kept by one thread.
+ * that raises the interrupt.
+ *
+ * The gate and the count are kept by one thread only when the process's other threads block
+ * SIGINT. Both modes do that: the helper blocks it before it starts any other thread, and the VM
+ * thread unblocks it once its handler is installed.
  *
  * The handler only touches atomics and calls write.
  */
@@ -1122,6 +1126,14 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
             installed = sigaction(SIGINT, &action, NULL) == 0;
 
             interrupt_attach(1);
+
+            if (installed) {
+                sigset_t set;
+
+                sigemptyset(&set);
+                sigaddset(&set, SIGINT);
+                pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+            }
         }
 
         evaluating = 1;
@@ -1173,7 +1185,7 @@ static void repl_ensure_terminal_signals(void) {
     tcsetattr(STDIN_FILENO, TCSANOW, &settings);
 }
 
-void uniterm_janet_repl_block_sigint(void) {
+void uniterm_janet_block_sigint(void) {
     sigset_t set;
 
     sigemptyset(&set);

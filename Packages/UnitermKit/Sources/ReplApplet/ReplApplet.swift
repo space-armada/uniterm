@@ -17,12 +17,19 @@ public struct ReplServices {
   /// scripting is not running, or when the REPL helpers already hold more than their budget.
   public var openChannel: @MainActor ([String]) -> ScriptReplOpening
 
+  /// Asks the helper to trace its SIGINT handling. Debug builds only. The app reads the flag from
+  /// its startup snapshot of the environment, because the process environment is scrubbed by the
+  /// time a pane exists.
+  public var traceSigint: Bool
+
   public init(
     helper: @escaping @MainActor () -> URL?,
-    openChannel: @escaping @MainActor ([String]) -> ScriptReplOpening
+    openChannel: @escaping @MainActor ([String]) -> ScriptReplOpening,
+    traceSigint: Bool = false
   ) {
     self.helper = helper
     self.openChannel = openChannel
+    self.traceSigint = traceSigint
   }
 }
 
@@ -100,6 +107,10 @@ public final class ReplApplet: Applet, InputOwning {
   private var phase = Phase.idle
   private var session: (any TerminalSession)?
   private var channel: ScriptReplChannel?
+
+  /// True while the pane shows the generic end of a helper whose channel still listens for why.
+  private var reasonMayFollow = false
+
   private var evaluating = false
   private var started = false
 
@@ -212,13 +223,13 @@ public final class ReplApplet: Applet, InputOwning {
 
   /// The words and environment of a helper launch. The token travels in the environment, the
   /// address as an argument, and the working directory is the home folder.
-  public static func launch(helper: URL, channel: ScriptReplLaunch, home: String)
-    -> TerminalLaunch
-  {
+  public static func launch(
+    helper: URL, channel: ScriptReplLaunch, home: String, traceSigint: Bool = false
+  ) -> TerminalLaunch {
     var words = [helper.path, "repl", "--socket", channel.address]
 
     #if DEBUG
-      if ProcessInfo.processInfo.environment["UNITERM_REPL_TRACE_SIGINT"] == "1" {
+      if traceSigint {
         words.append("--trace-sigint")
       }
     #endif
@@ -252,7 +263,8 @@ public final class ReplApplet: Applet, InputOwning {
       return
     }
 
-    let launch = Self.launch(helper: helper, channel: channel.launch, home: home)
+    let launch = Self.launch(
+      helper: helper, channel: channel.launch, home: home, traceSigint: services.traceSigint)
 
     let session: any TerminalSession
 
@@ -287,8 +299,7 @@ public final class ReplApplet: Applet, InputOwning {
   /// Ends the helper and lets the session go. The channel closes the connection first, which makes
   /// the helper exit, and the app kills a helper still there after a short wait.
   private func stopHelper() {
-    channel?.end()
-    channel = nil
+    releaseChannel()
 
     session?.onEvent = nil
     session?.view.removeFromSuperview()
@@ -382,14 +393,18 @@ public final class ReplApplet: Applet, InputOwning {
       evaluating = running
 
     case .ended:
-      helperEnded("The REPL's connection to uniterm closed.")
+      if reasonMayFollow {
+        releaseChannel()
+      } else {
+        helperEnded("The REPL's connection to uniterm closed.")
+      }
     }
   }
 
   private func handle(_ event: TerminalEvent) {
     switch event {
     case .exited:
-      helperEnded("The REPL ended.")
+      helperEnded("The REPL ended.", reasonMayFollow: true)
 
     case .clipboardRequest(let request):
       confirm(request)
@@ -401,14 +416,31 @@ public final class ReplApplet: Applet, InputOwning {
 
   /// The helper is gone. The pane stays, keeps its history, and offers a restart. The helper's
   /// last output stays on screen above the message.
-  private func helperEnded(_ message: String) {
-    guard phase == .running else { return }
+  ///
+  /// The pty's exit and the helper's own report of why it ended arrive in either order. When the
+  /// exit comes first, the channel stays open until the connection closes, and a reason that
+  /// arrives meanwhile replaces the generic message.
+  private func helperEnded(_ message: String, reasonMayFollow: Bool = false) {
+    if phase == .running {
+      evaluating = false
 
+      if reasonMayFollow {
+        self.reasonMayFollow = true
+      } else {
+        releaseChannel()
+      }
+
+      showEnded(message)
+    } else if reasonMayFollow == false, self.reasonMayFollow {
+      releaseChannel()
+      showEnded(message)
+    }
+  }
+
+  private func releaseChannel() {
     channel?.end()
     channel = nil
-    evaluating = false
-
-    showEnded(message)
+    reasonMayFollow = false
   }
 
   private func showEnded(_ message: String) {

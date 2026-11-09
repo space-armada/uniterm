@@ -11,8 +11,9 @@ public final class ScriptListener: @unchecked Sendable {
   /// The most peers served at once. The next one is refused.
   public static let maxConnections = 32
 
-  /// How long a peer may take to send its hello before it is turned away.
-  static let helloTimeout: TimeInterval = 5
+  /// How long a peer may take from connecting to declaring itself a script or a REPL before it is
+  /// turned away. Without a bound, same-user peers could hold every slot by never declaring.
+  static let declarationTimeout: TimeInterval = 5
 
   /// This instance's own address, `<pid>.sock`.
   public let path: String
@@ -28,6 +29,7 @@ public final class ScriptListener: @unchecked Sendable {
   private let wakeRead: Int32
   private let wakeWrite: Int32
   private let readPeer: @Sendable (Int32) throws -> ScriptPeer
+  private let declarationTimeout: TimeInterval
   private let lock = NSLock()
   private var connections: [UInt64: ScriptConnection] = [:]
   private var serving = 0
@@ -36,7 +38,8 @@ public final class ScriptListener: @unchecked Sendable {
 
   private init(
     path: String, listenDescriptor: Int32, wellKnown: ScriptSocketFiles.WellKnown?,
-    wake: (Int32, Int32), readPeer: @escaping @Sendable (Int32) throws -> ScriptPeer
+    wake: (Int32, Int32), readPeer: @escaping @Sendable (Int32) throws -> ScriptPeer,
+    declarationTimeout: TimeInterval
   ) {
     let (events, continuation) = AsyncStream<ScriptEvent>.makeStream()
 
@@ -49,6 +52,7 @@ public final class ScriptListener: @unchecked Sendable {
     self.wakeRead = wake.0
     self.wakeWrite = wake.1
     self.readPeer = readPeer
+    self.declarationTimeout = declarationTimeout
   }
 
   /// Listens at `<directory>/<pid>.sock`. Each running instance has its own address, named by its
@@ -58,18 +62,26 @@ public final class ScriptListener: @unchecked Sendable {
   /// owns it until it stops. A later instance leaves the address alone. A socket file that a
   /// crashed instance left is removed first.
   ///
+  public static func start(directory: URL) throws -> ScriptListener {
+    try start(directory: directory, readPeer: nil)
+  }
+
   /// `readPeer` reads who is on the other end of a connection. Only a test replaces it, so it can
-  /// play a peer of another user.
-  public static func start(
-    directory: URL, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil
+  /// play a peer of another user. `declarationTimeout` is likewise only a test's to change.
+  static func start(
+    directory: URL, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil,
+    declarationTimeout: TimeInterval = ScriptListener.declarationTimeout
   ) throws -> ScriptListener {
-    try start(directory: directory, instanceName: String(getpid()), readPeer: readPeer)
+    try start(
+      directory: directory, instanceName: String(getpid()), readPeer: readPeer,
+      declarationTimeout: declarationTimeout)
   }
 
   /// Starts with a name other than the process ID. Only a test uses it, to stand two instances in
   /// one process.
   static func start(
-    directory: URL, instanceName: String, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil
+    directory: URL, instanceName: String, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil,
+    declarationTimeout: TimeInterval = ScriptListener.declarationTimeout
   ) throws -> ScriptListener {
     try ScriptSocketDirectory.prepare(directory)
 
@@ -106,7 +118,8 @@ public final class ScriptListener: @unchecked Sendable {
 
     let listener = ScriptListener(
       path: path, listenDescriptor: descriptor, wellKnown: wellKnown, wake: (wake[0], wake[1]),
-      readPeer: readPeer ?? { try ScriptPeer.read(descriptor: $0) })
+      readPeer: readPeer ?? { try ScriptPeer.read(descriptor: $0) },
+      declarationTimeout: declarationTimeout)
     let thread = Thread { listener.acceptLoop() }
 
     thread.name = "uniterm.script.accept"
@@ -241,7 +254,9 @@ public final class ScriptListener: @unchecked Sendable {
       return
     }
 
-    setReadTimeout(Self.helloTimeout, on: descriptor)
+    let deadline = Date().addingTimeInterval(declarationTimeout)
+
+    setReadTimeout(declarationTimeout, on: descriptor)
 
     do {
       try handshake(socket)
@@ -257,8 +272,6 @@ public final class ScriptListener: @unchecked Sendable {
       return
     }
 
-    setReadTimeout(0, on: descriptor)
-
     let connection = ScriptConnection(
       id: id, peer: peer, socket: socket,
       onOverflow: { [continuation] connection in
@@ -269,7 +282,7 @@ public final class ScriptListener: @unchecked Sendable {
     connections[id] = connection
     lock.unlock()
 
-    readCalls(from: connection)
+    readCalls(from: connection, descriptor: descriptor, deadline: deadline)
 
     connection.close()
 
@@ -298,12 +311,17 @@ public final class ScriptListener: @unchecked Sendable {
     case repl
   }
 
-  private func readCalls(from connection: ScriptConnection) {
+  /// Reads until the connection ends. The declaration is due by `deadline`, and a peer that has
+  /// not declared by then is closed. A declared connection reads without a bound.
+  private func readCalls(from connection: ScriptConnection, descriptor: Int32, deadline: Date) {
     var role = Role.undeclared
-    var called = false
 
     while !connection.isClosed {
       do {
+        if role == .undeclared {
+          setReadTimeout(max(deadline.timeIntervalSinceNow, 0.001), on: descriptor)
+        }
+
         let frame = try connection.socket.readFrame(limit: ScriptHelperMessage.bodyLimit(type:))
 
         switch try ScriptHelperMessage.decode(type: frame.type, body: frame.body) {
@@ -314,14 +332,16 @@ public final class ScriptListener: @unchecked Sendable {
           guard role == .undeclared else { throw WireError.badValue("a second begin") }
 
           role = .script
+          setReadTimeout(0, on: descriptor)
           continuation.yield(.begun(connection, name: name))
 
         case .attach(let token):
-          guard role == .undeclared, !called else {
+          guard role == .undeclared else {
             throw WireError.badValue("a token after the connection began")
           }
 
           role = .repl
+          setReadTimeout(0, on: descriptor)
           continuation.yield(.attached(connection, token: token))
 
         case .replLine(let text):
@@ -353,11 +373,14 @@ public final class ScriptListener: @unchecked Sendable {
           continuation.yield(.replMemoryLimit(connection))
 
         case .request(let id, let call):
+          guard role != .undeclared else {
+            throw WireError.badValue("a call from a connection that has not begun")
+          }
+
           connection.slots.wait()
 
           guard !connection.isClosed else { return }
 
-          called = true
           continuation.yield(.request(connection, id: id, call: call))
         }
       } catch WireError.closed {
@@ -372,8 +395,13 @@ public final class ScriptListener: @unchecked Sendable {
     }
   }
 
+  /// Zero removes the bound. A positive time is at least a millisecond, since a zero timeval
+  /// means no timeout.
   private func setReadTimeout(_ seconds: TimeInterval, on descriptor: Int32) {
-    var timeout = timeval(tv_sec: Int(seconds), tv_usec: 0)
+    let bounded = seconds > 0 ? max(seconds, 0.001) : 0
+    let whole = bounded.rounded(.down)
+    var timeout = timeval(
+      tv_sec: Int(whole), tv_usec: Int32((bounded - whole) * 1_000_000))
 
     _ = setsockopt(
       descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))

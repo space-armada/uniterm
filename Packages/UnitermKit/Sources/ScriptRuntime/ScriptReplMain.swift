@@ -16,7 +16,7 @@ public enum ScriptReplMain {
   static let probeFlag = "--probe-environment"
 
   /// Makes the helper report each SIGINT it receives on stderr. Debug builds only. The app passes it
-  /// when `UNITERM_REPL_TRACE_SIGINT` is set in its own environment.
+  /// when its startup snapshot of the environment holds `UNITERM_REPL_TRACE_SIGINT=1`.
   static let traceFlag = "--trace-sigint"
 
   static var usageText: String {
@@ -98,7 +98,7 @@ public enum ScriptReplMain {
       return fail("a REPL needs the token that uniterm passes it\n\(usageText)", .usage)
     }
 
-    uniterm_janet_repl_block_sigint()
+    uniterm_janet_block_sigint()
 
     if trace { uniterm_janet_repl_trace_sigint() }
 

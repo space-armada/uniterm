@@ -61,10 +61,11 @@ public enum ScriptProtocol {
 
   /// The most lines one history message may carry. The app splits a longer history across
   /// messages, so no message passes the control frame's size.
-  public static let maxHistoryLines = 32
+  public static let historyLinesPerMessage = 32
 
   /// The most lines of a restored history the helper keeps to recall. It is the line editor's own
-  /// limit, and the app sends no more than this.
+  /// limit. The app sends no more than this across all of a history's messages, and the helper
+  /// refuses a history that holds more.
   public static let recallLines = 100
 
   /// The most memory one helper's Janet VM may hold, in bytes. The helper's allocator enforces it.
@@ -469,7 +470,8 @@ public enum ScriptAppMessage: Equatable, Sendable {
   case ping(UInt32)
 
   /// The user asked to stop what the helper is running. The watchdog thread carries it out by
-  /// interrupting the VM, as Ctrl-C does. It changes nothing when no form is running.
+  /// signalling the VM thread, which interrupts the form the way Ctrl-C does. It changes nothing
+  /// when no form is running.
   case stop
 
   var wireType: UInt8 {
@@ -511,9 +513,9 @@ public enum ScriptAppMessage: Equatable, Sendable {
 
     case .history(let lines, let final):
       body.put(final ? UInt8(1) : UInt8(0))
-      body.put(UInt16(min(lines.count, ScriptProtocol.maxHistoryLines)))
+      body.put(UInt16(min(lines.count, ScriptProtocol.historyLinesPerMessage)))
 
-      for line in lines.prefix(ScriptProtocol.maxHistoryLines) {
+      for line in lines.prefix(ScriptProtocol.historyLinesPerMessage) {
         body.put(string: line, limit: ScriptProtocol.maxReplLineBytes)
       }
     }
@@ -569,8 +571,8 @@ public enum ScriptAppMessage: Equatable, Sendable {
 
       let count = Int(try reader.u16())
 
-      guard count <= ScriptProtocol.maxHistoryLines else {
-        throw WireError.tooLong(declared: count, limit: ScriptProtocol.maxHistoryLines)
+      guard count <= ScriptProtocol.historyLinesPerMessage else {
+        throw WireError.tooLong(declared: count, limit: ScriptProtocol.historyLinesPerMessage)
       }
 
       var lines: [String] = []

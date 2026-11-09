@@ -105,7 +105,8 @@ Scripts are denied file, network, process, and FFI access unless their job needs
   pty's signal arriving. Both end in one SIGINT handler on the VM's own thread, which stops the evaluation. A second
   Ctrl-C in the pane, after a short gap and with the form still running, kills the helper. The helper's watchdog thread
   reads the connection, answers the app's ping, carries out the stop request, and ends a helper whose connection
-  closes. Amended 2026-11-09, see the Decision Log.
+  closes. The helper blocks SIGINT on every thread but the VM's, in a run as in a REPL, so the handler runs on one
+  thread only.
 - Memory is bounded per helper, per "Where scripts run".
 - The helper holds no App Sandbox entitlement, for the reason in "Where scripts run". Janet's `sandbox` is applied
   before the first line of a script runs, with every capability denied unless the command line grants it. Amended
@@ -128,15 +129,14 @@ Decision: one VM per script run and per REPL pane, each in its own process, sepa
   to a socket by path, and may be granted `--allow fs-read`. A REPL helper starts from a terminal. The terminal
   launch can pass only a working directory, an environment, and a program, and ADR-01 bars reaching past that
   protocol, so the helper connects by path too. Janet's sandbox, the memory
-  cap, and process isolation bound the helper instead. The last bullet of ADR-10's Decision allows this. Amended
-  2026-11-09; see Decision Log.
+  cap, and process isolation bound the helper instead. The last bullet of ADR-10's Decision allows this.
 - Host API calls are messages from the helper to the app. The app runs each one on the main thread and replies.
 - The main thread never waits on a helper. Any later Janet-backed action the app runs sends its message and returns.
 - A running evaluation stops on Ctrl-C or on the app's stop request, and the VM keeps its state. Ctrl-C is SIGINT,
   handled on the VM's own thread. The stop request is the watchdog thread's, and it signals the VM's thread, so both
   take the one handler. The app kills a helper in four cases only. The helper leaves a ping unanswered for 3 seconds.
   Its footprint passes the cap by a quarter. The user presses Ctrl-C twice while a form ignores the first. It outlives
-  its closed pane. A helper that answers is never killed for working long. Amended 2026-11-09; see Decision Log.
+  its closed pane. A helper that answers is never killed for working long.
 - Memory is capped in two layers:
   - In the helper: `janetconf.h` routes Janet's allocator through a counting wrapper. An allocation that would pass the
     per-helper cap fails, and the helper exits with status 79 and a memory-limit message. A REPL helper first sends
@@ -218,7 +218,7 @@ Decision: the CLI runs the script's VM in its own process, and connects to the a
 - The script's output, input, arguments, working directory, and exit status are the CLI process's own. The
   arguments after the script's file reach the script through `(dyn :args)`, the script's own path first, as under
   Janet's own command. Ctrl-C or a kill on the CLI stops the VM and closes its connection. Nothing is relayed through
-  the app. Amended 2026-11-09; see Decision Log.
+  the app.
 - REPL helpers connect to the same listener, per "REPL features".
 - Each running instance listens at its own address, and passes that address to its REPL helpers. The first instance to
   start also claims the well-known per-user address, under a lock that tells a live owner from a stale socket.
@@ -358,7 +358,7 @@ Leaves undone: nothing.
   points it under `/tmp`, since a UI test's scratch folder is too long for a socket path. The listener records each
   peer's user, process, and audit token, and refuses a peer of another user. A thread for each connection reads and
   decodes. The main actor gets each call through an `AsyncStream`. Replies go to a writer queue that is unbounded for
-  now, so M3 bounds it. At most 32 peers connect, a peer has 5 seconds to say hello, and at most 8 of its calls wait
+  now, so M3 bounds it. At most 32 peers connect, a peer has 5 seconds from connecting to declare itself a script or a REPL and may not call before it does, and at most 8 of its calls wait
   for an answer.
 - `post-status` posts through a producer from the active window's status center, named for the script, so a script
   never posts as uniterm. With no window open, the call fails with a refusal the script sees.
@@ -369,7 +369,7 @@ Leaves undone: nothing.
   message after the hello. Both numbers are the same for the package twin and the bundled command, which are Debug
   builds. A release build is not measured.
 - Left for later milestones: the well-known address, its lock, and cleanup of the socket file that a crashed instance
-  leaves behind. A reader thread in the helper for Ctrl-C and the watchdog. Running Janet's event loop after the script
+  leaves behind. A reader thread in the helper for Ctrl-C and the watchdog, which M4 and M5 built. Running Janet's event loop after the script
   ends. Bounding the writer queue. No UI test covers the app's wiring.
 
 ### M2: Host API v1
@@ -505,16 +505,16 @@ Amended 2026-11-09; see Decision Log.
   catches errors cannot go on. The VM thread flushes standard output before it ends the process. The watchdog does
   not, since it cannot know whether the VM thread holds the stdio lock, and a blocked flush would leave the helper
   running after the app quit. A run that the app's quit cuts off may therefore lose the end of its output, and all of
-  what was buffered when the watchdog ends it. The two threads race, and no test pins which one wins.
-  `ScriptWatchdog` is where Ctrl-C and the app's stop request become more event sources. A fixture loop that never
-  yields exits within the test's bound once the listener closes.
+  what was buffered when the watchdog ends it. The two threads race, and no test pins which one wins. A fixture loop
+  that never yields exits within the test's bound once the listener closes. M5 replaced the kqueue with a watchdog
+  that is the only reader of the connection. See M5's As built.
 - The command refuses to run unless its resolved path is `<name>.app/Contents/Helpers/uniterm` in a bundle whose
   `CFBundleExecutable` exists and is executable. It resolves the path with `_NSGetExecutablePath` and `realpath`, so a
   link is judged by where it leads. A refusal prints a message to reinstall the command and exits 78. The package
   twin passes `identity: .unchecked` from its own `main`, and nothing a user sets can turn the check off. Tests cover
   fake bundles, links, a copy, and a bundle with no main executable. The UI test runs a copy of the built command.
 - The app menu has Install Command Line Tool, a registry command. A save panel opens in `~/.local/bin`, made first,
-  with the name `uniterm`. `ScriptCommandInstaller` writes a symlink to `Contents/Helpers/uniterm` through a temporary
+  with the name `uniterm`. The installer writes a symlink to `Contents/Helpers/uniterm` through a temporary
   link and `renamex_np`. An empty place is claimed with `RENAME_EXCL`, so a file that appears after the look is never
   replaced. A symlink is replaced with `RENAME_SWAP`, and when the entry that comes out is not a symlink, the swap is
   undone and the install is refused. A regular file, a folder, or anything else is refused and left alone. The app
@@ -527,9 +527,8 @@ Amended 2026-11-09; see Decision Log.
   connection and reports `peerNotReading` to the status bar and the log. A test with a raw peer that sends 200,000
   calls and never reads sees the disconnect. A second test fills each bound alone.
 - A test replaces the credential reader to play a peer of another user, and the listener refuses it.
-- `ScriptHost.instanceAddress` is this instance's own `<pid>.sock`, which M4's REPL applet passes to its helper.
-  `wellKnownAddress` is the owner's address, or nil. No test starts two app processes. A package test starts two
-  listeners in one process, and the lock separates them.
+- The host's instance address is this instance's own `<pid>.sock`, which M4's REPL applet passes to its helper. No test
+  starts two app processes. A package test starts two listeners in one process, and the lock separates them.
 - `open-tab` now refuses while the window has a sheet up, as `open-pane` and `send` do. The test failed on the
   unfixed code.
 - A UI test, `ScriptRunUITests`, runs the bundled command against the test instance's well-known address in the
@@ -539,7 +538,7 @@ Amended 2026-11-09; see Decision Log.
   standard output. The shell retries the command while it exits 69, so the wait for the app to listen is a real
   connect. A second test checks the no-app message and status, and that a copy of the command, made by the shell, is
   refused. The tests were built and not run by this milestone.
-- The wire is unchanged, so its protocol version stays 2. The shim's run call gained an argument list.
+- The wire is unchanged, so its protocol version stays 2.
 
 ### M4: REPL applet
 
@@ -555,8 +554,7 @@ Amended 2026-11-09; see Decision Log.
 - Closing a REPL at an idle prompt does not ask for confirmation
 - REPL history survives a close and an undo, never re-runs on restore, and is bounded in size in the layout file
 - Ctrl-C stops a running evaluation and returns to the prompt
-- A script's send to a REPL pane is refused with an error to the script, through the property M2 built. Amended
-  2026-11-09; see Decision Log.
+- A script's send to a REPL pane is refused with an error to the script, through the property M2 built.
 - With two uniterm instances running, each REPL's helper reaches the instance that started it, not the other one.
   Amended 2026-11-09; see Decision Log.
 
@@ -593,8 +591,10 @@ Amended 2026-11-09; see Decision Log.
   M5 adds a second path that does not depend on the pty's signal: the pane sends the app's stop request when it sees
   Ctrl-C while a form runs. A package test proves the stop request, and a UI test can prove the key path.
   A debug helper takes `--trace-sigint` and writes `[sigint evaluating]` or `[sigint idle]` to stderr on each SIGINT.
-  The app passes the flag in debug builds when its own environment sets `UNITERM_REPL_TRACE_SIGINT=1`, which the
-  Ctrl-C UI test sets, and the failure message shows the screen. `TerminalUITests` also has a test that Ctrl-C ends a
+  The app passes the flag in debug builds when its startup snapshot of the environment holds
+  `UNITERM_REPL_TRACE_SIGINT=1`, which the Ctrl-C UI test sets, and the failure message shows the screen. The process
+  environment is scrubbed before the app starts, so the flag travels through the REPL's services and not through a
+  later read of the environment. `TerminalUITests` also has a test that Ctrl-C ends a
   foreground `sleep` in a shell pane, so the app's key path is proved for an ordinary program.
 - The app keeps its own history as the helper reports lines, bounded at 500 lines, 256 KiB, and 1,024 bytes a line,
   and the layout file holds that copy. A restored file's lines are checked again, and a line with a control character
@@ -642,8 +642,7 @@ Amended 2026-11-09; see Decision Log.
 - A script that allocates without limit ends with a memory error, and the app keeps running
 - A REPL helper whose footprint passes the cap outside Janet's allocator is killed by the app, and its pane says why
 - While the REPL helpers' total footprint is over the app-wide budget, a new REPL does not start, its pane says why
-  and offers a user-only retry, the history holds one warning, and no running REPL is killed for the total. Amended
-  2026-11-06; see Decision Log.
+  and offers a user-only retry, the history holds one warning, and no running REPL is killed for the total.
 - M1 records a helper's resting footprint and startup time in its As built block, and this milestone records a REPL
   helper's in its own
 
@@ -658,13 +657,12 @@ Amended 2026-11-09; see Decision Log.
   runs another against the same app while it spins, and stops the first with SIGINT.
 - The watchdog thread is the only reader of the connection once a script or REPL starts. It hands each reply to the VM
   thread through a one-slot mailbox, answers each ping with a pong, and signals the VM thread for a stop request. A
-  kqueue no longer watches the descriptor, since the read itself reports the hangup. The wire is protocol version 4.
-  The app sends `ping` and `stop`. The helper sends `pong` and a memory-limit notice. The codec tests and the fuzzer
-  cover all four.
-- The app pings each attached REPL helper once a second and kills one that leaves a ping unanswered for 3 seconds. The
-  state machine is `HelperLiveness`, which takes no time bound here. A test runs a REPL in a loop for ten seconds of
-  the app's own clock, which a test moves by hand. The helper answers each ping, and nothing is killed. A second test
-  stops a helper with SIGSTOP, and the app kills it as hung after the grace.
+  kqueue no longer watches the descriptor, since the read itself reports the hangup. The wire is protocol version 4,
+  and the codec tests and the fuzzer cover its four new messages.
+- The app pings each attached REPL helper once a second and kills one that leaves a ping unanswered for 3 seconds. A
+  test runs a REPL in a loop for ten seconds of the app's own clock, which a test moves by hand. The helper answers
+  each ping, and nothing is killed. A second test stops a helper with SIGSTOP, and the app kills it as hung after the
+  grace.
 - A form stuck in a C call that the interrupt never reaches ends by the user's second Ctrl-C. Janet 1.43's `peg/match`
   does check the interrupt flag, so the fixtures read standard input, which never ends. The fixture marks the
   point just before the read, and the test then waits until the helper's main thread is blocked in the kernel, so the
@@ -672,35 +670,35 @@ Amended 2026-11-09; see Decision Log.
   comes at least half a second after the first and within five seconds. The app kills the helper only while the
   process is the one that attached. A double tap on an ordinary loop is read as one press, and the loop ends without
   a kill. A run needs no gap, since its second SIGINT is the helper's own.
-- The allocator wrapper refuses a block that would pass the cap and ends the process with status 79 and a message on
-  stderr. A REPL helper sends a notice frame first, through the connection's own locked send, so the pane says why
-  and the notice never interleaves with a pong. The failure path formats nothing and does no stdio, so unflushed
-  output is lost. The cap is 1 GiB. Debug builds take
-  `--memory-cap BYTES`, which only a test uses. `(buffer/new 1e12)` never reaches the allocator, since Janet's integer
-  check refuses it, and a fixture shows that it is an ordinary error. The memory fixtures ask for 2,000,000,000 bytes
-  against the default cap, and grow a buffer against a 64 MiB cap. Both end with status 79.
-- The app reads each attached helper's footprint with `proc_pid_rusage`, off the main thread. A helper past the cap and
-  a quarter more is killed, and the pane says why and offers Restart. A footprint inside the margin is left alone. The
-  app never touches a `uniterm run` process.
-- The app-wide budget is the smaller of 4 GiB and a quarter of physical memory. A new REPL asks the host before it
-  starts. It reads each attached helper's footprint fresh, one bounded system call each, and counts a helper that was
-  admitted and has not attached for 8 MiB, above the measured 3.2 MiB at rest. While the total is over the budget,
-  the pane stays empty, says why, and offers Restart, which only the user presses. The host records one history
-  warning for the episode, however many panes are refused, and a total back under the budget ends the episode. A
-  restored pane is refused the same way and never retries. A test with two real helpers and injected footprints shows a refusal, with
-  neither helper killed for the total. Only the helper that passed its own margin was killed.
+- The allocator wrapper ends the process with status 79 and a message on stderr, and a REPL helper sends a notice frame
+  first, so the pane says why. Unflushed output is lost, per the Decision Log. Debug builds take `--memory-cap BYTES`,
+  which only a test uses. `(buffer/new 1e12)` never reaches the allocator, since Janet's integer check refuses it, and
+  a fixture shows that it is an ordinary error. The memory fixtures ask for 2,000,000,000 bytes against the default cap,
+  and grow a buffer against a 64 MiB cap. Both end with status 79. The pane's pty can report the helper's exit before
+  the notice arrives. The pane then keeps its channel until the connection closes, and the notice replaces the
+  generic message.
+- A test with injected footprints shows a helper past the cap and its margin killed, with the pane saying why and
+  offering Restart, and a footprint inside the margin left alone. The app never touches a `uniterm run` process.
+- A test with two real helpers and injected footprints shows the app-wide budget refusing a new REPL with neither
+  helper killed for the total. Only the helper that passed its own margin was killed. The restored pane is refused the
+  same way and never retries. The floor of 8 MiB for an unattached helper is above the measured 3.2 MiB at rest.
 - A REPL helper at rest holds 3,359,104 bytes, 3.2 MiB, and takes about 22 ms from launch to attach. The bundled
   command measures 3,375,464 bytes and 23 ms. Both are Debug builds. A release build is not measured.
 - The real-app Ctrl-C gap is not reproduced in a package test. A helper that is the target of `exec -l` under `login`
   and `bash`, as the pinned libghostty starts a program, stops a loop on the byte 3. Reading the pinned Ghostty source
   found nothing in the child's setup that would hold back SIGINT. The pane now also sends the app's stop request on a
   Ctrl-C key press. Which path carries the stop in the real app is for the UI tests to show.
-- A SIGINT handler stays installed after a run or a REPL ends, and does nothing then. Putting the old disposition
-  back let a late stop request reach the default action and kill the helper while it shut down.
-- The UI tests were built and not run by this milestone. `ReplUITests` gained the stuck-form test. The key hook is
-  proved only by reading and by the key classifier's unit test.
-- Not covered: the first Ctrl-C's SIGINT and the app's stop request arrive together in the real app, and the one handler
-  balances both. No test sends both at once.
+- A SIGINT handler stays installed after a run or a REPL ends, and does nothing then. See the Decision Log.
+- A run now blocks SIGINT on every thread but the VM's, as a REPL does, so the handler and its gate run on one thread
+  in both modes. A run's second SIGINT still ends the process, since the signal reaches the VM thread even while it is
+  blocked in a C call. The block starts after the helper connects, so a Ctrl-C during the connect still takes the
+  default action.
+- Proof boundary. The Ctrl-C and stuck-in-C checks are proved through the stop channel and through a real SIGINT to a
+  real helper, in package tests. The app's key path, which sends the stop request when the pane sees Ctrl-C, waits
+  on the real-app UI tests that M4 also waits on. `ReplUITests` gained the stuck-form test, and the UI tests were built
+  and not run by this milestone. The key hook is proved only by reading and by the key classifier's unit test. No test
+  sends the first Ctrl-C's SIGINT and the app's stop request together, so that the one handler balances both is
+  unproved in the real app.
 
 ## Decision Log
 
@@ -980,6 +978,21 @@ Amended 2026-11-09; see Decision Log.
   `proc_pid_rusage` each, which ADR-08 allows on the main thread. The floor is 8 MiB. The guarantee is now that the
   total at admission is at most the budget, and one admission adds at most one cap beyond it. If wrong, a look
   before each admission would put an await in the start path.
+- 2026-11-09: The listener requires a declared role before any call, refuses a second declaration, and bounds the
+  declaration to the same 5 seconds as the hello (work-queue best guess, from the row review). M2's As built said a
+  peer has 5 seconds to say hello, and the timeout was cleared after it. A peer could then call with no `begin` or
+  `attach`, begin again after calling to rename its session, or hold one of the 32 slots forever by saying nothing
+  more. The 5 seconds now run from connecting to declaring. A declared peer has no bound. If wrong, a peer would need
+  no declaration before a call, as before.
+- 2026-11-09: A run blocks SIGINT on every thread but the VM's, as a REPL does (work-queue best guess, from the row
+  review). Amended "Sandboxing". The text said both modes end in one handler on the VM's own thread, but a run left
+  SIGINT unblocked on the watchdog thread, so the process-directed signal could land there and the gate and the count
+  were not kept by one thread. If wrong, the handler would need atomics that tolerate two threads.
+- 2026-11-09: A pty exit that reaches the pane before the helper's memory-limit notice no longer hides the reason
+  (work-queue best guess, from the row review). The pane ended the channel on the exit and dropped the later notice,
+  so it said only that the REPL ended. It now keeps the channel until the connection closes, and a reason that arrives
+  meanwhile replaces the generic message. If wrong, the pane would say only that the REPL ended whenever the exit
+  came first.
 
 ## References
 

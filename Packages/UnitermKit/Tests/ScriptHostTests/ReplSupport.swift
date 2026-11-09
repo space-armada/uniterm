@@ -163,31 +163,18 @@ final class ReplProcess: @unchecked Sendable {
 
   /// Waits until standard output holds `fragment`.
   func waitForOutput(_ fragment: String, timeout: Duration = .seconds(30)) async -> Bool {
-    await poll(timeout: timeout) { self.standardOutput.contains(fragment) }
+    await pollUntil(timeout: timeout) { self.standardOutput.contains(fragment) }
   }
 
   func waitForError(_ fragment: String, timeout: Duration = .seconds(30)) async -> Bool {
-    await poll(timeout: timeout) { self.standardError.contains(fragment) }
+    await pollUntil(timeout: timeout) { self.standardError.contains(fragment) }
   }
 
   /// Waits for the process to exit and returns its status, or nil when it is still running.
   func exitStatus(timeout: Duration = .seconds(30)) async -> Int32? {
-    let ended = await poll(timeout: timeout) { !self.process.isRunning }
+    let ended = await pollUntil(timeout: timeout) { !self.process.isRunning }
 
     return ended ? process.terminationStatus : nil
-  }
-
-  private func poll(timeout: Duration, _ condition: @Sendable () -> Bool) async -> Bool {
-    let clock = ContinuousClock()
-    let deadline = clock.now + timeout
-
-    while clock.now < deadline {
-      if condition() { return true }
-
-      try? await Task.sleep(for: .milliseconds(20))
-    }
-
-    return condition()
   }
 }
 
@@ -205,16 +192,7 @@ func expect(
 func waitUntil(
   timeout: Duration = .seconds(30), _ condition: @MainActor () -> Bool
 ) async -> Bool {
-  let clock = ContinuousClock()
-  let deadline = clock.now + timeout
-
-  while clock.now < deadline {
-    if condition() { return true }
-
-    try? await Task.sleep(for: .milliseconds(20))
-  }
-
-  return condition()
+  await pollUntil(timeout: timeout) { condition() }
 }
 
 /// What a REPL channel reported, in order.
@@ -322,15 +300,6 @@ final class PseudoTerminal: @unchecked Sendable {
   func waitFor(_ condition: @Sendable (String) -> Bool, timeout: Duration = .seconds(30)) async
     -> Bool
   {
-    let clock = ContinuousClock()
-    let deadline = clock.now + timeout
-
-    while clock.now < deadline {
-      if condition(output) { return true }
-
-      try? await Task.sleep(for: .milliseconds(20))
-    }
-
-    return condition(output)
+    await pollUntil(timeout: timeout) { condition(output) }
   }
 }

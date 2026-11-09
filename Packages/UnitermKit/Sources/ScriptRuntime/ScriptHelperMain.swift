@@ -158,6 +158,8 @@ public enum ScriptHelperMain {
       return fail("cannot talk to uniterm at \(address.path): \(error)", status: Exit.unavailable)
     }
 
+    uniterm_janet_block_sigint()
+
     let watchdog = ScriptWatchdog.start(
       reading: session, onStop: { uniterm_janet_request_interrupt() },
       onHangup: { ScriptSession.endHelper(ScriptSession.appQuitText, flushingOutput: false) })

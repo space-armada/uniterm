@@ -219,20 +219,28 @@ final class FakeFootprints: @unchecked Sendable {
   }
 }
 
-/// Waits until no process has the ID `pid`, for at most `timeout`.
-func processIsGone(_ pid: pid_t, timeout: Duration = .seconds(10)) async -> Bool {
+/// Polls `condition` on the caller's actor until it holds or `timeout` passes, and returns whether
+/// it held. Every wait in these tests goes through it, so each one is bounded.
+func pollUntil(
+  timeout: Duration, interval: Duration = .milliseconds(20),
+  isolation: isolated (any Actor)? = #isolation, _ condition: () -> Bool
+) async -> Bool {
   let clock = ContinuousClock()
   let deadline = clock.now + timeout
 
   while clock.now < deadline {
-    if kill(pid, 0) != 0 && errno == ESRCH { return true }
+    if condition() { return true }
 
-    try? await Task.sleep(for: .milliseconds(20))
+    try? await Task.sleep(for: interval)
   }
 
-  return false
+  return condition()
 }
 
+/// Waits until no process has the ID `pid`, for at most `timeout`.
+func processIsGone(_ pid: pid_t, timeout: Duration = .seconds(10)) async -> Bool {
+  await pollUntil(timeout: timeout) { kill(pid, 0) != 0 && errno == ESRCH }
+}
 /// True when the process's main thread, the oldest thread it has, is blocked in the kernel. A
 /// helper stuck in a read is waiting, and a helper on its way to the read is running. A test uses
 /// it to know the call has begun before it sends the first interrupt.
@@ -255,14 +263,5 @@ func mainThreadIsWaiting(_ pid: pid_t) -> Bool {
 
 /// Waits until the process's main thread is blocked, for at most `timeout`.
 func waitUntilBlocked(_ pid: pid_t, timeout: Duration = .seconds(10)) async -> Bool {
-  let clock = ContinuousClock()
-  let deadline = clock.now + timeout
-
-  while clock.now < deadline {
-    if mainThreadIsWaiting(pid) { return true }
-
-    try? await Task.sleep(for: .milliseconds(10))
-  }
-
-  return mainThreadIsWaiting(pid)
+  await pollUntil(timeout: timeout, interval: .milliseconds(10)) { mainThreadIsWaiting(pid) }
 }

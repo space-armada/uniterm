@@ -265,7 +265,8 @@ extension ScriptHost {
       let size = min(line.utf8.count, ScriptProtocol.maxReplLineBytes) + 2
 
       if !current.isEmpty
-        && (current.count >= ScriptProtocol.maxHistoryLines || bytes + size > historyChunkBytes)
+        && (current.count >= ScriptProtocol.historyLinesPerMessage
+          || bytes + size > historyChunkBytes)
       {
         chunks.append(current)
         current = []

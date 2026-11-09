@@ -128,6 +128,10 @@ final class ScriptLimitsTests: XCTestCase {
 
     kill(stuck.processIdentifier, SIGINT)
 
+    // Cost: this 1 s wait proves a negative. A helper stuck in C survives one interrupt, and no
+    // event marks that nothing happened. The call has no reply to wait for. A shorter wait could
+    // miss an exit that takes a moment. No fake can stand in for a real SIGINT landing on a
+    // thread blocked in a read.
     try await Task.sleep(for: .seconds(1))
 
     XCTAssertTrue(stuck.isRunning, "the first Ctrl-C ended a call the interrupt cannot reach")

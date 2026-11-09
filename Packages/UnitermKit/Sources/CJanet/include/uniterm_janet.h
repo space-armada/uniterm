@@ -95,7 +95,12 @@ void uniterm_janet_set_memory_limit_hook(void (*hook)(void *userdata), void *use
 /*
  * Makes the next uniterm_janet_run stop on SIGINT. The first SIGINT while the script runs stops
  * it, and a second ends the process at once, so a script stuck in a C call that the interrupt
- * never reaches still ends. Call it before the run. The handler stays installed after the run, and does nothing once the run is over, so a late signal never reaches the default action.
+ * never reaches still ends. Call it before the run.
+ *
+ * The handler stays installed after the run and does nothing once the run is over, so a late
+ * signal never reaches the default action. The run unblocks SIGINT on its own thread only. A
+ * caller that blocked it on every other thread, with uniterm_janet_block_sigint, keeps the
+ * handler on one thread.
  */
 void uniterm_janet_enable_run_sigint(void);
 
@@ -149,10 +154,11 @@ typedef struct uniterm_repl_host {
 } uniterm_repl_host;
 
 /*
- * Blocks SIGINT on the calling thread. The REPL's thread calls it before it starts any other
- * thread, so every other thread inherits the block and the signal can only reach the REPL's own.
+ * Blocks SIGINT on the calling thread. The VM's thread calls it before it starts any other thread,
+ * so every other thread inherits the block and the signal can only reach the VM's own. The REPL
+ * and the run each unblock it again on the VM thread, once their handler is installed.
  */
-void uniterm_janet_repl_block_sigint(void);
+void uniterm_janet_block_sigint(void);
 
 /*
  * Makes the REPL's SIGINT handler write `[sigint evaluating]` or `[sigint idle]` to stderr each

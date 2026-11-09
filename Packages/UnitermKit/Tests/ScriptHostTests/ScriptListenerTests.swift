@@ -244,6 +244,92 @@ final class ScriptListenerTests: XCTestCase {
     XCTAssertEqual(uid, geteuid() &+ 1)
   }
 
+  /// Drives the listener until it reports a protocol violation, and returns every event up to it.
+  private func eventsUntilViolation(of listener: ScriptListener) async -> (Bool, EventLog) {
+    let log = EventLog()
+    let found = await listener.drive(timeout: .seconds(15)) { event in
+      log.record(event)
+
+      if case .refused(_, .protocolViolation) = event { return true }
+
+      return false
+    }
+
+    return (found, log)
+  }
+
+  /// Catches a peer that calls the host after its hello without declaring a script or a REPL.
+  /// The call must never reach the host, and the peer must be closed.
+  func testACallBeforeBeginOrAttachIsRefusedAndNeverReachesTheHost() async throws {
+    let listener = try ScriptListener.start(directory: directory)
+
+    defer { listener.stop() }
+
+    let socket = try hello(to: listener.path)
+
+    try socket.send(ScriptHelperMessage.request(id: 1, call: .listWindows).frame())
+
+    let (found, log) = await eventsUntilViolation(of: listener)
+
+    XCTAssertTrue(found, "the app accepted a call from a peer that never declared a role")
+    XCTAssertEqual(log.requests, 0)
+
+    XCTAssertThrowsError(try socket.readFrame(limit: ScriptAppMessage.bodyLimit(type:)))
+  }
+
+  /// Catches a script that begins again after it has called the host, which would rename its
+  /// session. A second begin is refused, so only the first name is ever reported.
+  func testBeginAfterACallIsRefusedAndKeepsTheFirstName() async throws {
+    let listener = try ScriptListener.start(directory: directory)
+
+    defer { listener.stop() }
+
+    let socket = try hello(to: listener.path)
+
+    try socket.send(ScriptHelperMessage.begin(name: "first").frame())
+    try socket.send(ScriptHelperMessage.request(id: 1, call: .listWindows).frame())
+    try socket.send(ScriptHelperMessage.begin(name: "second").frame())
+
+    let (found, log) = await eventsUntilViolation(of: listener)
+
+    XCTAssertTrue(found, "the app accepted a second begin")
+    XCTAssertEqual(log.names, ["first"])
+    XCTAssertEqual(log.requests, 1)
+  }
+
+  /// Catches same-user peers holding connection slots by saying hello and then never declaring.
+  /// The bound is injected, so the test runs in a fraction of a second. A peer that declared is
+  /// past the bound for good, and the sleep past it is the only way to show that.
+  func testAPeerThatNeverDeclaresIsClosedAndADeclaredPeerIsNot() async throws {
+    let listener = try ScriptListener.start(directory: directory, declarationTimeout: 0.25)
+
+    defer { listener.stop() }
+
+    let declared = try hello(to: listener.path)
+
+    try declared.send(ScriptHelperMessage.begin(name: "kept").frame())
+
+    let silent = try hello(to: listener.path)
+
+    let (found, _) = await eventsUntilViolation(of: listener)
+
+    XCTAssertTrue(found, "the app never turned away the peer that did not declare")
+    XCTAssertThrowsError(try silent.readFrame(limit: ScriptAppMessage.bodyLimit(type:))) { error in
+      XCTAssertEqual(error as? WireError, .closed)
+    }
+
+    try await Task.sleep(for: .milliseconds(400))
+    try declared.send(ScriptHelperMessage.request(id: 1, call: .listWindows).frame())
+
+    let reached = await listener.drive(timeout: .seconds(15)) { event in
+      if case .request = event { return true }
+
+      return false
+    }
+
+    XCTAssertTrue(reached, "the declared peer was closed by the declaration bound")
+  }
+
   /// Catches a peer that never reads growing the app's memory. A raw peer sends many calls and
   /// reads nothing. The app queues each reply for the writer, so the queue must stop at its bounds
   /// and the peer must be disconnected, whatever the peer does.
@@ -402,4 +488,35 @@ private func inode(of path: String) throws -> UInt64 {
   guard lstat(path, &info) == 0 else { throw WireError.io(errno) }
 
   return UInt64(info.st_ino)
+}
+
+private final class EventLog: @unchecked Sendable {
+  private let lock = NSLock()
+  private var begun: [String] = []
+  private var requested = 0
+
+  func record(_ event: ScriptEvent) {
+    lock.lock()
+    defer { lock.unlock() }
+
+    switch event {
+    case .begun(_, let name): begun.append(name)
+    case .request: requested += 1
+    default: break
+    }
+  }
+
+  var names: [String] {
+    lock.lock()
+    defer { lock.unlock() }
+
+    return begun
+  }
+
+  var requests: Int {
+    lock.lock()
+    defer { lock.unlock() }
+
+    return requested
+  }
 }

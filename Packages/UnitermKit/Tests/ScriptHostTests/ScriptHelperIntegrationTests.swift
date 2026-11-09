@@ -208,7 +208,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
     let message = try XCTUnwrap(center.history.first)
 
     XCTAssertEqual(message.text, "line one line [2J two")
-    XCTAssertEqual(message.source.label, "raw[31mname")
+    XCTAssertEqual(message.source.label, "raw [31m name")
   }
 
   /// Catches a helper that runs against an app of another protocol version. It must refuse with

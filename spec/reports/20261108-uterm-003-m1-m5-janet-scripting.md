@@ -510,3 +510,49 @@ prove.
   - `TerminalUITests.testControlCInterruptsAForegroundProgram`
   - `ReplUITests.testCtrlCStopsARunningEvaluationAndTheCloseAsksOnlyWhileItRuns`
   - `ReplUITests.testASecondCtrlCEndsAFormStuckInACallThatIgnoresTheFirst`
+
+## Row review
+
+### Commits
+
+- "Tighten the script listener's roles and fix row-review findings"
+
+### Findings
+
+| Finding | Disposition |
+|---|---|
+| PLAUSIBLE, high: the REPL's trace flag was read after the app scrubs its environment, so `--trace-sigint` never reached the helper | Fixed. The flag travels through `ReplServices` from the startup snapshot |
+| Same bug for `UNITERM_PLACE_NAMES` at `AppDelegate.swift:288`, from before this row | Left for the user |
+| CONFIRMED: a peer could call before declaring a role, and `begin` after a call renamed the session | Fixed. Tests failed first |
+| PLAUSIBLE: no deadline for declaring a role, so a same-user peer could hold all 32 slots | Fixed. One 5 s deadline runs from connect to declaration |
+| PLAUSIBLE: in run mode, SIGINT could run its handler on the watchdog thread | Fixed. Both modes block SIGINT on every thread but the VM's |
+| PLAUSIBLE: a memory-limit reason was lost when the pty exit came first | Fixed. A later reason upgrades the ended pane. A test failed first |
+| M5 marked `DONE` against an app key path that no test proves | Kept `DONE`. As built now states that package tests prove the stop channel and real SIGINT, and that the app's key path waits on M4's UI tests |
+| Dead code, misleading names, a misplaced `ProcessIdentity` | Fixed |
+| A second, weaker sanitizer for script names | Fixed. `StatusText.bounded` is the only one |
+| Test-only public API | Fixed. `@testable` used instead |
+| Comment width and accuracy | Fixed |
+| Test sleeps and duplicated polling | Fixed where cheap. The rest carry cost notes. One shared bounded poll helper |
+| Proposal: stacked "Amended" markers and stale As built text | Fixed. One marker per section, forward pointers, trimmed symbol lists |
+| ADR-impact, row: ADR-07 and ADR-08 validated as written | Recorded for the user. Both stay `proposed` |
+| ADR-impact, row: ADR-10 needs nuance | Recorded for the user. The open points are scope, enforced replacement controls, Janet's language-level sandbox, and stale text |
+| ADR-impact, row: `InputOwning` as an ADR | Dismissed as an ADR candidate. ADR-05 and the proposal cover it |
+| Implementer candidates: the listener's role contract, and blocking SIGINT off the VM thread | Dismissed as ADR candidates. Each is an implementation detail inside one feature |
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make lint`, `make check` | 88QNX3, 915QVF | pass |
+| `caffeinate -dimsu make test-package` | PG4GS7 | 2190 tests, 0 failures |
+| Same, after `make fmt` | ZAFK8J | 1 unowned failure, below |
+| `make build`, `check-sandbox-off.sh`, `make test-helper-sandbox` | 9ZSCQS, 7HE83A, 13PH2C | pass |
+| ASan fuzz, `swiftpm-offline-check.sh`, `build-for-testing` | CGB3TD, 76WP8K, 2R8DCE | pass |
+| UI tests | 5GCQH7 | not run. "Timed out while enabling automation mode" |
+
+### Unowned failures
+
+`FileWatcherTests.testChangesToOtherFilesInTheFolderDeliverNothing` failed once in ZAFK8J, at `FileWatcherTests.swift:112`.
+It saw 2 events where it expected 1. It passed in the full run PG4GS7 and alone in 1BED78. This row does not touch
+`FileWatching`. It was not reproduced on the base commit. The likely cause is filesystem-event timing, which is
+unconfirmed.

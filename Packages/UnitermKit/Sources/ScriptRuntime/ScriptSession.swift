@@ -41,9 +41,6 @@ final class ScriptSession: @unchecked Sendable {
     self.lost = lost
   }
 
-  /// The descriptor the watchdog watches.
-  var descriptor: Int32 { socket.rawDescriptor }
-
   /// Says why on stderr and ends the process with a status of its own. It must not return.
   ///
   /// `flushingOutput` is for the VM thread, which owns standard output. A script writes through
@@ -103,7 +100,7 @@ final class ScriptSession: @unchecked Sendable {
         case .history(let more, let final):
           lines += more
 
-          guard lines.count <= maxHistoryLines else {
+          guard lines.count <= ScriptProtocol.recallLines else {
             throw WireError.badValue("the app sent more history than a REPL can recall")
           }
 
@@ -122,10 +119,6 @@ final class ScriptSession: @unchecked Sendable {
       throw error
     }
   }
-
-  /// The most history lines a helper accepts. The app sends at most the lines the line editor
-  /// recalls, so a larger history is a fault.
-  private static let maxHistoryLines = 1000
 
   private static func connect(path: String) throws -> ScriptSession {
     let socket = try UnixSocket.connect(path: path)

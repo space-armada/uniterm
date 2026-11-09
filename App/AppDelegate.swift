@@ -304,7 +304,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       helper: { ScriptCommandInstaller.command(in: Bundle.main.bundleURL) },
       openChannel: { [weak self] history in
         self?.scriptHost?.admitRepl(history: history) ?? .refused(.scriptingOff)
-      })
+      },
+      traceSigint: debugEnvironment["UNITERM_REPL_TRACE_SIGINT"] == "1")
 
     let restoreApplet: AppletRestorer = { description in
       switch description.type {
