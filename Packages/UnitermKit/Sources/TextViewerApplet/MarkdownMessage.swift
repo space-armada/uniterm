@@ -7,7 +7,7 @@ struct MarkdownAnchor: Equatable, Sendable {
   var fraction: Double
 }
 
-/// A heading the page found, for the contents sidebar a later milestone adds.
+/// A heading the page found, for the contents sidebar.
 struct MarkdownHeading: Equatable, Sendable {
   var level: Int
   var text: String
@@ -19,7 +19,7 @@ struct MarkdownHeading: Equatable, Sendable {
 /// so a page that misbehaves cannot hand the host a value it did not expect.
 enum MarkdownMessage: Equatable {
   case ready
-  case rendered(lines: Int, headings: [MarkdownHeading], anchor: MarkdownAnchor?)
+  case rendered(lines: Int, headings: [MarkdownHeading], headingsCut: Bool, anchor: MarkdownAnchor?)
   case anchor(MarkdownAnchor)
   case failed(String)
 
@@ -64,7 +64,9 @@ enum MarkdownMessage: Equatable {
         anchor = parsed
       }
 
-      self = .rendered(lines: lines, headings: headings, anchor: anchor)
+      let cut = fields["headingsCut"] as? Bool ?? false
+
+      self = .rendered(lines: lines, headings: headings, headingsCut: cut, anchor: anchor)
 
     default:
       return nil

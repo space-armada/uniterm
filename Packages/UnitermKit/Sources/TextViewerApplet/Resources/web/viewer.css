@@ -156,6 +156,19 @@ mark {
   background: var(--um-mark);
 }
 
+/* Every match is a pale wash of the theme's mark color, and the current one is the full color with
+   an outline, so it is the most prominent in both light and dark themes. */
+mark.um-find {
+  color: inherit;
+  background: color-mix(in srgb, var(--um-mark) 35%, transparent);
+}
+
+mark.um-find-current {
+  color: #1e1e2e;
+  background: var(--um-mark);
+  outline: 2px solid var(--um-mark);
+}
+
 figcaption {
   color: var(--um-muted);
   font-size: 0.875em;

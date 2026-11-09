@@ -67,8 +67,8 @@ public struct TextViewerDescription: Codable, Equatable, Sendable {
 
   public var anchor: TextViewerAnchor?
 
-  /// Whether the contents sidebar is shown. The sidebar arrives with a later milestone, and the
-  /// field is here from the first version so that milestone needs no version bump.
+  /// Whether the contents sidebar is shown. The field was in version 1 from the start, so the
+  /// sidebar needed no version bump. A pane keeps it when it opens another file.
   public var sidebarShown: Bool
 
   public init(

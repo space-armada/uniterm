@@ -7,6 +7,9 @@ import TextViewerModel
 /// is built once off the main thread and handed over whole.
 struct DecodedDocument: @unchecked Sendable {
   let text: NSAttributedString
+
+  /// The headings the reader marked, found off the main thread with the rest of the decode.
+  let contents: Contents
 }
 
 enum DocumentReplyError: Error, Equatable, Sendable {
@@ -67,7 +70,9 @@ enum DocumentReplyDecoder {
       return .failure(.misbehaved("the images do not match the placeholders"))
     }
 
-    guard !reply.images.isEmpty else { return .success(DecodedDocument(text: source)) }
+    guard !reply.images.isEmpty else {
+      return .success(DecodedDocument(text: source, contents: ContentsBuilders.text(source)))
+    }
 
     let mutable = NSMutableAttributedString(attributedString: source)
     var next = 0
@@ -98,7 +103,7 @@ enum DocumentReplyDecoder {
       return .failure(.misbehaved("the images do not match the placeholders"))
     }
 
-    return .success(DecodedDocument(text: mutable))
+    return .success(DecodedDocument(text: mutable, contents: ContentsBuilders.text(mutable)))
   }
 
   /// The table cells and attachment placeholders of a decoded string.

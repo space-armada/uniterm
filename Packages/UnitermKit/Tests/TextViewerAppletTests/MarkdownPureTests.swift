@@ -36,7 +36,13 @@ final class MarkdownPureTests: XCTestCase {
         body: ["kind": "rendered", "lines": 10, "headings": [heading]] as [String: Any]),
       .rendered(
         lines: 10, headings: [MarkdownHeading(level: 2, text: "Install", id: "install", line: 4)],
-        anchor: nil))
+        headingsCut: false, anchor: nil))
+
+    XCTAssertEqual(
+      MarkdownMessage(
+        body: ["kind": "rendered", "lines": 10, "headings": [], "headingsCut": true]
+          as [String: Any]),
+      .rendered(lines: 10, headings: [], headingsCut: true, anchor: nil))
 
     var wrong = heading
     wrong["level"] = 9

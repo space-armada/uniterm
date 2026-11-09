@@ -548,15 +548,24 @@ final class TextViewerAppletTests: XCTestCase {
   // MARK: Commands
 
   /// Catches an Open that asks for a key, which would shadow the window's Cmd-O, a Reload without
-  /// Cmd-R, and a declaration that drifts from the owner rank for the formats the viewer reads.
+  /// Cmd-R, a find command that leaves Edit > Find, and a declaration that drifts from the owner
+  /// rank for the formats the viewer reads.
   func testTheCommandSetAndDeclaration() {
     let commands = TextViewerApplet.commandSet.commands
 
-    XCTAssertEqual(commands.map(\.name), ["open", "reload"])
+    XCTAssertEqual(
+      commands.map(\.name),
+      [
+        "open", "find", "find-next", "find-previous", "use-selection-for-find", "show-contents",
+        "reload",
+      ])
     XCTAssertNil(commands.first?.key)
     XCTAssertEqual(commands.first?.home, .file)
-    XCTAssertEqual(commands.last?.key, KeyChord("r"))
-    XCTAssertEqual(commands.last?.home, .view)
+
+    let reload = commands.first { $0.name == "reload" }
+
+    XCTAssertEqual(reload?.key, KeyChord("r"))
+    XCTAssertEqual(reload?.home, .view)
     XCTAssertEqual(
       TextViewerApplet.typeDeclaration.opens,
       [

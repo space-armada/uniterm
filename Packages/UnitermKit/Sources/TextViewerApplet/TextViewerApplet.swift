@@ -39,6 +39,10 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   private static let untitled = "Text viewer"
 
   let content: TextViewerView
+  let finder: FindCoordinator
+
+  /// The contents the shown document carries. The sidebar lists it.
+  private(set) var contents = Contents.empty
   private var record: TextViewerDescription
   private var opening: Task<Void, Never>?
   private var openGeneration = 0
@@ -126,6 +130,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     self.opener = opener
 
     content = TextViewerView()
+    finder = FindCoordinator(content: content)
     links = LinkHandler(opener: opener)
     publishedTabs = AppletTabList(first: AppletTab(id: .make(), title: Self.untitled))
 
@@ -145,6 +150,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     self.opener = opener
 
     content = TextViewerView()
+    finder = FindCoordinator(content: content)
     links = LinkHandler(opener: opener)
     publishedTabs = AppletTabList(first: AppletTab(id: .make(), title: Self.untitled))
 
@@ -193,6 +199,17 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     content.onLayout = { [weak self] in self?.applyPendingAnchor() }
     content.textView.delegate = links
     content.pdfView.delegate = links
+    content.setSidebar(visible: false)
+
+    content.findBar.onQuery = { [weak self] query in self?.finder.queryChanged(query) }
+    content.findBar.onStep = { [weak self] forward in self?.finder.step(forward: forward) }
+    content.findBar.onClose = { [weak self] in self?.closeFind() }
+    content.sidebar.onSelect = { [weak self] entry in self?.go(to: entry) }
+
+    let builtIn: (BuiltInFindAction) -> Void = { [weak self] action in self?.perform(action) }
+
+    content.textView.onFindAction = builtIn
+    content.pdfView.onFindAction = builtIn
 
     links.onRefused = { [weak self] url in
       guard let self else { return }
@@ -223,7 +240,8 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   /// Shows `file` in place of what the pane shows. The load before it stops. Nothing here touches
   /// the disk, so a missing or unreadable file shows its message in the pane.
   public func replaceSource(with file: URL, startDirectory: String) throws {
-    record = TextViewerDescription(startDirectory: startDirectory, path: file.path)
+    record = TextViewerDescription(
+      startDirectory: startDirectory, path: file.path, sidebarShown: record.sidebarShown)
     describesFromRecord = false
     restoreWaitsForStart = false
 
@@ -456,7 +474,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
       switch decoded {
       case .success(let document):
-        show(text: document.text, anchor: anchor)
+        show(text: document.text, contents: document.contents, anchor: anchor)
 
       case .failure(.overCap(let violation)):
         fail(violation.message(fileName: name))
@@ -568,12 +586,15 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     loadSucceeded()
     content.pdfView.document = nil
     content.textView.textStorage?.setAttributedString(NSAttributedString())
+    finder.documentChanged()
+    setContents(.empty)
 
     if content.markdownView !== view {
       view.onRendered = { [weak self] in self?.markdownRendered() }
       view.onFailed = { [weak self] reason in self?.markdownFailed(reason) }
       view.onTerminated = { [weak self] in self?.markdownTerminated() }
       view.onLink = { [weak self] url in self?.links.handle(url) }
+      view.onFindAction = { [weak self] action in self?.perform(action) }
 
       content.install(markdown: view)
       view.apply(palette)
@@ -599,6 +620,12 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   private func markdownRendered() {
     anchorApplied = true
     describesFromRecord = false
+    setContents(
+      ContentsBuilders.markdown(
+        content.markdownView?.headings ?? [], cut: content.markdownView?.headingsCut ?? false)
+    )
+    content.sidebar.isReady = true
+    finder.documentReady()
     refresh()
   }
 
@@ -621,6 +648,9 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
     let text = "The page for this document stopped. Reload to show it again."
 
+    finder.documentChanged()
+    setContents(.empty)
+
     showMessage(text, offersOpen: false, offersReload: true)
     messageText = text
     refresh()
@@ -634,6 +664,9 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     loadSucceeded()
     content.pdfView.document = document
     content.show(.pdf)
+    finder.documentChanged()
+    setContents(ContentsBuilders.pdf(document))
+    content.sidebar.isReady = true
     pendingAnchor = anchor
     scrollsToTop = anchor == nil
     anchorApplied = anchor == nil
@@ -642,10 +675,11 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
     refresh()
     applyPendingAnchor()
+    finder.documentReady()
     settleLoad()
   }
 
-  private func show(text: NSAttributedString, anchor: TextViewerAnchor?) {
+  func show(text: NSAttributedString, contents found: Contents, anchor: TextViewerAnchor?) {
     content.removeMarkdown()
     opening = nil
     messageText = nil
@@ -654,6 +688,9 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     content.pdfView.document = nil
     content.textView.textStorage?.setAttributedString(text)
     content.show(.text)
+    finder.documentChanged()
+    setContents(found)
+    content.sidebar.isReady = true
     pendingAnchor = anchor
     scrollsToTop = false
     anchorApplied = anchor == nil
@@ -662,6 +699,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
     refresh()
     applyPendingAnchor()
+    finder.documentReady()
     settleLoad()
   }
 
@@ -679,6 +717,8 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     case .pdf:
       guard let document = content.pdfView.document else { return }
 
+      // The body sits inside stack views, so the document view has a frame only after a layout pass.
+      content.layoutSubtreeIfNeeded()
       content.pdfView.layoutDocumentView()
 
       if let anchor {
@@ -723,6 +763,8 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     }
 
     content.removeMarkdown()
+    finder.documentChanged()
+    setContents(.empty)
     opening = nil
     describesFromRecord = false
     anchorApplied = true
@@ -840,6 +882,87 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     }
   }
 
+  // MARK: Find and contents
+
+  /// True while a document is on screen for the find commands to search.
+  var canFind: Bool { !closed && finder.canFind }
+
+  func showFind() {
+    guard canFind else { return }
+
+    finder.show()
+  }
+
+  func stepFind(forward: Bool) {
+    finder.step(forward: forward)
+  }
+
+  func useSelectionForFind() {
+    Task { @MainActor [weak self] in await self?.finder.useSelection() }
+  }
+
+  private func closeFind() {
+    finder.close()
+    content.focusBody()
+  }
+
+  private func perform(_ action: BuiltInFindAction) {
+    switch action {
+    case .show: showFind()
+    case .next: stepFind(forward: true)
+    case .previous: stepFind(forward: false)
+    case .useSelection: useSelectionForFind()
+    }
+  }
+
+  /// Show Contents is off for a document with no outline, unless the sidebar is already showing,
+  /// since the command is also how the sidebar is hidden.
+  var canShowContents: Bool {
+    guard !closed, finder.canFind else { return false }
+
+    return record.sidebarShown || !contents.isEmpty
+  }
+
+  var sidebarShown: Bool { record.sidebarShown }
+
+  func toggleContents() {
+    guard canShowContents else { return }
+
+    record.sidebarShown.toggle()
+    updateSidebar()
+    host?.appletDidChange(self)
+  }
+
+  private func setContents(_ found: Contents) {
+    contents = found
+    content.sidebar.show(found)
+    content.sidebar.isReady = false
+    updateSidebar()
+  }
+
+  private func updateSidebar() {
+    content.setSidebar(visible: record.sidebarShown && finder.canFind)
+  }
+
+  private func go(to entry: ContentsEntry) {
+    switch entry.target {
+    case .pdf(let index, _, let y):
+      guard let document = content.pdfView.document, index < document.pageCount,
+        let page = document.page(at: index)
+      else { return }
+
+      content.pdfView.show(page: page, at: y, clampedToPage: true)
+
+    case .text(let index):
+      scrollText(toCharacter: index)
+
+    case .markdown(let heading):
+      guard let view = content.markdownView else { return }
+
+      Task { await view.scrollToHeading(heading) }
+    }
+  }
+
   // MARK: Applet
 
   public func start(origin: StartOrigin) {
@@ -881,6 +1004,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     unwatch()
     alerts.discard()
     cancelLoad()
+    finder.documentChanged()
     content.removeMarkdown()
 
     if let pageObserver { NotificationCenter.default.removeObserver(pageObserver) }
@@ -930,6 +1054,8 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
   private func refresh() {
     guard !closed else { return }
+
+    updateSidebar()
 
     let newTitle = record.path.map { ($0 as NSString).lastPathComponent } ?? Self.untitled
     let newSegments = segmentsForState()

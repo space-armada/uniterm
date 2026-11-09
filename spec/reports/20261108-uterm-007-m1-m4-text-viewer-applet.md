@@ -22,7 +22,7 @@ work is stashed. No commands need the user's credentials.
 | UTERM-007 M1: PDF and RTF | DONE | "Add a text viewer for PDF, RTF, and Word documents" |
 | UTERM-007 M2: Markdown | DONE | "Render Markdown in the text viewer inside an isolated web view" |
 | UTERM-007 M3: Live reload | DONE | "Reload the text viewer when its file changes on disk" |
-| UTERM-007 M4: Find and contents | QUEUED | |
+| UTERM-007 M4: Find and contents | DONE | "Find text and list contents in the text viewer" |
 
 ## Local checks
 
@@ -336,8 +336,8 @@ Both displays reported full power. The user was away, and the user suggested `ca
 The implementer's first `caffeinate` call waited about 26 minutes on an approval prompt, because `caffeinate` was not
 allowlisted. A pending cg call missing from `cg_list` gave it away.
 
-After the coordinator's commit, `.cg.yaml` line 12 changed to `prefixx: [caffeinate, -dimsu, swift, test]`. The run
-did not make that edit and left it for the user.
+After the coordinator's commit, the user replaced the `swift test` rule with `wrapper: [caffeinate, -dimsu]`. That edit is
+the user's, and the run leaves it uncommitted. The coordinator first misread it mid-edit as a typo.
 
 ### Best guesses
 
@@ -397,3 +397,112 @@ sheet". The cg server restarted during that run. The class passed 8 of 8 alone i
 | `LiveReloadTests`, 14 tests | about 3 s |
 | `PDFPlacementTests` | not timed alone |
 | `TextViewerUITests`, 8 tests | 81 s for the class |
+
+## UTERM-007 M4: Find and contents
+
+### Commits
+
+- "Find text and list contents in the text viewer". The review fixes, the screenshot fixes, and this report's M4
+  section are in the same commit. The report also carries the corrected `.cg.yaml` note under M3.
+
+### What landed
+
+- Find (Cmd-F), Find Next (Cmd-G), Find Previous (Cmd-Shift-G), and Use Selection for Find (Cmd-E) in Edit > Find, and
+  Show Contents in View with no key. A catalog test pins the keys through the real registry and menu.
+- One find bar per pane. The query lives in the pane. Nothing reads or writes the system find pasteboard, and the
+  text, PDF, and web views hand their built-in find actions to the pane.
+- RTF and Word search a copy of the text off the main thread. PDF uses PDFKit's asynchronous find. Markdown searches
+  in the parser's isolated world, with the query passed as a call argument.
+- Matching is case- and diacritic-insensitive in every format. The page mirrors Foundation's fold, and a hit counts
+  only when it starts and ends on source-character boundaries.
+- A contents sidebar from structure only: the PDF outline, Markdown headings, and RTF/Word heading levels. Lists are
+  capped by entry count and depth, and the sidebar says why one was cut. Its visibility persists in the description.
+- The current PDF match, and a PDF outline jump, land with room above them. The current Markdown match is the
+  strongest highlight.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | TSSKBA, 46EY0Y, 63SD90 | pass |
+| `make build` | 22C85P | pass |
+| `xcodebuild build-for-testing` | E21HG4 | pass |
+| `caffeinate -dimsu make test-package`, implementer, after the last change | YENFAQ | 1,975 tests, 7 skipped, 0 failures |
+| `caffeinate -dimsu make test-package`, coordinator, before the screenshot fixes | SFS1C5 | pass |
+| `proposals.py check` and `freeze` | implementer's last runs | only the row-to-history finding, and `[]` |
+| Text viewer UI tests, first try | EP3ZMT | did not start: the automation authentication prompt was cancelled |
+| Text viewer UI tests | JRTZ8F | 11 tests, 3 failures: two sidebar lookups, and one hang on a system dialog |
+| Text viewer UI tests | 9C11WD | 13 tests, 2 failures: the sidebar lookups |
+| Text viewer UI tests | QYTAYX, MJE1AA | 13 tests, 0 failures |
+| Text viewer UI tests, after the Use Selection fix | KJT03V | 13 tests, 0 failures |
+
+The coordinator looked at every screenshot across those runs and sent back each visual problem:
+
+- The current Markdown match was paler than the others.
+- The current PDF match sat under the find bar.
+- One screenshot captured other applications' windows instead of uniterm.
+- Selected sidebar text was dark on blue.
+- A PDF outline jump clipped its target.
+- An empty strip sat at the bottom of the sidebar.
+- Use Selection reported no matches for the selected text.
+
+KJT03V shows all of them fixed. Use Selection on the RTF finds "A sample document", 1 of 1, and selects it.
+
+### Best guesses
+
+Each is a Decision Log entry tagged as a work-queue best guess.
+
+- Matching follows Foundation's case- and diacritic-insensitive rules in every format. Matches are capped at 10,000
+  and queries at 500 characters.
+- A match inside a closed `<details>` counts, and opens that element only when it becomes current.
+- A typed query selects the first match. A reload searches again without moving the view.
+- Use Selection takes the selection's first non-empty line or table cell, and the match inside the selection becomes
+  current. PDFKit, Foundation, and the page do not match across line breaks the same way, so a joined query could not
+  match consistently.
+- Show Contents stays enabled while the sidebar is shown, so a sidebar left open can be hidden when the next document
+  has no outline. M4's check text was amended for this.
+- Contents are capped at 5,000 entries, depth 32, and 200-character titles. Markdown entries scroll by heading index.
+
+### Review findings
+
+| Finding | Disposition |
+|---|---|
+| Markdown matched inside a character that expands when folded, such as "s" in "ß" (CONFIRMED) | Fixed: hits must fall on source-character boundaries. The agreement test failed before the fix |
+| The reload test passed even with the generation check removed (CONFIRMED) | Fixed. It now fails without the check |
+| No test covered Markdown Use Selection | Added |
+| Proposal hygiene: two amendment markers on one decision, long lines, a reason in As built | Fixed |
+| The cap test bypassed the pane's own find | Now drives the pane and counts main-actor turns |
+| The outline walker keyed visited nodes by address, and the cut message ignored its cause | Fixed: the walker retains nodes, and the message names the cause |
+| `PDFSearch.active` could be read off the main thread (PLAUSIBLE) | Traced: the reads were already on main. It is now `@MainActor`, so the compiler enforces it |
+| Real-time sleeps and polling in tests | Replaced with awaited completions |
+| A long doc comment | Rewrapped |
+| Use Selection could apply a stale selection after a reload | Fixed with a generation check |
+
+The ADR-impact pass found no conflicts. Its pasteboard candidate was already declined on 2026-11-03, since CLAUDE.md
+"Applet Attributes" states it. Its other candidates are specific to this viewer.
+
+### Left for the user
+
+- Real RTF and Word files get no contents on this macOS. The system readers set no heading level, even for a `.docx`
+  with Heading 1 and 2 styles, or an RTF with `\outlinelevel`. The code lists headings when levels are present, and a
+  test proves that with text that carries levels. The proposal lists this as left undone, and the Decision Log holds
+  an unowned finding.
+- Every row in the contents sidebar reports "Disabled" to accessibility. So does the whole pane subtree, and that
+  predates M4. The cause is unexplained.
+
+### Unowned failures
+
+- `TerminalSessionIntegrationTests.testClipboardReadIsNeverAnsweredWithoutConfirmation` failed once in the
+  implementer's full run VBEE6A, with "timed out waiting for the second request". It passed alone in NWCXQW and in the
+  next full run, WE06KH. No M4 change touches terminal code. The cause is unresolved.
+- `testAnEditedFileReloadsInPlaceAndByRename` hung once in JRTZ8F. Its spindump shows the app idle and the runner
+  inside `XCUIInterruptionMonitor`, handling a system dialog. It passed in every later run.
+
+### Test cost
+
+| Class | Wall time alone |
+|---|---|
+| `FindModelTests` | 0.01 s |
+| `FindTests` | 1.5 to 2.5 s |
+| `ContentsTests` | about 2.3 s |
+| `TextViewerUITests`, 13 tests | 127 s for the class |

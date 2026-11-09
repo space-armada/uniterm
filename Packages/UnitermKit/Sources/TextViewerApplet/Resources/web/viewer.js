@@ -206,7 +206,10 @@
     root: null,
     blocks: [],
     headings: [],
+    headingNodes: [],
+    headingsCut: false,
     usedIDs: new Set(),
+    find: null,
     rendered: false,
     lastAnchor: null,
     token: null,
@@ -254,12 +257,15 @@
         }
 
         if (state.headings.length < MAX_HEADINGS) {
+          state.headingNodes.push(heading);
           state.headings.push({
             level: Number(heading.tagName.slice(1)),
             text: text.slice(0, MAX_HEADING_TEXT),
             id: id,
             line: line,
           });
+        } else {
+          state.headingsCut = true;
         }
       }
     }
@@ -460,6 +466,306 @@
     style.setProperty('color-scheme', theme.dark ? 'dark' : 'light');
   }
 
+  // Find. The rule matches the host's other engines: Foundation's case- and diacritic-insensitive
+  // comparison. Text is decomposed, combining marks are dropped, and the rest is case folded. The
+  // folds JavaScript's lowercasing lacks are the ones Foundation applies: sharp s, final sigma,
+  // long s, and the Latin ligatures. The query reaches this code as a call argument, never as
+  // source text.
+  const MAX_MATCHES = 10000;
+  const MAX_QUERY = 500;
+  const ASCII = /^[\u0000-\u007f]*$/;
+  const MARKS = /\p{M}/gu;
+  const FOLDS = {
+    'ß': 'ss', 'ς': 'σ', 'ſ': 's', 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl',
+    'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st',
+  };
+  const FOLD_CHARS = /[ßςſﬀ-ﬆ]/g;
+  const INLINE = new Set([
+    'a', 'abbr', 'b', 'bdo', 'cite', 'code', 'del', 'dfn', 'em', 'i', 'ins', 'kbd', 'mark', 'q',
+    'rp', 'rt', 'ruby', 's', 'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'time', 'tt',
+    'u', 'var', 'wbr',
+  ]);
+
+  // Folds `text`. When the fold keeps every position, only the folded text comes back. Otherwise
+  // `starts` and `ends` map each folded unit to the span of the original text that made it.
+  function foldText(text, collapseBreaks) {
+    if (ASCII.test(text)) {
+      const folded = text.toLowerCase();
+
+      return { text: collapseBreaks ? folded.replace(/\n/g, ' ') : folded, starts: null, ends: null };
+    }
+
+    let out = '';
+    const starts = [];
+    const ends = [];
+    let position = 0;
+
+    for (const character of text) {
+      const width = character.length;
+      let folded = character.normalize('NFD').replace(MARKS, '').toLowerCase().replace(FOLD_CHARS, function (c) {
+        return FOLDS[c];
+      });
+
+      if (collapseBreaks && folded === '\n') folded = ' ';
+
+      for (let unit = 0; unit < folded.length; unit += 1) {
+        starts.push(position);
+        ends.push(position + width);
+      }
+
+      out += folded;
+      position += width;
+    }
+
+    return { text: out, starts: starts, ends: ends };
+  }
+
+  function blockOf(node, cache) {
+    let element = node.parentElement;
+    const first = element;
+
+    while (element && INLINE.has(element.localName)) element = element.parentElement;
+
+    cache.set(first, element);
+
+    return element;
+  }
+
+  function clearFind() {
+    const find = state.find;
+
+    state.find = null;
+
+    if (!find) return;
+
+    const parents = new Set();
+
+    for (const mark of find.marks) {
+      const parent = mark.parentNode;
+
+      if (!parent) continue;
+
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+
+      parent.removeChild(mark);
+      parents.add(parent);
+    }
+
+    for (const parent of parents) parent.normalize();
+  }
+
+  function entryAt(entries, offset) {
+    let low = 0;
+    let high = entries.length - 1;
+
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+
+      if (entries[middle].start <= offset) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+
+    return low;
+  }
+
+  // A hit counts only when it starts and ends between source characters. Foundation does not match
+  // part of a character that folds to several, such as an s inside a sharp s or an f inside a
+  // ligature, so neither does the page.
+  function onBoundaries(entries, start, end) {
+    const first = entries[entryAt(entries, start)];
+
+    if (first.starts) {
+      const index = start - first.start;
+
+      if (index > 0 && first.starts[index - 1] === first.starts[index]) return false;
+    }
+
+    const last = entries[entryAt(entries, end - 1)];
+
+    if (last.starts) {
+      const index = end - 1 - last.start;
+
+      if (index + 1 < last.starts.length && last.starts[index + 1] === last.starts[index]) return false;
+    }
+
+    return true;
+  }
+
+  // Searches the rendered text. A match may span inline elements, and never spans two blocks. A
+  // match inside a closed details element counts. It is revealed when it becomes the current match.
+  function find(query) {
+    clearFind();
+
+    const wanted = foldText(String(query).slice(0, MAX_QUERY), false).text.replace(/\u0000/g, '');
+
+    if (wanted === '' || !state.root) return { count: 0, capped: false };
+
+    const entries = [];
+    const parts = [];
+    const cache = new Map();
+    const walker = document.createTreeWalker(state.root, NodeFilter.SHOW_TEXT);
+    let total = 0;
+    let previousBlock;
+
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const value = node.nodeValue;
+
+      if (!value) continue;
+
+      const block = cache.has(node.parentElement) ? cache.get(node.parentElement) : blockOf(node, cache);
+
+      if (previousBlock !== undefined && block !== previousBlock) {
+        entries.push({ node: null, start: total, length: 1 });
+        parts.push('\u0000');
+        total += 1;
+      }
+
+      previousBlock = block;
+
+      const inPre = block && block.localName === 'pre';
+      const folded = foldText(value, !inPre);
+
+      entries.push({ node: node, start: total, length: folded.text.length, starts: folded.starts, ends: folded.ends });
+      parts.push(folded.text);
+      total += folded.text.length;
+    }
+
+    const flat = parts.join('');
+    const hits = [];
+    let capped = false;
+
+    for (let at = flat.indexOf(wanted); at !== -1; ) {
+      if (!onBoundaries(entries, at, at + wanted.length)) {
+        at = flat.indexOf(wanted, at + 1);
+        continue;
+      }
+
+      if (hits.length >= MAX_MATCHES) {
+        capped = true;
+        break;
+      }
+
+      hits.push(at);
+      at = flat.indexOf(wanted, at + wanted.length);
+    }
+
+    const matches = [];
+    const byNode = new Map();
+
+    hits.forEach(function (hit, index) {
+      const end = hit + wanted.length;
+
+      matches.push([]);
+
+      for (let at = entryAt(entries, hit); at < entries.length && entries[at].start < end; at += 1) {
+        const entry = entries[at];
+
+        if (!entry.node) continue;
+
+        const from = Math.max(hit, entry.start) - entry.start;
+        const to = Math.min(end, entry.start + entry.length) - entry.start;
+
+        if (to <= from) continue;
+
+        const first = entry.starts ? entry.starts[from] : from;
+        const last = entry.ends ? entry.ends[to - 1] : to;
+
+        if (!byNode.has(entry.node)) byNode.set(entry.node, []);
+
+        byNode.get(entry.node).push({ start: first, end: last, match: index });
+      }
+    });
+
+    const marks = [];
+
+    for (const [node, segments] of byNode) {
+      segments.sort(function (a, b) { return b.start - a.start; });
+
+      for (const segment of segments) {
+        const middle = segment.start > 0 ? node.splitText(segment.start) : node;
+
+        if (segment.end - segment.start < middle.length) middle.splitText(segment.end - segment.start);
+
+        const mark = document.createElement('mark');
+
+        mark.className = 'um-find';
+        middle.parentNode.insertBefore(mark, middle);
+        mark.appendChild(middle);
+        marks.push(mark);
+        matches[segment.match].push(mark);
+      }
+    }
+
+    state.find = { marks: marks, matches: matches, current: -1 };
+
+    return { count: matches.length, capped: capped };
+  }
+
+  function selectMatch(index) {
+    const find = state.find;
+
+    if (!find) return false;
+
+    if (find.current >= 0) {
+      for (const mark of find.matches[find.current] || []) mark.classList.remove('um-find-current');
+    }
+
+    find.current = -1;
+
+    const marks = find.matches[index];
+
+    if (!marks || marks.length === 0) return false;
+
+    find.current = index;
+
+    for (const mark of marks) mark.classList.add('um-find-current');
+
+    for (let parent = marks[0].parentElement; parent; parent = parent.parentElement) {
+      if (parent.localName === 'details' && !parent.open) parent.open = true;
+    }
+
+    marks[0].scrollIntoView({ block: 'center', inline: 'nearest' });
+
+    return true;
+  }
+
+  function scrollToHeading(index) {
+    const heading = state.headingNodes[index];
+
+    if (!heading) return false;
+
+    heading.scrollIntoView({ block: 'start' });
+
+    return true;
+  }
+
+  // The reader's selection as text. The selection's range is kept, since a live range follows the
+  // document as a search marks it, and `matchInSelection` finds the match that lies inside it.
+  function selectedText() {
+    const selection = window.getSelection ? window.getSelection() : null;
+
+    state.selectionRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+
+    return String(selection ? selection.toString() : '');
+  }
+
+  function matchInSelection() {
+    const find = state.find;
+    const range = state.selectionRange;
+
+    if (!find || !range) return -1;
+
+    for (let index = 0; index < find.matches.length; index += 1) {
+      if (find.matches[index].some(function (mark) { return range.intersectsNode(mark); })) return index;
+    }
+
+    return -1;
+  }
+
   async function start(options) {
     const generation = ++state.generation;
 
@@ -467,6 +773,9 @@
     state.root = document.getElementById('um-root');
     state.blocks = [];
     state.headings = [];
+    state.headingNodes = [];
+    state.headingsCut = false;
+    state.find = null;
     state.usedIDs = new Set();
     state.rendered = false;
     state.lastAnchor = null;
@@ -570,7 +879,8 @@
 
       state.lastAnchor = settled;
       post({
-        kind: 'rendered', generation: state.token, lines: lines, headings: state.headings, anchor: settled,
+        kind: 'rendered', generation: state.token, lines: lines, headings: state.headings,
+        headingsCut: state.headingsCut, anchor: settled,
       });
     } catch (error) {
       post({ kind: 'failed', generation: state.token, reason: String(error && error.message ? error.message : error).slice(0, 200) });
@@ -583,6 +893,13 @@
 
   api.start = start;
   api.setTheme = applyTheme;
+  api.find = find;
+  api.clearFind = clearFind;
+  api.selectMatch = selectMatch;
+  api.scrollToHeading = scrollToHeading;
+  api.selectedText = selectedText;
+  api.matchInSelection = matchInSelection;
+  api.foldText = function (text) { return foldText(String(text), false).text; };
 
   window.umViewer = api;
 

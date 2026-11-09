@@ -219,12 +219,13 @@ Following the bookmark live would switch to an editor's backup during a save, wh
 
 Original question: find in document, and a table of contents from headings or PDF outlines.
 
-Decision: find, plus a contents sidebar built only from structural outline data.
+Decision: find, plus a contents sidebar built only from structural outline data. Amended 2026-11-08; see
+Decision Log.
 
 - Find (Cmd-F), Find Next (Cmd-G), and Find Previous (Cmd-Shift-G) are registry commands the viewer declares per
   UTERM-013, in Edit > Find. The viewer owns one find bar. It drives each format's engine: `PDFDocument`'s asynchronous
   find, a search of the text storage's string for RTF and Word, shown with selection and the find indicator, and
-  a find in the parser's isolated world for Markdown, which returns highlight ranges and a count, since
+  a find in the parser's isolated world for Markdown, which marks its matches in the page and returns a count, since
   `WKWebView.find` offers no diacritic option and no count. The text view's built-in find bar and find panel are off.
   `NSTextFinder` is not used, since it takes its query only from its own bar or the system find pasteboard.
 - The find query belongs to the pane. The viewer neither reads nor writes the system find pasteboard, so a search typed
@@ -232,8 +233,8 @@ Decision: find, plus a contents sidebar built only from structural outline data.
   previous, and whether there is a match. Match counts show where the engine gives one.
 - A Show Contents registry command, with no key, toggles a contents sidebar. It lists the PDF outline, the Markdown
   headings the page pushes, or RTF and Word headings from `NSParagraphStyle.headerLevel` where the system reader sets
-  it. Selecting an entry scrolls there. A document with no structural outline gets a disabled command and a sidebar that
-  says there are no contents. Nothing is inferred from fonts or text.
+  it. Selecting an entry scrolls there. A document with no structural outline gets a disabled command while the sidebar
+  is hidden, and a sidebar that says there are no contents. Nothing is inferred from fonts or text.
 - The sidebar's visibility is saved in the description.
 
 Rationale: find is the main way through a long document, and every engine already exists. A table of contents built
@@ -567,7 +568,7 @@ None.
 
 ### M4: Find and contents
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Find, Find Next, Find Previous, Show Contents, Open..., and Reload are registry commands the viewer declares, and none
   of their keys is a reserved window key
@@ -578,7 +579,8 @@ None.
   the system find pasteboard. Use Selection for Find sets the pane's query only
 - The contents sidebar lists the PDF outline, Markdown headings, and RTF and Word headings where the reader sets a
   heading level. Selecting an entry scrolls there
-- A document with no outline disables Show Contents. A huge or cyclic outline is capped, and the sidebar says it was cut
+- A document with no outline disables Show Contents while the sidebar is hidden. A huge or cyclic outline is capped, and
+  the sidebar says it was cut. Amended 2026-11-08; see Decision Log
 - The sidebar's visibility survives reopen and relaunch
 - RTF and Word heading levels survive the trip through the helper, so the sidebar lists them
 - Searching an RTF or Word document at the decoded cap never blocks the main thread
@@ -589,6 +591,57 @@ None.
   `</script>` search literally
 - Markdown find matches text that spans inline elements, and one documented rule says whether a match inside a closed
   `<details>` is revealed or skipped
+
+**As built:**
+
+- Each format has its own engine behind one `FindCoordinator` and one find bar. RTF and Word search a copy of the text
+  storage's string off the main thread, then show matches as temporary background highlights, with the current match
+  selected and given the find indicator. A PDF searches through PDFKit's `beginFindString` and shows its matches as
+  highlighted selections. Markdown searches in the parser's world and wraps each match in a `mark` element. All three
+  pass `.caseInsensitive` and `.diacriticInsensitive` to PDFKit and Foundation, and the page reimplements Foundation's
+  fold. A test judges 18 pairs both ways, among them the sharp s, a ligature, a dotted capital I, and final sigma, and
+  pins agreement. See Decision Log.
+- The query reaches the page as a `callAsyncJavaScript` argument. A test finds `"hi" and </script> and \ '` literally.
+  A match spans inline elements, since the page searches one string built from a block's text nodes, and it never spans
+  two blocks.
+- Cmd-E, Cmd-F, Cmd-G, and Cmd-Shift-G are free of every reservation, and a catalog test pins the keys through the real
+  registry and menu. The text view, the PDF view, and the web view override their built-in find actions and hand them to
+  the pane, and a test sends `performFindPanelAction` to the first two. A package test per format shows the system find
+  pasteboard's change count unmoved across a search, a step, and Use Selection for Find. The UI test does the same with
+  a sentinel string. The web view's override compiles against `NSResponder`'s `performTextFinderAction`, and no test
+  reaches it with a real menu action.
+- The 4,000,000-character cap: a test shows a string of that length in the pane, runs the pane's own find, and counts
+  the main actor's turns while it runs. A search on the main actor would let none through.
+- A reload, a new document, or a close bumps a generation that every result checks. A query the open bar still holds
+  searches the new document again without moving the view or selecting a match, so Next then lands on the first.
+- PDFKit's `cancelFindString` delivered no match to a cancelled search in the test. The find object also ignores
+  callbacks after a cancel.
+- The contents come from structure only. A PDF walks `outlineRoot` with a visited set, a depth of 32, and 5,000
+  entries. A hand-written PDF whose one entry names itself as its first child loads as one entry, since PDFKit ends the
+  loop itself. The model tests drive the walker's own cycle, depth, and entry caps. RTF and Word headings come from
+  `NSParagraphStyle.headerLevel`, found off the main thread with the decode. Markdown headings come from the page. The
+  page now reports whether it cut its list, and the sidebar says so.
+- Real RTF and Word files get no contents on the macOS this was built on, and their sidebar says so. See Decision Log.
+  The heading extraction is proved with a string that carries levels, and the helper's archive keeping the level was
+  already proved in M1.
+- Use Selection for Find on a selection across lines or table cells searches for its first non-empty line or cell, and
+  that match inside the selection becomes current. A package test per format selects a span that crosses lines, and in
+  RTF and Markdown a table cell boundary, and checks that the query matches and the current match lies inside the
+  selection. All three failed before the change, when the lines were joined with spaces. See Decision Log.
+- A PDF outline jump uses the same placement. A destination near the top of its page shows the page top, and any other
+  destination sits about a third of the way down the view. A selected sidebar title takes the system selection text
+  color, and the list runs to the sidebar's bottom edge unless a cut message needs room.
+- The current PDF match scrolls to a third of the way down the view, since scrolling to the selection put it flush
+  against the top edge and clipped its find indicator. In Markdown, every match is a 35 percent wash of the theme's mark
+  color and the current one is the full color with an outline, so the current match is the most prominent.
+- The sidebar is a fixed 240 points wide and not resizable. Its visibility is the description's `sidebarShown`, and
+  opening another file in the pane keeps it. The Show Contents menu item has a fixed title.
+- Every element inside the pane reports Disabled in the UI hierarchy, the sidebar's rows included. The pane group did
+  so before this milestone. The cause is unexplained and pane-wide, and it is left for the user.
+- A sidebar entry is a text field in the table cell, so the accessibility tree lists its title, and UI tests find it
+  by that text.
+- Not run here: the UI tests for find in each format, Use Selection for Find, and the sidebar. They build, and they
+  attach screenshots.
 
 ### M5: Remote control
 
@@ -792,6 +845,37 @@ None.
   UTERM-007 M4 lists Reload among the registry commands, and this milestone declares it. The status bar text for a gone
   file is "Moved or deleted" as a warning segment, and the one warning says the pane keeps the last version it read.
   (work-queue best guess)
+- 2026-11-08: M4 matching rule. Every format matches by Foundation's `.caseInsensitive` and `.diacriticInsensitive`.
+  PDFKit and `NSString` take the options, and the page folds text in JavaScript by decomposing it, dropping combining
+  marks, lowercasing, and applying the folds Foundation applies and `toLowerCase` lacks. Those are the sharp s, final
+  sigma, long s, and the Latin ligatures. Compatibility forms such as fullwidth letters and `ǆ` do not fold, as in
+  Foundation. A hit counts only when it starts and ends between source characters, since Foundation does not match an
+  s inside a sharp s or an f inside a ligature, and a test pins eight such pairs. A search reports at most 10,000
+  matches and says when it stopped. A query is cut at 500 characters. (work-queue best guess)
+- 2026-11-08: M4 `<details>` rule. A match inside a closed `<details>` counts. It opens that element only when it
+  becomes the current match, and the other closed elements stay closed. Skipping would make the count lie about the
+  document, and opening every element would rewrite the reader's page. (work-queue best guess)
+- 2026-11-08: M4 find behavior. A typed query selects the first match. A reload searches and highlights without moving
+  the view or the selection, so a reader editing a file keeps their place. Use Selection for Find takes the
+  selection's first non-empty line or table cell as the query, trimmed and cut at 500 characters, since the field
+  holds one line and the engines do not match across line breaks alike. It then makes the first match inside the
+  selection current, so Next steps on from it. Closing the bar drops the query. A selection of one line is the query
+  whole. (work-queue best guess)
+- 2026-11-08: Amended "Search and navigation" and M4, in the decision's single marker. The text said the page's find
+  returns highlight ranges, and that a document with no outline gets a disabled Show Contents. The page marks its
+  matches with `mark` elements and returns a count. Show Contents stays on while the sidebar is showing, so a sidebar
+  left shown by one document can be hidden when the next has no outline, and it is off only when the sidebar is hidden
+  and the document lists nothing. Show Contents sits in View beside Reload with no key. (work-queue best guess)
+- 2026-11-08: M4 contents caps. A list holds at most 5,000 entries and follows an outline at most 32 levels deep, and
+  a title is cut at 200 characters. The Markdown page reports a `headingsCut` flag, since the host could not tell that
+  the page stopped at its heading cap. A Markdown entry scrolls by the heading's position in the page's list, not by
+  its `id`, because an authored element can share an `id`. A cut list says why: the entry cap, the depth cap, or an
+  entry that points back to one already listed. The sidebar is 240 points wide and not resizable. A pane keeps its
+  sidebar when it opens another file. (work-queue best guess)
+- 2026-11-08: Unowned finding. On this macOS the system RTF and Word XML readers set no `NSParagraphStyle.headerLevel`
+  for headings in a hand-built `.docx` with heading styles or in an RTF with outline levels, and the system writers
+  drop it. The sidebar for real RTF and Word files is therefore empty here, which "Search and navigation" already
+  lists as left undone. Revisit if a supported macOS sets the level.
 
 ## References
 

@@ -5,6 +5,20 @@ import WebKit
 /// A web view that gives file drops to the pane instead of taking them, and keeps the context
 /// menu to entries that cannot start a navigation or a download.
 final class MarkdownWebView: WKWebView {
+  /// Called for a find action sent down the responder chain, so the pane's find bar answers and
+  /// WebKit's own find stays unused.
+  var onFindAction: ((BuiltInFindAction) -> Void)?
+
+  override func performTextFinderAction(_ sender: Any?) {
+    guard let action = BuiltInFindAction(sender: sender) else { return }
+
+    onFindAction?(action)
+  }
+
+  @objc func performFindPanelAction(_ sender: Any?) {
+    performTextFinderAction(sender)
+  }
+
   override func registerForDraggedTypes(_ newTypes: [NSPasteboard.PasteboardType]) {}
 
   override func viewDidMoveToWindow() {
@@ -100,8 +114,17 @@ final class MarkdownView: NSView, WKNavigationDelegate, WKUIDelegate {
   /// A user-activated link, for the pane's link policy.
   var onLink: ((URL) -> Void)?
 
+  /// A find action that reached the page.
+  var onFindAction: ((BuiltInFindAction) -> Void)? {
+    get { webView.onFindAction }
+    set { webView.onFindAction = newValue }
+  }
+
   private(set) var anchor: MarkdownAnchor?
   private(set) var headings: [MarkdownHeading] = []
+
+  /// True when the document held more headings than the page reports.
+  private(set) var headingsCut = false
   private(set) var lineCount = 0
   private(set) var isRendered = false
 
@@ -223,6 +246,7 @@ final class MarkdownView: NSView, WKNavigationDelegate, WKUIDelegate {
     pageReady = false
     isRendered = false
     headings = []
+    headingsCut = false
     lineCount = 0
 
     webView.load(URLRequest(url: MarkdownScheme.pageURL))
@@ -281,9 +305,10 @@ final class MarkdownView: NSView, WKNavigationDelegate, WKUIDelegate {
       pageReady = true
       startRendering()
 
-    case .rendered(let lines, let found, let settled):
+    case .rendered(let lines, let found, let cut, let settled):
       lineCount = lines
       headings = found
+      headingsCut = cut
       isRendered = true
 
       if let settled { anchor = settled }
@@ -299,6 +324,72 @@ final class MarkdownView: NSView, WKNavigationDelegate, WKUIDelegate {
     case .failed(let reason):
       onFailed?(reason)
     }
+  }
+
+  // MARK: Find
+
+  /// What a search in the page found. The page folds case and diacritics the way the other engines
+  /// do, and marks each match in the document.
+  struct FindOutcome: Equatable {
+    var count: Int
+    var capped: Bool
+  }
+
+  /// Searches the rendered page for `query`. The query is a call argument, so quotes, backslashes,
+  /// and markup in it match as text. Returns nil when a newer document replaced this one while the
+  /// search ran.
+  func find(_ query: String) async -> FindOutcome? {
+    let shown = generation
+
+    guard isRendered,
+      let result = await run("return window.umViewer.find(query)", ["query": query])
+        as? [String: Any],
+      shown == generation, let count = (result["count"] as? NSNumber)?.intValue
+    else { return nil }
+
+    return FindOutcome(count: count, capped: (result["capped"] as? NSNumber)?.boolValue ?? false)
+  }
+
+  /// Makes match `index` the current one and scrolls it into view, opening a closed details element
+  /// around it.
+  func selectMatch(_ index: Int) async {
+    let shown = generation
+
+    guard isRendered, shown == generation else { return }
+
+    _ = await run("return window.umViewer.selectMatch(index)", ["index": index])
+  }
+
+  func clearFind() async {
+    guard isRendered else { return }
+
+    _ = await run("return window.umViewer.clearFind()")
+  }
+
+  /// Scrolls to the heading at `index` in `headings`.
+  func scrollToHeading(_ index: Int) async {
+    guard isRendered else { return }
+
+    _ = await run("return window.umViewer.scrollToHeading(index)", ["index": index])
+  }
+
+  /// The first match that lies inside the selection last read, or nil when none does.
+  func matchInSelection() async -> Int? {
+    guard isRendered,
+      let index = (await run("return window.umViewer.matchInSelection()") as? NSNumber)?.intValue,
+      index >= 0
+    else { return nil }
+
+    return index
+  }
+
+  /// The text the reader selected in the page, or nil when nothing is selected.
+  func selectedText() async -> String? {
+    guard isRendered,
+      let text = await run("return window.umViewer.selectedText()") as? String, !text.isEmpty
+    else { return nil }
+
+    return text
   }
 
   private func startRendering() {

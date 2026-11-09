@@ -12,10 +12,57 @@ enum TextViewerBody: Equatable {
   case markdown
 }
 
+/// The find actions a view's own find machinery would take. The pane takes them instead, so the
+/// viewer's find bar answers and the system find pasteboard stays untouched.
+enum BuiltInFindAction {
+  case show
+  case next
+  case previous
+  case useSelection
+
+  /// Reads the `NSTextFinder.Action` tag a find menu item or `performFindPanelAction` carries.
+  @MainActor
+  init?(sender: Any?) {
+    guard let tag = (sender as? NSMenuItem)?.tag ?? (sender as? NSControl)?.tag else { return nil }
+
+    switch NSTextFinder.Action(rawValue: tag) {
+    case .showFindInterface?: self = .show
+    case .nextMatch?: self = .next
+    case .previousMatch?: self = .previous
+    case .setSearchString?: self = .useSelection
+    default: return nil
+    }
+  }
+}
+
 /// A PDF view that gives file drops to the pane instead of taking them.
 final class DropThroughPDFView: PDFView {
   /// Called with an action the link policy refused, so the pane can say so.
   var onRefusedAction: ((PDFAction) -> Void)?
+
+  /// Called for a find action sent down the responder chain.
+  var onFindAction: ((BuiltInFindAction) -> Void)?
+
+  @objc func performFindPanelAction(_ sender: Any?) {
+    guard let action = BuiltInFindAction(sender: sender) else { return }
+
+    onFindAction?(action)
+  }
+
+  override func performTextFinderAction(_ sender: Any?) {
+    performFindPanelAction(sender)
+  }
+
+  /// Scrolls so `y` on `page` sits about a third of the way down the view. Going to the point
+  /// itself puts it flush with the top edge, where it is clipped. With `clampedToPage`, a point near
+  /// the top of the page shows the page top, so the reader sees the page from its start.
+  func show(page: PDFPage, at y: CGFloat, clampedToPage: Bool) {
+    let box = page.bounds(for: .cropBox)
+    let margin = bounds.height * 0.33 / max(scaleFactor, 0.01)
+    let top = clampedToPage ? min(y + margin, box.maxY) : y + margin
+
+    go(to: PDFDestination(page: page, at: CGPoint(x: box.minX, y: top)))
+  }
 
   override func registerForDraggedTypes(_ newTypes: [NSPasteboard.PasteboardType]) {}
 
@@ -29,9 +76,33 @@ final class DropThroughPDFView: PDFView {
   }
 }
 
+/// Holds the document views. It reports each layout pass after its own subviews have a frame, so
+/// the pane can place a restored anchor once the document view has a size.
+final class BodyHostView: NSView {
+  var onLayout: (() -> Void)?
+
+  override func layout() {
+    super.layout()
+    onLayout?()
+  }
+}
+
 /// A text view that gives file drops to the pane instead of taking them.
 final class DropThroughTextView: NSTextView {
+  /// Called for a find action sent down the responder chain.
+  var onFindAction: ((BuiltInFindAction) -> Void)?
+
   override func registerForDraggedTypes(_ newTypes: [NSPasteboard.PasteboardType]) {}
+
+  override func performFindPanelAction(_ sender: Any?) {
+    guard let action = BuiltInFindAction(sender: sender) else { return }
+
+    onFindAction?(action)
+  }
+
+  override func performTextFinderAction(_ sender: Any?) {
+    performFindPanelAction(sender)
+  }
 }
 
 /// The viewer's body: a PDF view, a text view in a scroll view, and a message that stands in for
@@ -47,8 +118,12 @@ final class TextViewerView: NSView {
   /// Gets the dropped files. Returns false to refuse them.
   var onDrop: (([URL]) -> Bool)?
 
-  /// Called after each layout pass, so the pane can place a restored anchor once the view has a size.
-  var onLayout: (() -> Void)?
+  /// Called after each layout pass of the body, so the pane can place a restored anchor once the
+  /// document view has a size.
+  var onLayout: (() -> Void)? {
+    get { bodyHost.onLayout }
+    set { bodyHost.onLayout = newValue }
+  }
 
   let pdfView = DropThroughPDFView()
   let scrollView = NSScrollView()
@@ -59,6 +134,14 @@ final class TextViewerView: NSView {
   private(set) var markdownView: MarkdownView?
   private let messageStack = NSStackView()
   private(set) var body = TextViewerBody.message("", offersOpen: false, offersReload: false)
+
+  let findBar = FindBarView()
+  let sidebar = ContentsSidebarView()
+
+  /// Holds the document views and the message. The find bar sits above it and the sidebar beside it.
+  private let bodyHost = BodyHostView()
+  private let mainColumn = NSStackView()
+  private let layoutRow = NSStackView()
 
   override var isFlipped: Bool { true }
 
@@ -137,23 +220,61 @@ final class TextViewerView: NSView {
     messageStack.addArrangedSubview(openButton)
     messageStack.addArrangedSubview(reloadButton)
 
-    addSubview(pdfView)
-    addSubview(scrollView)
-    addSubview(messageStack)
+    bodyHost.translatesAutoresizingMaskIntoConstraints = false
+    bodyHost.addSubview(pdfView)
+    bodyHost.addSubview(scrollView)
+    bodyHost.addSubview(messageStack)
 
     NSLayoutConstraint.activate([
-      pdfView.leadingAnchor.constraint(equalTo: leadingAnchor),
-      pdfView.trailingAnchor.constraint(equalTo: trailingAnchor),
-      pdfView.topAnchor.constraint(equalTo: topAnchor),
-      pdfView.bottomAnchor.constraint(equalTo: bottomAnchor),
-      scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-      scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-      scrollView.topAnchor.constraint(equalTo: topAnchor),
-      scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
-      messageStack.centerXAnchor.constraint(equalTo: centerXAnchor),
-      messageStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-      messageStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
-      messageStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
+      pdfView.leadingAnchor.constraint(equalTo: bodyHost.leadingAnchor),
+      pdfView.trailingAnchor.constraint(equalTo: bodyHost.trailingAnchor),
+      pdfView.topAnchor.constraint(equalTo: bodyHost.topAnchor),
+      pdfView.bottomAnchor.constraint(equalTo: bodyHost.bottomAnchor),
+      scrollView.leadingAnchor.constraint(equalTo: bodyHost.leadingAnchor),
+      scrollView.trailingAnchor.constraint(equalTo: bodyHost.trailingAnchor),
+      scrollView.topAnchor.constraint(equalTo: bodyHost.topAnchor),
+      scrollView.bottomAnchor.constraint(equalTo: bodyHost.bottomAnchor),
+      messageStack.centerXAnchor.constraint(equalTo: bodyHost.centerXAnchor),
+      messageStack.centerYAnchor.constraint(equalTo: bodyHost.centerYAnchor),
+      messageStack.leadingAnchor.constraint(
+        greaterThanOrEqualTo: bodyHost.leadingAnchor, constant: 24),
+      messageStack.trailingAnchor.constraint(
+        lessThanOrEqualTo: bodyHost.trailingAnchor, constant: -24),
+    ])
+
+    findBar.translatesAutoresizingMaskIntoConstraints = false
+    sidebar.translatesAutoresizingMaskIntoConstraints = false
+    sidebar.isHidden = true
+
+    mainColumn.orientation = .vertical
+    mainColumn.spacing = 0
+    mainColumn.alignment = .leading
+    mainColumn.distribution = .fill
+    mainColumn.translatesAutoresizingMaskIntoConstraints = false
+    mainColumn.addArrangedSubview(findBar)
+    mainColumn.addArrangedSubview(bodyHost)
+
+    layoutRow.orientation = .horizontal
+    layoutRow.spacing = 0
+    layoutRow.alignment = .top
+    layoutRow.distribution = .fill
+    layoutRow.translatesAutoresizingMaskIntoConstraints = false
+    layoutRow.addArrangedSubview(sidebar)
+    layoutRow.addArrangedSubview(mainColumn)
+
+    addSubview(layoutRow)
+
+    NSLayoutConstraint.activate([
+      layoutRow.leadingAnchor.constraint(equalTo: leadingAnchor),
+      layoutRow.trailingAnchor.constraint(equalTo: trailingAnchor),
+      layoutRow.topAnchor.constraint(equalTo: topAnchor),
+      layoutRow.bottomAnchor.constraint(equalTo: bottomAnchor),
+      sidebar.heightAnchor.constraint(equalTo: layoutRow.heightAnchor),
+      mainColumn.heightAnchor.constraint(equalTo: layoutRow.heightAnchor),
+      findBar.leadingAnchor.constraint(equalTo: mainColumn.leadingAnchor),
+      findBar.trailingAnchor.constraint(equalTo: mainColumn.trailingAnchor),
+      bodyHost.leadingAnchor.constraint(equalTo: mainColumn.leadingAnchor),
+      bodyHost.trailingAnchor.constraint(equalTo: mainColumn.trailingAnchor),
     ])
 
     show(.message("", offersOpen: false, offersReload: false))
@@ -198,13 +319,13 @@ final class TextViewerView: NSView {
     view.translatesAutoresizingMaskIntoConstraints = false
     view.isHidden = body != .markdown
 
-    addSubview(view, positioned: .below, relativeTo: messageStack)
+    bodyHost.addSubview(view, positioned: .below, relativeTo: messageStack)
 
     NSLayoutConstraint.activate([
-      view.leadingAnchor.constraint(equalTo: leadingAnchor),
-      view.trailingAnchor.constraint(equalTo: trailingAnchor),
-      view.topAnchor.constraint(equalTo: topAnchor),
-      view.bottomAnchor.constraint(equalTo: bottomAnchor),
+      view.leadingAnchor.constraint(equalTo: bodyHost.leadingAnchor),
+      view.trailingAnchor.constraint(equalTo: bodyHost.trailingAnchor),
+      view.topAnchor.constraint(equalTo: bodyHost.topAnchor),
+      view.bottomAnchor.constraint(equalTo: bodyHost.bottomAnchor),
     ])
   }
 
@@ -227,11 +348,13 @@ final class TextViewerView: NSView {
     pdfView.backgroundColor = palette[.mantle].nsColor
     messageLabel.textColor = palette.secondaryText.nsColor
     markdownView?.apply(palette)
+    findBar.apply(palette)
+    sidebar.apply(palette)
   }
 
-  override func layout() {
-    super.layout()
-    onLayout?()
+  /// Shows or hides the contents sidebar.
+  func setSidebar(visible: Bool) {
+    sidebar.isHidden = !visible
   }
 
   @objc private func openPressed() {
