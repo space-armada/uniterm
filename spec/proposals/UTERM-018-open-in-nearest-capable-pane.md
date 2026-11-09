@@ -106,8 +106,8 @@ Amended 2026-11-09; see Decision Log.
 
 ### Several capable panes
 
-When more than one pane is equally near, the walk picks one by a fixed rule and does not ask. A better tie rule waits
-until the simple one proves wrong.
+When more than one pane is equally near, the walk picks one by a fixed rule and does not ask. "The tie rule" settles
+which. Amended 2026-11-09; see Decision Log.
 
 ### Document links use the shared browser session
 
@@ -587,7 +587,7 @@ and the path-reading power.
   establishes authority under UTERM-004, and UTERM-004's nearest rule never falls back. (autonomous)
 - 2026-11-09: Ties break by tree position: the candidate whose child index at the shared split is closest to the
   origin's wins, then reading order, then stable pane ID. UTERM-004's accepted tie rule, reading order then stable pane
-  ID, takes the same rule. (autonomous)
+  ID, takes the same rule. (autonomous, addition)
 - 2026-11-09: Rank filters first: `FileRouter` resolves the winning applet unchanged, and distance picks among its
   panes. (autonomous)
 - 2026-11-09: No browser modifier skips the origin. The Motivation and M2 named Ctrl-click as a new-tab gesture, which
@@ -597,9 +597,9 @@ and the path-reading power.
 - 2026-11-09: A link-opened tab restores like any tab, by UTERM-005's rule. The first risk is now accepted on that
   basis. (autonomous)
 - 2026-11-09: A batch walks file by file, each taking an unused capable pane, with leftovers split into the origin
-  window. (autonomous)
+  window. (autonomous, addition)
 - 2026-11-09: A web URL on remote terminal output opens after Cmd-hover shows it. Paths and other schemes stay
-  refused. This amends UTERM-015's remote-marker rule for web URLs only. (autonomous)
+  refused. This amends UTERM-015's remote-marker rule for web URLs only. (autonomous, addition)
 - 2026-11-09: A file with no capable pane opens in a new pane beside the origin, with no prompt. This amends the
   settled "No capable pane", which asked macOS-or-cancel for every open, and the Summary and M1 check that said so.
   macOS loops back to uniterm when it is the file's default app, and a prompt would contradict the batch rule.
@@ -640,6 +640,9 @@ and the path-reading power.
 - 2026-11-09: ADR candidate (departs from the past): an applet never decides where content it opens goes; the window
   chooses the pane or app. Declined: the user chose to keep it in this proposal.
 - 2026-11-09: Accepted by the user.
+- 2026-11-09: "Several capable panes" said "A better tie rule waits until the simple one proves wrong", which "The
+  tie rule" overtook. It now points there. The settling entries for the tie rule, batches, and remote web URLs now
+  carry their `addition` tags directly. (autonomous)
 
 ## References
 
