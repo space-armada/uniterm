@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-06
+**Updated:** 2026-11-09
 
 ## Dependencies
 
@@ -94,6 +94,9 @@ Scripts are denied file, network, process, and FFI access unless their job needs
   freeze the app, since the main thread never waits on a helper. The helper's watchdog thread carries out Ctrl-C and
   the app's stop request. Amended 2026-11-02, see the Decision Log.
 - Memory is bounded per helper, per "Where scripts run".
+- The helper holds no App Sandbox entitlement, for the reason in "Where scripts run". Janet's `sandbox` is applied
+  before the first line of a script runs, with every capability denied unless the command line grants it. Amended
+  2026-11-09; see Decision Log.
 
 **Revisit:** when UTERM-004 settles control levels, decide how a REPL is granted capabilities.
 
@@ -108,6 +111,12 @@ Decision: one VM per script run and per REPL pane, each in its own process, sepa
   thread. The app spawns one helper per REPL pane. How a `uniterm run` process relates to a helper is settled under
   "How `uniterm run` reaches the app".
 - A helper exits when its connection to the app closes, so no helper outlives the app.
+- The helper is not in the App Sandbox. `uniterm run` is the user's own process. It reads the script by path, connects
+  to a socket by path, and may be granted `--allow fs-read`. A REPL helper starts from a terminal. The terminal
+  launch can pass only a working directory, an environment, and a program, and ADR-01 bars reaching past that
+  protocol, so the helper connects by path too. Janet's sandbox, the memory
+  cap, and process isolation bound the helper instead. The last bullet of ADR-10's Decision allows this. Amended
+  2026-11-09; see Decision Log.
 - Host API calls are messages from the helper to the app. The app runs each one on the main thread and replies.
 - The main thread never waits on a helper. Any later Janet-backed action the app runs sends its message and returns.
 - The helper's watchdog thread interrupts a running evaluation on Ctrl-C or on the app's stop request, and the VM keeps
@@ -268,12 +277,55 @@ Leaves undone: nothing.
 
 ### M1: Embedded Janet and the first host function
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Janet is vendored from a recorded tagged release and builds into the helper executable, which ships in the bundle
 - The app and a helper connect, exchange a protocol version, and refuse a mismatch
 - One host function, such as posting a status message, works from a script
 - A script error is reported with the script name, line, and message, and the app keeps running
+
+**As built:**
+
+- Janet v1.43.0 is vendored by `scripts/vendor-janet.sh` and recorded in `janet.pin`, which holds the tag, the commit,
+  the tarball hash, and the hash of each copied file. Janet's own make builds the amalgamation. `make check` verifies
+  the copies against the pin, and `make licenses` carries Janet's license after checking it against the pin. The line
+  editor's source is vendored from the same tag and left out of the build until the REPL needs it.
+- `janetconf.h` is the upstream file plus a block that the script appends. The block routes every allocation through a
+  counting wrapper and turns off native modules. The wrapper only counts. M5 adds the cap.
+- Only the helper targets reach Janet. A C shim holds every call into it and every host function, so Swift never sees
+  `janet.h` and a Janet error never unwinds a Swift frame. Each host function checks its arguments in C, then calls a
+  Swift callback that cannot throw, and raises any failure from C.
+  `scripts/check-janet-isolation.sh` fails when the app target, the host target, or the wire target can reach Janet. It
+  runs in `make check` and `make build`.
+- The `uniterm` command is an Xcode tool target named `UnitermCLI` with the product name `uniterm`, embedded in
+  `Contents/Helpers`. A SwiftPM executable is its twin for the package tests. The command uses the hardened runtime and
+  holds no entitlements. `check-sandbox-off.sh` names it as the deliberate exception. It insists that the built command
+  exists, verifies its signature, and holds no sandbox or other entitlement. The sandbox is off for it per the Decision
+  Log entry of 2026-11-09.
+- Janet's sandbox is already applied, with file, network, process, FFI, environment, signal, thread, and chroot access
+  denied. A fixture proves that a plain file read fails. M3 clears a capability's bit when the command line names it.
+- The wire is a new target that reuses the framed socket. Hello is one version field in every version. Next come the
+  script's name, requests with an ID and a function code, and replies that carry the same ID and either a payload or a
+  failure with a kind and text. The app answers a helper's hello with its own before it refuses a mismatch, so the
+  helper tells the user to relaunch uniterm and exits with status 70. A fuzzer for it runs in `make fuzz`.
+- The app listens at `Application Support/uniterm/run/<pid>.sock`. The folder is created private to the user, and
+  refused when it is a symlink or another user's. Debug builds read `UNITERM_SCRIPT_DIR`, and the UI test base class
+  points it under `/tmp`, since a UI test's scratch folder is too long for a socket path. The listener records each
+  peer's user, process, and audit token, and refuses a peer of another user. A thread for each connection reads and
+  decodes. The main actor gets each call through an `AsyncStream`. Replies go to a writer queue that is unbounded for
+  now, so M3 bounds it. At most 32 peers connect, a peer has 5 seconds to say hello, and at most 8 of its calls wait
+  for an answer.
+- `post-status` posts through a producer from the active window's status center, named for the script, so a script
+  never posts as uniterm. With no window open, the call fails with a refusal the script sees.
+- The script mode is `uniterm run --socket PATH file.janet`. A script error prints `name:line:col: kind error: message`
+  to stderr and exits 1, and the connection closes. The tests show the app serving the next script after a runtime
+  error, a compile error, and a parse error.
+- A helper at rest holds 3,211,624 bytes of physical footprint, 3.1 MiB. It takes about 12 ms from launch to its first
+  message after the hello. Both numbers are the same for the package twin and the bundled command, which are Debug
+  builds. A release build is not measured.
+- Left for later milestones: the well-known address, its lock, and cleanup of the socket file that a crashed instance
+  leaves behind. A reader thread in the helper for Ctrl-C and the watchdog. Running Janet's event loop after the script
+  ends. Bounding the writer queue. No UI test covers the app's wiring.
 
 ### M2: Host API v1
 
@@ -409,6 +461,12 @@ Leaves undone: nothing.
   to read. UTERM-017 "Placement of refusals" has the empty pane carry a durable explanation, record one warning in the
   history, and leave any retry to the user, since ADR-03 forbids a restore from running a program. This proposal's
   milestone wires it when the REPL is built.
+- 2026-11-09: Amended "Where scripts run" and "Sandboxing" to say that the helper is not in the App Sandbox
+  (work-queue best guess). The text said nothing about the helper's sandbox, and the proposal's own checks needed the
+  rule stated. `uniterm run` reads the script by path, connects to a socket by path, and may hold `--allow fs-read`. A
+  REPL helper launches through a terminal. The terminal launch can pass only a working directory, an environment, and a
+  program, and ADR-01 bars reaching past that protocol, so the helper must connect by path. ADR-10's last bullet lets a helper skip the sandbox with a stated reason, so ADR-10 is not edited.
+  Janet's sandbox, the memory cap, and process isolation bound the helper instead.
 
 ## References
 

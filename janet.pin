@@ -1,0 +1,14 @@
+# The Janet release that uniterm embeds. scripts/vendor-janet.sh reads this file. Bump it
+# deliberately, rerun the script with --record, then run make licenses.
+#
+# The tag and commit name the release. The tarball hash covers the source. The remaining hashes
+# cover what the build copies into Packages/UnitermKit/Sources/CJanet and ThirdParty/janet, so a
+# hand edit to a vendored file fails scripts/vendor-janet.sh --verify.
+JANET_TAG=v1.43.0
+JANET_COMMIT=e4b504568364b5aaeae2a764294b25ed84b402f4
+JANET_TARBALL_SHA256=9e01a7df04ef9b36c103238ac687e57ceeb5645fb7cc8782325a2844f6bb6a79
+JANET_C_SHA256=79ff23cb1cad38b471b79cbde4401f1caa6b5e04514261c2ddd3196e6b15dea2
+JANET_H_SHA256=bcb9d8078e7ffb7901d1b348e4b3b243eee838407a28feb9a2bac83f24d98f5d
+JANETCONF_H_SHA256=c192ed26312817643693d6b121343f5c545056dc626e498003869256b14fae96
+SHELL_C_SHA256=dbd05c7cc169c0e1bc031995d958ed1f6d0062b9bf6ae5b4c9b21b32fecff4c6
+LICENSE_SHA256=16e31703a3ab5c4d3e35aa8bd607551911a9d981fbf0b5fbd832fe6eed4b70ca

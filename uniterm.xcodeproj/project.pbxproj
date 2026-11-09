@@ -27,6 +27,9 @@
 		7A0000000000000000000060 /* DocumentDecoding in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000061 /* DocumentDecoding */; };
 		7A0000000000000000000062 /* DocumentDecoder in Embed helpers */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000063 /* DocumentDecoder */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		7A0000000000000000000064 /* TextViewerApplet in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000065 /* TextViewerApplet */; };
+		7A0000000000000000000070 /* ScriptRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000071 /* ScriptRuntime */; };
+		7A0000000000000000000072 /* uniterm in Embed helpers */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000073 /* uniterm */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		7A000000000000000000007D /* ScriptHost in Frameworks */ = {isa = PBXBuildFile; productRef = 7A000000000000000000007E /* ScriptHost */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +54,13 @@
 			remoteGlobalIDString = 7A0000000000000000000069;
 			remoteInfo = DocumentDecoder;
 		};
+		7A0000000000000000000074 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A0000000000000000000077;
+			remoteInfo = UnitermCLI;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -62,6 +72,7 @@
 			files = (
 				7A000000000000000000005C /* ImageDecoder in Embed helpers */,
 				7A0000000000000000000062 /* DocumentDecoder in Embed helpers */,
+				7A0000000000000000000072 /* uniterm in Embed helpers */,
 			);
 			name = "Embed helpers";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -73,6 +84,7 @@
 		7A0000000000000000000007 /* uniterm UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "uniterm UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A0000000000000000000050 /* ImageDecoder */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ImageDecoder; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A0000000000000000000063 /* DocumentDecoder */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = DocumentDecoder; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A0000000000000000000073 /* uniterm */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = uniterm; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -89,6 +101,7 @@
 				DocumentDecoder/DocumentDecoder.entitlements,
 				DocumentDecoder/main.swift,
 				ImageDecoder/ImageDecoder.entitlements,
+				UnitermCLI/main.swift,
 			);
 			target = 7A0000000000000000000055 /* ImageDecoder */;
 		};
@@ -98,8 +111,19 @@
 				DocumentDecoder/DocumentDecoder.entitlements,
 				ImageDecoder/ImageDecoder.entitlements,
 				ImageDecoder/main.swift,
+				UnitermCLI/main.swift,
 			);
 			target = 7A0000000000000000000069 /* DocumentDecoder */;
+		};
+		7A0000000000000000000075 /* Exceptions for "Helpers" folder in "UnitermCLI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				DocumentDecoder/DocumentDecoder.entitlements,
+				DocumentDecoder/main.swift,
+				ImageDecoder/ImageDecoder.entitlements,
+				ImageDecoder/main.swift,
+			);
+			target = 7A0000000000000000000077 /* UnitermCLI */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -122,6 +146,7 @@
 			exceptions = (
 				7A0000000000000000000052 /* Exceptions for "Helpers" folder in "ImageDecoder" target */,
 				7A0000000000000000000067 /* Exceptions for "Helpers" folder in "DocumentDecoder" target */,
+				7A0000000000000000000075 /* Exceptions for "Helpers" folder in "UnitermCLI" target */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -149,6 +174,7 @@
 				7A000000000000000000004A /* BrowserApplet in Frameworks */,
 				7A000000000000000000004E /* ImageViewerApplet in Frameworks */,
 				7A0000000000000000000064 /* TextViewerApplet in Frameworks */,
+				7A000000000000000000007D /* ScriptHost in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -175,6 +201,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A0000000000000000000076 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A0000000000000000000070 /* ScriptRuntime in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -195,6 +229,7 @@
 				7A0000000000000000000007 /* uniterm UITests.xctest */,
 				7A0000000000000000000050 /* ImageDecoder */,
 				7A0000000000000000000063 /* DocumentDecoder */,
+				7A0000000000000000000073 /* uniterm */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -218,6 +253,7 @@
 			dependencies = (
 				7A000000000000000000005A /* PBXTargetDependency */,
 				7A000000000000000000006C /* PBXTargetDependency */,
+				7A000000000000000000007C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7A0000000000000000000004 /* App */,
@@ -240,6 +276,7 @@
 				7A000000000000000000004B /* BrowserApplet */,
 				7A000000000000000000004F /* ImageViewerApplet */,
 				7A0000000000000000000065 /* TextViewerApplet */,
+				7A000000000000000000007E /* ScriptHost */,
 			);
 			productName = uniterm;
 			productReference = 7A0000000000000000000006 /* uniterm.app */;
@@ -312,6 +349,28 @@
 			productReference = 7A0000000000000000000063 /* DocumentDecoder */;
 			productType = "com.apple.product-type.tool";
 		};
+		7A0000000000000000000077 /* UnitermCLI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A0000000000000000000079 /* Build configuration list for PBXNativeTarget "UnitermCLI" */;
+			buildPhases = (
+				7A0000000000000000000078 /* Sources */,
+				7A0000000000000000000076 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7A0000000000000000000051 /* Helpers */,
+			);
+			name = UnitermCLI;
+			packageProductDependencies = (
+				7A0000000000000000000071 /* ScriptRuntime */,
+			);
+			productName = UnitermCLI;
+			productReference = 7A0000000000000000000073 /* uniterm */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -333,6 +392,9 @@
 						CreatedOnToolsVersion = 26.0;
 					};
 					7A0000000000000000000069 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					7A0000000000000000000077 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -358,6 +420,7 @@
 				7A0000000000000000000009 /* uniterm UITests */,
 				7A0000000000000000000055 /* ImageDecoder */,
 				7A0000000000000000000069 /* DocumentDecoder */,
+				7A0000000000000000000077 /* UnitermCLI */,
 			);
 		};
 /* End PBXProject section */
@@ -455,6 +518,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A0000000000000000000078 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -472,6 +542,11 @@
 			isa = PBXTargetDependency;
 			target = 7A0000000000000000000069 /* DocumentDecoder */;
 			targetProxy = 7A0000000000000000000066 /* PBXContainerItemProxy */;
+		};
+		7A000000000000000000007C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A0000000000000000000077 /* UnitermCLI */;
+			targetProxy = 7A0000000000000000000074 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -656,6 +731,38 @@
 			};
 			name = Release;
 		};
+		7A000000000000000000007A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uniterm.app.UnitermCLI;
+				PRODUCT_MODULE_NAME = UnitermCLI;
+				PRODUCT_NAME = uniterm;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		7A000000000000000000007B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uniterm.app.UnitermCLI;
+				PRODUCT_MODULE_NAME = UnitermCLI;
+				PRODUCT_NAME = uniterm;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -700,6 +807,15 @@
 			buildConfigurations = (
 				7A000000000000000000006D /* Debug */,
 				7A000000000000000000006E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A0000000000000000000079 /* Build configuration list for PBXNativeTarget "UnitermCLI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A000000000000000000007A /* Debug */,
+				7A000000000000000000007B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -785,6 +901,14 @@
 		7A0000000000000000000065 /* TextViewerApplet */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TextViewerApplet;
+		};
+		7A0000000000000000000071 /* ScriptRuntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ScriptRuntime;
+		};
+		7A000000000000000000007E /* ScriptHost */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ScriptHost;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

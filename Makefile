@@ -44,7 +44,7 @@ ghostty: ## Build the pinned GhosttyKit and link it into the package (needs Zig,
 	scripts/build-ghostty.sh
 
 .PHONY: build
-build: check-ghosttykit-imports ghostty ## Build uniterm.app
+build: check-ghosttykit-imports check-janet-isolation ghostty ## Build uniterm.app
 	$(XCODEBUILD) build
 
 # Runs the binary in the foreground, not through `open`, so the shell owns the process and sees its logs
@@ -82,6 +82,7 @@ test-package: ghostty ## Run the package tests with swift test
 test-helper-sandbox: build ## Run each helper's sandbox probe and samples against the helper in the built app
 	test -x "$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/ImageDecoder"
 	test -x "$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/DocumentDecoder"
+	test -x "$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/uniterm"
 	cd $(PACKAGE_DIR) && \
 		UNITERM_IMAGE_HELPER="$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/ImageDecoder" \
 		UNITERM_DOCUMENT_HELPER="$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/DocumentDecoder" \
@@ -92,7 +93,7 @@ fuzz: ghostty ## Fuzz the table, GeoJSON, wire, and PDF readers under ASan. Slow
 	cd $(PACKAGE_DIR) && UNITERM_FUZZ_ITERATIONS=$(FUZZ_ITERATIONS) \
 		swift test --sanitize=address --scratch-path ../../$(FUZZ_SCRATCH) \
 		--filter TableFuzzTests --filter GeoJSONFuzzTests --filter ImageWireFuzzTests \
-		--filter DocumentWireFuzzTests --filter PDFFuzzTests
+		--filter DocumentWireFuzzTests --filter PDFFuzzTests --filter ScriptWireFuzzTests
 
 .PHONY: test-app
 test-app: ghostty ## Run the UI tests with xcodebuild. They need a GUI session and Accessibility permission
@@ -127,13 +128,25 @@ lint: fmt-check ## Lint Swift sources and check the scripts parse
 	sh -n Support/ghostty-bin/ghostty
 
 .PHONY: check
-check: check-ghosttykit-imports ## Check the Swift language mode, the GhosttyKit boundary, and that the sandbox is off
+check: check-ghosttykit-imports check-janet-isolation check-janet-vendor ## Check the Swift language mode, the GhosttyKit and Janet boundaries, the vendored Janet, and that the sandbox is off
 	scripts/check-swift-mode.sh
 	scripts/check-sandbox-off.sh
 
 .PHONY: check-ghosttykit-imports
 check-ghosttykit-imports: ## Fail when any module but TerminalSurface can reach GhosttyKit
 	scripts/check-ghosttykit-imports.sh
+
+.PHONY: check-janet-isolation
+check-janet-isolation: ## Fail when Janet can reach the app process
+	scripts/check-janet-isolation.sh
+
+.PHONY: check-janet-vendor
+check-janet-vendor: ## Fail when the vendored Janet differs from janet.pin
+	scripts/vendor-janet.sh --verify
+
+.PHONY: vendor-janet
+vendor-janet: ## Fetch the pinned Janet release, verify it, build the amalgamation, and copy it in. Needs the network
+	scripts/vendor-janet.sh
 
 .PHONY: licenses
 licenses: ## Collect the license notices for Ghostty, its libraries, the Swift packages, and the web assets into Licenses/

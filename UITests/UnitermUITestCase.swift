@@ -15,11 +15,16 @@ import XCTest
 @MainActor
 class UnitermUITestCase: XCTestCase {
   private(set) var scratch = ""
+
+  /// The folder for the app's script socket. A socket path holds 104 bytes, and `scratch` is too
+  /// long to hold one, so this sits directly under `/tmp`. The app creates it.
+  private var scriptDirectory = ""
   private var launched: [XCUIApplication] = []
 
   override func setUpWithError() throws {
     continueAfterFailure = false
     scratch = NSTemporaryDirectory() + "uniterm-ui-\(UUID().uuidString)"
+    scriptDirectory = "/tmp/ut-\(UUID().uuidString.prefix(8))"
 
     try FileManager.default.createDirectory(
       atPath: scratch + "-shell", withIntermediateDirectories: true)
@@ -37,6 +42,7 @@ class UnitermUITestCase: XCTestCase {
     try? FileManager.default.removeItem(atPath: scratch + "-terminal")
     try? FileManager.default.removeItem(atPath: scratch + "-layout")
     try? FileManager.default.removeItem(atPath: scratch + "-browser")
+    try? FileManager.default.removeItem(atPath: scriptDirectory)
   }
 
   /// The folder the app saves its layout in during this test.
@@ -78,6 +84,7 @@ class UnitermUITestCase: XCTestCase {
     app.launchEnvironment["UNITERM_LAYOUT_DIR"] = scratch + "-layout"
     app.launchEnvironment["UNITERM_BROWSER_DIR"] = scratch + "-browser"
     app.launchEnvironment["UNITERM_BROWSER_STORE"] = "memory"
+    app.launchEnvironment["UNITERM_SCRIPT_DIR"] = scriptDirectory
     app.launchEnvironment["SHELL"] = "/bin/zsh"
     app.launchEnvironment["ZDOTDIR"] = scratch + "-shell"
     app.launchEnvironment["SSH_AUTH_SOCK"] = ""

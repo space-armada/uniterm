@@ -47,6 +47,9 @@ let package = Package(
     .library(name: "TextViewerApplet", targets: ["TextViewerApplet"]),
     .library(name: "ImageDecoding", targets: ["ImageDecoding"]),
     .library(name: "ImageViewerApplet", targets: ["ImageViewerApplet"]),
+    .library(name: "ScriptWire", targets: ["ScriptWire"]),
+    .library(name: "ScriptRuntime", targets: ["ScriptRuntime"]),
+    .library(name: "ScriptHost", targets: ["ScriptHost"]),
   ],
   dependencies: [
     // The first third-party Swift package. Only TableData uses it. The version is exact, and
@@ -165,6 +168,28 @@ let package = Package(
         "StatusKit", "TextViewerModel", "Theme",
       ],
       resources: [.copy("Resources/web")]),
+    // Embedded Janet, vendored from the release janet.pin names, and the small C shim that is the
+    // only code that calls it. Only the script helper targets may depend on it, so Janet never
+    // links into the app. scripts/check-janet-isolation.sh enforces that.
+    //
+    // The vendored source is not edited, so its own deprecation warning is silenced here instead.
+    // Unbuilt holds Janet's line editor, vendored from the same release and left out of the build
+    // until the REPL needs it.
+    .target(
+      name: "CJanet", exclude: ["Unbuilt"],
+      cSettings: [.unsafeFlags(["-Wno-deprecated-declarations"])]),
+    // The wire between the app and a script helper: the protocol version, the host calls a script
+    // makes, and their replies. It has no AppKit and no Janet, so the app and the helper share one
+    // codec and the fuzzers can reach it alone.
+    .target(name: "ScriptWire", dependencies: ["HelperWire"]),
+    // The helper side of scripting. It owns the one Janet VM of its process, on its main thread.
+    .target(name: "ScriptRuntime", dependencies: ["CJanet", "ScriptWire"]),
+    // A thin main over ScriptRuntime, so tests can run a helper without the hardened runtime. The
+    // shipped command is the Xcode target UnitermCLI.
+    .executableTarget(name: "ScriptHelper", dependencies: ["ScriptRuntime"]),
+    // The app side of scripting: the listener, the peers, and the dispatch of their calls. It
+    // never imports Janet.
+    .target(name: "ScriptHost", dependencies: ["FileRouting", "ScriptWire", "StatusKit"]),
     .target(
       name: "AppletCatalog",
       dependencies: [
@@ -250,6 +275,11 @@ let package = Package(
         "BrowserApplet", "AppletKit", "StatusKit", "Theme", "AppletTestSupport",
         "DocumentTestSupport", "TableTestSupport", "BrowserTestSupport",
       ]),
+    .testTarget(name: "ScriptWireTests", dependencies: ["ScriptWire", "TableTestSupport"]),
+    .testTarget(
+      name: "ScriptHostTests",
+      dependencies: ["ScriptHost", "ScriptWire", "ScriptHelper", "StatusKit"],
+      resources: [.copy("Fixtures")]),
     .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
     .testTarget(name: "AppletKitTests", dependencies: ["AppletKit", "AppletTestSupport"]),
     .testTarget(name: "LayoutKitTests", dependencies: ["LayoutKit", "AppletKit", "PaneModel"]),
@@ -270,5 +300,6 @@ let package = Package(
         "FileRouting", "GeoData", "PlaceSearch",
       ]),
   ],
-  swiftLanguageModes: [.v6]
+  swiftLanguageModes: [.v6],
+  cLanguageStandard: .c99
 )

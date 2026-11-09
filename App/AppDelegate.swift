@@ -9,6 +9,7 @@ import MapViewerApplet
 import OSLog
 import PlaceSearch
 import Preferences
+import ScriptHost
 import SettingsKit
 import StatusKit
 import TerminalApplet
@@ -39,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var layoutPersistence: LayoutPersistence?
   private var settingsWindowController: SettingsWindowController?
   private var browserWebsiteData: BrowserWebsiteData?
+  private var scriptHost: ScriptHost?
   private var askingToQuit = false
 
   /// The `UNITERM_` variables the process started with. The scrub of the inherited environment
@@ -119,6 +121,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     #endif
 
     return try LayoutPersistence.defaultDirectory()
+  }
+
+  /// UI tests set `UNITERM_SCRIPT_DIR` so the script socket stays out of the developer's Application
+  /// Support folder. The folder must be short, since a socket path holds 104 bytes. Only debug
+  /// builds honor it, for the same reason as the layout folder.
+  private func scriptDirectory() throws -> URL {
+    #if DEBUG
+      if let path = debugEnvironment["UNITERM_SCRIPT_DIR"] {
+        return URL(fileURLWithPath: path, isDirectory: true)
+      }
+    #endif
+
+    return try ScriptSocketDirectory.defaultDirectory()
+  }
+
+  /// Starts the listener that script helpers connect to. A failure leaves the app running without
+  /// scripting, and says so.
+  private func startScripting(windows: WindowSet) {
+    do {
+      let listener = try ScriptListener.start(directory: try scriptDirectory())
+
+      let host = ScriptHost(
+        listener: listener,
+        issueProducer: { [weak windows] name in
+          windows?.issueProducer(kind: .script, name: name)
+        },
+        onRefusal: { [weak self] refusal in
+          self?.logger.error("a script connection was refused: \(refusal.text, privacy: .public)")
+          self?.windowSet?.post(level: .warning, text: refusal.text)
+        })
+
+      host.start()
+      scriptHost = host
+    } catch {
+      logger.error("scripting did not start: \(String(describing: error), privacy: .public)")
+      windows.post(level: .warning, text: "Scripts cannot connect to uniterm: \(error)")
+    }
   }
 
   /// UI tests set `UNITERM_BROWSER_DIR` so the browser's own files stay out of the developer's
@@ -387,6 +426,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     launchOpens?.launchFinished()
 
+    startScripting(windows: windows)
+
     let sync = TerminalPaletteSync(engine: engine) { [weak self] error in
       self?.paletteDidNotApply(error)
     }
@@ -444,6 +485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    scriptHost?.stop()
     layoutPersistence?.saveForQuit()
     terminalEngine?.removeConfigFile()
   }
