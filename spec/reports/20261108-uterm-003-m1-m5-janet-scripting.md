@@ -7,7 +7,11 @@ specs live in the code repo, so every commit below is in this repo, on the `agen
 
 ## Run state
 
-The run is in progress.
+The run is paused. M1, M2, M3, and M5 are `DONE`. M4 stays `IN PROGRESS`. Its check "Ctrl-C stops a running
+evaluation and returns to the prompt" failed in the real app on the last UI run that could reach the screen. The
+later fixes have not been run in the app, since every UI run from 05:09 on timed out while enabling automation
+mode. The row review ran, and its fixes are committed. The row has not moved to `history.md`, the proposal stays
+`accepted`, and the final review waits on M4. Nothing is stashed.
 
 Step 0 fetched `upstream/main`. The branch already held it, so no rebase ran. The run's base and the row's base are
 both "Rate UTERM-018's link session risk the same as a regular browser".
@@ -20,7 +24,7 @@ work is stashed. No commands need the user's credentials.
 | UTERM-003 M1: Embedded Janet and the first host function | DONE | "Embed Janet in a script helper and post status from scripts" |
 | UTERM-003 M2: Host API v1 | DONE | "Let scripts list, open, and send to panes" |
 | UTERM-003 M3: `uniterm run` | DONE | "Run scripts against uniterm from the command line" |
-| UTERM-003 M4: REPL applet | IN PROGRESS | "Add a Janet REPL applet that runs in a pane" (Ctrl-C in the real app still open) |
+| UTERM-003 M4: REPL applet | IN PROGRESS | "Add a Janet REPL applet that runs in a pane". Ctrl-C in the real app is open |
 | UTERM-003 M5: Sandbox and limits | DONE | "Bound script helpers in time and memory" |
 
 ## Local checks
@@ -556,3 +560,22 @@ prove.
 It saw 2 events where it expected 1. It passed in the full run PG4GS7 and alone in 1BED78. This row does not touch
 `FileWatching`. It was not reproduced on the base commit. The likely cause is filesystem-event timing, which is
 unconfirmed.
+
+## Where the run stopped
+
+To resume, run these UI tests on an unlocked screen:
+
+```
+./scripts/run-ui-tests.sh xcodebuild -project uniterm.xcodeproj -scheme uniterm -configuration Debug \
+  -derivedDataPath .build/DerivedData -clonedSourcePackagesDirPath .build/SourcePackages \
+  -only-testing:"uniterm UITests/TerminalUITests/testControlCInterruptsAForegroundProgram" \
+  -only-testing:"uniterm UITests/ReplUITests" test
+```
+
+- If they pass, M4 becomes `DONE`, and the row finishes and moves to `history.md`. The proposal becomes
+  `implemented`, and the final review runs over the range.
+- If the REPL Ctrl-C test fails, its failure message shows the screen, with `[sigint evaluating]` or `[sigint idle]`
+  if SIGINT reached the helper, or neither if it never did.
+- If the plain-shell test fails too, the fault is in the app's key path, not the helper.
+
+Runs that timed out while enabling automation mode: 7W038P, 220DXM, VXECNN, S0GGJ6, AF1GBG, 5GCQH7, and DB6911.
