@@ -57,6 +57,9 @@ final class ScriptCodecTests: XCTestCase {
       .replLine(""),
       .replEvaluating(true),
       .replEvaluating(false),
+      .pong(0),
+      .pong(UInt32.max),
+      .memoryLimit,
     ]
 
     for level in ScriptStatusLevel.allCases {
@@ -83,6 +86,9 @@ final class ScriptCodecTests: XCTestCase {
       .attachRefused("synthetic refusal"),
       .history(lines: [], final: true),
       .history(lines: ["(+ 1 2)", "(def x 1)"], final: false),
+      .ping(0),
+      .ping(UInt32.max),
+      .stop,
     ]
 
     for message in messages {
@@ -402,5 +408,30 @@ extension ScriptCodecTests {
 
     XCTAssertLessThanOrEqual(
       message.frame().count - FrameHeader.size, ScriptProtocol.maxControlBody)
+  }
+}
+
+extension ScriptCodecTests {
+  /// Catches a liveness or stop message that tolerates a body of the wrong size, which a peer could
+  /// use to smuggle bytes past the decoder. A ping holds exactly one nonce, a stop and a memory
+  /// notice hold nothing, and a pong holds exactly one nonce.
+  func testLivenessAndStopMessagesRefuseABodyOfTheWrongSize() {
+    for size in [0, 1, 3, 5] {
+      XCTAssertThrowsError(
+        try ScriptAppMessage.decode(type: 5, body: Data(repeating: 1, count: size)), "ping \(size)")
+      XCTAssertThrowsError(
+        try ScriptHelperMessage.decode(type: 8, body: Data(repeating: 1, count: size)),
+        "pong \(size)")
+    }
+
+    XCTAssertThrowsError(try ScriptAppMessage.decode(type: 6, body: Data([0])))
+    XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 9, body: Data([0])))
+  }
+
+  /// Catches a kill margin that drifts from the cap it is a share of. The app kills a REPL helper
+  /// at the cap plus a quarter, which is the 1.25 GiB the design names.
+  func testTheKillMarginIsAQuarterOfTheCap() {
+    XCTAssertEqual(ScriptProtocol.helperMemoryCap, 1 << 30)
+    XCTAssertEqual(ScriptProtocol.helperMemoryCap + ScriptProtocol.footprintKillMargin, 5 << 28)
   }
 }

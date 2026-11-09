@@ -21,7 +21,7 @@ work is stashed. No commands need the user's credentials.
 | UTERM-003 M2: Host API v1 | DONE | "Let scripts list, open, and send to panes" |
 | UTERM-003 M3: `uniterm run` | DONE | "Run scripts against uniterm from the command line" |
 | UTERM-003 M4: REPL applet | IN PROGRESS | "Add a Janet REPL applet that runs in a pane" (Ctrl-C in the real app still open) |
-| UTERM-003 M5: Sandbox and limits | QUEUED | |
+| UTERM-003 M5: Sandbox and limits | DONE | "Bound script helpers in time and memory" |
 
 ## Local checks
 
@@ -411,3 +411,102 @@ The package suite grew to 163 to 203 s.
   and built, but not run. One is `TerminalUITests.testControlCInterruptsAForegroundProgram`, which checks whether
   Ctrl-C reaches any foreground program. The other is the REPL test with `UNITERM_REPL_TRACE_SIGINT=1`, which shows
   whether SIGINT reaches the helper.
+
+## UTERM-003 M5: Sandbox and limits
+
+### Commits
+
+- "Bound script helpers in time and memory"
+
+### What landed
+
+The watchdog thread is now the only reader of the helper's connection. It hands replies to the VM thread through a
+one-slot mailbox. It answers the app's pings itself, and it turns the app's stop request into a SIGINT on the VM
+thread. Wire protocol version 4 adds `ping`, `pong`, `stop`, and a memory-limit notice.
+
+A run's first Ctrl-C stops the script, prints `name: interrupted`, and exits with status 130. A second Ctrl-C exits
+at once with 130. In a REPL pane, Ctrl-C sends the stop request over the control channel as well as the pty's signal.
+A second press, between 0.5 s and 5 s after the first, kills a helper stuck in C. The pane then says why, keeps its
+history, and offers Restart.
+
+The app pings each REPL helper once a second. It kills one that leaves a ping unanswered for 3 s, and it forgives pings
+that a stall on its own main actor left outstanding. It never kills a busy helper that still answers.
+
+The helper's allocator refuses a block past 1 GiB, sends a notice through the connection's write lock, writes a
+static message, and exits with status 79. The app samples REPL footprints off the main thread and kills one past
+1.25 GiB. It never touches a `uniterm run` process. The app-wide budget is the smaller of 4 GiB and a quarter of
+physical memory. Admission reads fresh footprints and counts each helper that has not attached yet at an 8 MiB floor.
+A refused pane says why and offers Restart, and each over-budget episode records one history warning.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | 9QX0FR, KWT97F, 4P997P | pass |
+| `caffeinate -dimsu make test-package` | ZX2CX7 | pass |
+| Limit and applet classes | GD42CZ | 45 tests, 0 failures, 6.6 s |
+| `make build`, then `check-sandbox-off.sh` | YFZZTV, QGPS6N | pass |
+| `make test-helper-sandbox` | QYZQ4Y | pass |
+| ASan fuzz of the v4 wire, 5000 iterations | SJH4FX | pass |
+| `scripts/swiftpm-offline-check.sh` | YY3TSK | pass |
+| New classes against the helper in the built app | SX6W6N | pass |
+| `xcodebuild build-for-testing` | T0WC3S | pass |
+| UI tests: the Ctrl-C diagnostics and `ReplUITests` | S0GGJ6, AF1GBG | not run. "Timed out while enabling automation mode": the screen was unavailable |
+
+The first two full package runs, WTDKYP and YGHRE7, each failed one test. The cause was a race in a new test, and the
+fix removed it with a marker and a kernel-state wait, not a sleep.
+
+### Best guesses
+
+1. Janet 1.43's `peg/match` checks the interrupt flag, so the stuck-in-C fixture blocks on a `stdin` read.
+2. `(buffer/new 1e12)` fails Janet's int32 check before it reaches the allocator. The memory fixtures use 2,000,000,000
+   bytes against the 1 GiB cap, and a growing loop against a 64 MiB test cap.
+3. A run's second Ctrl-C ends the process. Janet's own shell has no such rule for scripts, so this is uniterm's choice.
+4. A REPL escalates to a kill when the second press comes between 0.5 s and 5 s after the first.
+5. A REPL has no time bound. A legitimate long loop is never killed while it answers pings.
+6. Ctrl-C in a REPL pane sends both the stop request and the pty's signal. One handler balances the interrupt, so a
+   double delivery stops the form once.
+7. A late stop request is a no-op. The SIGINT handler stays installed for the helper's life.
+8. At the memory cap, stdout may lose buffered output, since the failure path does no stdio.
+9. The budget warning is one per over-budget episode, tracked on the host.
+10. Admission reads fresh footprints and counts each helper that has not attached yet at an 8 MiB floor. The text now
+    says the total at admission is within the budget. One admission adds at most one cap. Running helpers may grow to
+    their own caps.
+
+### Review findings
+
+| Finding | Disposition |
+|---|---|
+| PLAUSIBLE: 500 ms sleeps hid a race in the stuck-in-C tests | Confirmed. Fixed with a marker and a wait on the kernel's blocked state |
+| PLAUSIBLE: a late stop request could kill the helper by default SIGINT | Confirmed by trace. Fixed: the handler stays installed. No deterministic test |
+| PLAUSIBLE: the allocator failure path called `snprintf` and `fflush` | Confirmed. Fixed: a static message, `write`, `_exit` |
+| PLAUSIBLE: the memory notice could interleave with a pong | Confirmed. Fixed: it is sent under the socket's write lock |
+| PLAUSIBLE: the budget warning came once per pane | Confirmed. Fixed: once per episode, with tests |
+| ADR-impact and reviewer: a burst of admissions could pass the budget | Confirmed. Fixed with fresh reads and a floor. The proposal text now states the real bound |
+| ADR-impact: ADR-07 and ADR-08 | Both validated as written. They stay `proposed`, and the user decides on promotion |
+| ADR-impact ADVISORY: ADR-09 | The planned gap |
+| Implementer's ADR candidate: one reader thread owns the helper connection, and the app kills a helper only for silence, the memory margin, or a double Ctrl-C | Dismissed as an ADR candidate. It refines ADR-07 and ADR-08 inside one feature and adds no new rule across the system |
+
+### Measurements
+
+At rest, a REPL helper holds 3,359,104 bytes, 3.2 MiB, and takes about 22 ms from launch to attach. The helper in the
+built app measured 3,375,464 bytes and 23 ms. Both are Debug builds.
+
+### Test cost
+
+| Class | Time alone |
+|---|---|
+| `ScriptLimitsTests`, 7 tests | 3.06 s |
+| `ScriptReplLimitsTests`, 14 tests | 2.6 s |
+| `ReplAppletTests`, 19 tests | 1.6 s |
+| `ScriptReplTests`, 28 tests | 2.8 s |
+
+Each limit test earns its seconds. It runs a real helper to its cap or its interrupt, which no cheaper layer can
+prove.
+
+### Left open
+
+- These UI tests are written but unrun, because the screen was unavailable:
+  - `TerminalUITests.testControlCInterruptsAForegroundProgram`
+  - `ReplUITests.testCtrlCStopsARunningEvaluationAndTheCloseAsksOnlyWhileItRuns`
+  - `ReplUITests.testASecondCtrlCEndsAFormStuckInACallThatIgnoresTheFirst`

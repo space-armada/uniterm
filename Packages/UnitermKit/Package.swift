@@ -191,7 +191,8 @@ let package = Package(
     .executableTarget(name: "ScriptHelper", dependencies: ["ScriptRuntime"]),
     // The app side of scripting: the listener, the peers, and the dispatch of their calls. It
     // never imports Janet.
-    .target(name: "ScriptHost", dependencies: ["FileRouting", "ScriptWire", "StatusKit"]),
+    .target(
+      name: "ScriptHost", dependencies: ["FileRouting", "HelperHost", "ScriptWire", "StatusKit"]),
     // The REPL applet. It hosts a terminal session whose child is the REPL helper, and binds the
     // helper's control channel to its pane through the script host. It never imports Janet.
     .target(
@@ -286,7 +287,8 @@ let package = Package(
       ]),
     .testTarget(name: "ScriptWireTests", dependencies: ["ScriptWire", "TableTestSupport"]),
     // Holds the shim's reply reader against crafted bytes, so it reaches the Janet C target.
-    .testTarget(name: "ScriptRuntimeTests", dependencies: ["ScriptRuntime", "CJanet"]),
+    .testTarget(
+      name: "ScriptRuntimeTests", dependencies: ["ScriptRuntime", "ScriptWire", "CJanet"]),
     .testTarget(
       name: "ScriptHostTests",
       dependencies: ["ScriptHost", "ScriptWire", "ScriptHelper", "StatusKit"],

@@ -13,13 +13,13 @@ public struct ReplServices {
   /// bundle has none.
   public var helper: @MainActor () -> URL?
 
-  /// Issues a token and a channel for one helper, with the history it recalls. Nil when scripting
-  /// is not running.
-  public var openChannel: @MainActor ([String]) -> ScriptReplChannel?
+  /// Issues a token and a channel for one helper, with the history it recalls. It refuses when
+  /// scripting is not running, or when the REPL helpers already hold more than their budget.
+  public var openChannel: @MainActor ([String]) -> ScriptReplOpening
 
   public init(
     helper: @escaping @MainActor () -> URL?,
-    openChannel: @escaping @MainActor ([String]) -> ScriptReplChannel?
+    openChannel: @escaping @MainActor ([String]) -> ScriptReplOpening
   ) {
     self.helper = helper
     self.openChannel = openChannel
@@ -27,11 +27,32 @@ public struct ReplServices {
 }
 
 /// Lays out the terminal above the strip that shows after the helper has gone.
+///
+/// It also sees Ctrl-C before the terminal does. The terminal still gets the key and sends it
+/// through the pty. The container tells the applet too, so the app can ask the helper to stop over
+/// its control channel, which does not depend on the pty's signal reaching the helper.
 @MainActor
 private final class ReplContainerView: NSView {
   var onResize: (() -> Void)?
+  var onInterruptKey: (() -> Void)?
 
   override var isFlipped: Bool { true }
+
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if ReplApplet.isInterruptKey(event), isFirstResponderInside {
+      onInterruptKey?()
+    }
+
+    return super.performKeyEquivalent(with: event)
+  }
+
+  /// A key equivalent reaches every view of the window, so only a Ctrl-C typed into this pane
+  /// counts as its interrupt.
+  private var isFirstResponderInside: Bool {
+    guard let responder = window?.firstResponder as? NSView else { return false }
+
+    return responder.isDescendant(of: self)
+  }
 
   override func resizeSubviews(withOldSize oldSize: NSSize) {
     super.resizeSubviews(withOldSize: oldSize)
@@ -97,6 +118,7 @@ public final class ReplApplet: Applet, InputOwning {
     endedView.isHidden = true
     endedView.onRestart = { [weak self] in self?.restart() }
     container.onResize = { [weak self] in self?.layoutContents() }
+    container.onInterruptKey = { [weak self] in self?.interruptKeyPressed() }
   }
 
   /// Restores an applet from a description. It starts a fresh helper when the pane starts. The
@@ -213,8 +235,19 @@ public final class ReplApplet: Applet, InputOwning {
       return
     }
 
-    guard let channel = services.openChannel(history.lines) else {
+    let channel: ScriptReplChannel
+
+    switch services.openChannel(history.lines) {
+    case .channel(let opened):
+      channel = opened
+
+    case .refused(.scriptingOff):
       showEnded("Scripting is not running, so the REPL cannot start. Relaunch uniterm.")
+
+      return
+
+    case .refused(.overBudget(let used, let budget, let announce)):
+      refuseForBudget(used: used, budget: budget, announce: announce)
 
       return
     }
@@ -265,10 +298,81 @@ public final class ReplApplet: Applet, InputOwning {
     evaluating = false
   }
 
+  /// A Ctrl-C in the pane. The first while a form runs asks the helper to stop it. A second, after a
+  /// short gap and with the form still running, ends a helper that the first request never reached.
+  func interruptKeyPressed() {
+    guard phase == .running, let channel else { return }
+
+    channel.interruptPressed()
+  }
+
+  /// True for Ctrl-C alone, as a fresh press and not a held key. Command, Option, and Shift make
+  /// other keys.
+  static func isInterruptKey(_ event: NSEvent) -> Bool {
+    guard event.type == .keyDown, !event.isARepeat else { return false }
+
+    let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+    return modifiers.contains(.control) && modifiers.isDisjoint(with: [.command, .option, .shift])
+      && event.charactersIgnoringModifiers == "c"
+  }
+
+  private func refuseForBudget(used: Int, budget: Int, announce: Bool) {
+    showEnded(
+      "Other REPLs hold \(Self.describe(bytes: used)) of the \(Self.describe(bytes: budget)) that "
+        + "REPLs may use together, so this REPL did not start. Close a REPL, then press Restart "
+        + "to try again.")
+
+    guard announce else { return }
+
+    host?.applet(
+      self, post: .warning,
+      text: "A REPL did not start. REPLs hold \(Self.describe(bytes: used)) of their "
+        + "\(Self.describe(bytes: budget)) budget.")
+  }
+
+  /// Sizes the way a person reads them: whole GiB or MiB.
+  static func describe(bytes: Int) -> String {
+    let gibibyte = 1 << 30
+
+    if bytes >= gibibyte {
+      let tenths = bytes * 10 / gibibyte
+
+      return tenths % 10 == 0 ? "\(tenths / 10) GiB" : "\(tenths / 10).\(tenths % 10) GiB"
+    }
+
+    return "\(bytes >> 20) MiB"
+  }
+
+  /// What the pane says when the app or the helper ended the helper for a reason of its own.
+  static func message(for end: ScriptReplEnd) -> String {
+    switch end {
+    case .memoryLimit:
+      return
+        "The REPL used more than \(describe(bytes: ScriptProtocol.helperMemoryCap)) of memory, "
+        + "so uniterm ended it. Press Restart for a fresh one. Your history is kept."
+
+    case .overFootprint(let bytes):
+      return "The REPL's process grew to \(describe(bytes: bytes)), past its limit, so uniterm "
+        + "ended it. Press Restart for a fresh one. Your history is kept."
+
+    case .unresponsive:
+      return "The REPL stopped answering uniterm, so uniterm ended it. Press Restart for a fresh "
+        + "one. Your history is kept."
+
+    case .stoppedByUser:
+      return "You pressed Ctrl-C twice while the REPL ignored the first, so uniterm ended it. "
+        + "Press Restart for a fresh one. Your history is kept."
+    }
+  }
+
   private func handle(_ event: ScriptReplEvent) {
     switch event {
     case .attached:
       break
+
+    case .terminated(let end):
+      helperEnded(Self.message(for: end))
 
     case .line(let text):
       history.append(text)

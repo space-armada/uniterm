@@ -338,6 +338,20 @@ public final class ScriptListener: @unchecked Sendable {
 
           continuation.yield(.replEvaluating(connection, running))
 
+        case .pong(let nonce):
+          guard role != .undeclared else {
+            throw WireError.badValue("a pong from a connection that has not begun")
+          }
+
+          continuation.yield(.pong(connection, nonce))
+
+        case .memoryLimit:
+          guard role == .repl else {
+            throw WireError.badValue("a memory notice from a connection that is not a REPL")
+          }
+
+          continuation.yield(.replMemoryLimit(connection))
+
         case .request(let id, let call):
           connection.slots.wait()
 

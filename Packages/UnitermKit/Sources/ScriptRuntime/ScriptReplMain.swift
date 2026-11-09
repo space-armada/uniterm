@@ -32,6 +32,7 @@ public enum ScriptReplMain {
     var socket: String?
     var probe = false
     var trace = false
+    var memoryCap: UInt64?
     var index = 0
 
     while index < arguments.count {
@@ -50,6 +51,13 @@ public enum ScriptReplMain {
         trace = true
         index += 1
 
+      case ScriptHelperMain.memoryCapFlag:
+        guard index + 1 < arguments.count, let bytes = UInt64(arguments[index + 1]), bytes > 0
+        else { return fail("--memory-cap needs a number of bytes", .usage) }
+
+        memoryCap = bytes
+        index += 2
+
       case "-h", "--help":
         print(usageText)
 
@@ -63,7 +71,12 @@ public enum ScriptReplMain {
     #if !DEBUG
       if probe { return fail("unknown option \(probeFlag)\n\(usageText)", .usage) }
       if trace { return fail("unknown option \(traceFlag)\n\(usageText)", .usage) }
+      if memoryCap != nil {
+        return fail("unknown option \(ScriptHelperMain.memoryCapFlag)\n\(usageText)", .usage)
+      }
     #endif
+
+    if let memoryCap { uniterm_janet_set_memory_cap(memoryCap) }
 
     let token = ReplEnvironment.takeToken()
 
@@ -115,12 +128,22 @@ public enum ScriptReplMain {
 
     let quitText = session.quitText
 
-    let watchdog = ScriptWatchdog.start(watching: session.descriptor) {
-      ScriptSession.endHelper(quitText, flushingOutput: false)
-    }
+    // The hook runs on the VM thread inside an allocation, with the session kept alive for the rest
+    // of the process. It sends through the socket's own lock, which the watchdog's pong shares.
+    uniterm_janet_set_memory_limit_hook(
+      { userdata in
+        guard let userdata else { return }
+
+        Unmanaged<ScriptSession>.fromOpaque(userdata).takeUnretainedValue()
+          .sendMemoryLimitNotice()
+      }, Unmanaged.passRetained(session).toOpaque())
+
+    let watchdog = ScriptWatchdog.start(
+      reading: session, onStop: { uniterm_janet_request_interrupt() },
+      onHangup: { ScriptSession.endHelper(quitText, flushingOutput: false) })
 
     defer {
-      watchdog?.finish()
+      watchdog.finish()
       session.close()
     }
 

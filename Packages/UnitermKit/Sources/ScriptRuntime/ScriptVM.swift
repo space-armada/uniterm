@@ -9,6 +9,9 @@ public struct ScriptFailure: Error, Equatable, Sendable {
     case compile
     case runtime
     case start
+
+    /// Ctrl-C or the app's stop request ended the script.
+    case interrupted
   }
 
   public let name: String
@@ -19,6 +22,8 @@ public struct ScriptFailure: Error, Equatable, Sendable {
 
   /// One line for stderr: the script name, the position when Janet gave one, and the message.
   public var description: String {
+    if kind == .interrupted { return "\(name): interrupted" }
+
     let position = line > 0 ? ":\(line):\(column)" : ""
 
     return "\(name)\(position): \(kind.rawValue) error: \(message)"
@@ -60,6 +65,7 @@ enum ScriptVM {
     case UNITERM_SCRIPT_PARSE_ERROR: kind = .parse
     case UNITERM_SCRIPT_COMPILE_ERROR: kind = .compile
     case UNITERM_SCRIPT_RUNTIME_ERROR: kind = .runtime
+    case UNITERM_SCRIPT_INTERRUPTED: kind = .interrupted
     default: kind = .start
     }
 

@@ -56,8 +56,55 @@ typedef enum uniterm_script_status {
     UNITERM_SCRIPT_PARSE_ERROR = 1,
     UNITERM_SCRIPT_COMPILE_ERROR = 2,
     UNITERM_SCRIPT_RUNTIME_ERROR = 3,
-    UNITERM_SCRIPT_START_FAILED = 4
+    UNITERM_SCRIPT_START_FAILED = 4,
+    UNITERM_SCRIPT_INTERRUPTED = 5
 } uniterm_script_status;
+
+/* The most memory Janet may hold in one helper, in bytes. 1 GiB. */
+#define UNITERM_JANET_DEFAULT_MEMORY_CAP ((uint64_t)1 << 30)
+
+/*
+ * The status a helper exits with when its allocator refuses a block for passing the cap. It is
+ * outside sysexits.h, which names nothing for this.
+ */
+#define UNITERM_JANET_EXIT_MEMORY_LIMIT 79
+
+/* The status of a run that Ctrl-C stopped, as a shell reports a process that died of SIGINT. */
+#define UNITERM_JANET_EXIT_INTERRUPTED 130
+
+/*
+ * Sets the most bytes the allocator wrapper lets Janet hold. An allocation that would pass it
+ * writes a message to standard error, sends the notice below when one is set, and ends the process
+ * with UNITERM_JANET_EXIT_MEMORY_LIMIT. It never returns null, since Janet's out-of-memory path is
+ * not safe to unwind. Call it before the VM starts.
+ */
+void uniterm_janet_set_memory_cap(uint64_t bytes);
+
+/* The cap now in force. */
+uint64_t uniterm_janet_memory_cap(void);
+
+/*
+ * Sets a function the allocator calls, on the VM thread, just before it ends the process for the
+ * cap. The REPL helper uses it to send the app a notice through the connection's own locked send,
+ * so the notice never interleaves with a pong from the watchdog thread. It must not allocate
+ * through Janet. The failure path itself formats nothing and uses no stdio, so output a script
+ * printed but did not flush may be lost.
+ */
+void uniterm_janet_set_memory_limit_hook(void (*hook)(void *userdata), void *userdata);
+
+/*
+ * Makes the next uniterm_janet_run stop on SIGINT. The first SIGINT while the script runs stops
+ * it, and a second ends the process at once, so a script stuck in a C call that the interrupt
+ * never reaches still ends. Call it before the run. The handler stays installed after the run, and does nothing once the run is over, so a late signal never reaches the default action.
+ */
+void uniterm_janet_enable_run_sigint(void);
+
+/*
+ * Asks the running script or REPL form to stop, as a SIGINT does. Any thread may call it. It
+ * signals the VM's own thread, so it takes the same gated path as Ctrl-C: it does nothing when no
+ * form is running, and it leaves no interrupt behind for the next one.
+ */
+void uniterm_janet_request_interrupt(void);
 
 typedef struct uniterm_script_failure {
     int32_t line;

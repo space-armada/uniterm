@@ -50,6 +50,12 @@ public enum ScriptEvent: Sendable {
 
   /// A REPL's helper reports whether a form is evaluating.
   case replEvaluating(ScriptConnection, Bool)
+
+  /// A helper answered a ping.
+  case pong(ScriptConnection, UInt32)
+
+  /// A REPL's helper is ending itself because it reached its memory cap.
+  case replMemoryLimit(ScriptConnection)
   case closed(ScriptConnection)
   case refused(ScriptPeer?, ScriptRefusal)
 }

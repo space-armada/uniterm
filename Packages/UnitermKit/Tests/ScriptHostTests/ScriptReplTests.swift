@@ -222,14 +222,14 @@ final class ScriptReplTests: XCTestCase {
   /// that the definitions survive. `prelude` shapes the terminal or the signal state the helper
   /// inherits.
   private func assertACtrlCByteStopsALoop(
-    prelude: String, arguments: [String] = [], traced: Bool = false,
+    prelude: String, arguments: [String] = [], traced: Bool = false, direct: Bool = false,
     file: StaticString = #filePath, line: UInt = #line
   ) async throws {
     let channel = host.openRepl(history: [])
     let events = ReplEvents(channel)
     let repl = try ReplProcess(
       address: channel.launch.address, environment: environment(channel), arguments: arguments,
-      login: true, prelude: prelude)
+      login: true, direct: direct, prelude: prelude)
 
     expect(await attached(events), repl.standardOutput, file: file, line: line)
     expect(await repl.waitForOutput("repl:1:> "), repl.standardOutput, file: file, line: line)
@@ -265,6 +265,12 @@ final class ScriptReplTests: XCTestCase {
   /// the terminal's signal also reaches. The Ctrl-C is still the byte 3 on the pty.
   func testACtrlCByteStopsARunningFormWhenStartedThroughLogin() async throws {
     try await assertACtrlCByteStopsALoop(prelude: "")
+  }
+
+  /// Catches a Ctrl-C that fails only when the helper is exactly what libghostty starts: the target
+  /// of bash's `exec -l`, with a dash in front of its argv[0] and no `/bin/sh` above it.
+  func testACtrlCByteStopsARunningFormWhenTheHelperIsTheTargetOfExecDashL() async throws {
+    try await assertACtrlCByteStopsALoop(prelude: "", direct: true)
   }
 
   /// Catches a SIGINT trace that stays silent. A UI run reads these markers to tell a signal that

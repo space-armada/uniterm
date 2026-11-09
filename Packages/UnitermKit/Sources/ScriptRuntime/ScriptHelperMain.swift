@@ -1,3 +1,4 @@
+import CJanet
 import Darwin
 import Foundation
 import ScriptWire
@@ -21,7 +22,17 @@ public enum ScriptHelperMain {
     public static let protocolMismatch: Int32 = 70
     public static let connectionLost: Int32 = 74
     public static let notBundleCommand: Int32 = 78
+
+    /// A script that took more memory than the cap. Sysexits names nothing for it.
+    public static let memoryLimit = Int32(UNITERM_JANET_EXIT_MEMORY_LIMIT)
+
+    /// A run that Ctrl-C stopped, as a shell reports a process that died of SIGINT.
+    public static let interrupted = Int32(UNITERM_JANET_EXIT_INTERRUPTED)
   }
+
+  /// Makes the allocator's cap smaller, so a test reaches it with a small script. Debug builds only,
+  /// since a cap is not a setting. It takes a number of bytes.
+  static let memoryCapFlag = "--memory-cap"
 
   /// Whether the command insists on being the one inside a uniterm bundle.
   public enum Identity: Sendable {
@@ -75,6 +86,14 @@ public enum ScriptHelperMain {
     if arguments.dropFirst().first == "repl" {
       return ScriptReplMain.run(arguments: Array(arguments.dropFirst(2)))
     }
+
+    #if DEBUG
+      var arguments = arguments
+
+      if let refusal = takeMemoryCap(from: &arguments) {
+        return fail(refusal, status: Exit.usage)
+      }
+    #endif
 
     let invocation: Invocation
 
@@ -139,24 +158,47 @@ public enum ScriptHelperMain {
       return fail("cannot talk to uniterm at \(address.path): \(error)", status: Exit.unavailable)
     }
 
-    let watchdog = ScriptWatchdog.start(watching: session.descriptor) {
-      ScriptSession.endHelper(ScriptSession.appQuitText, flushingOutput: false)
-    }
+    let watchdog = ScriptWatchdog.start(
+      reading: session, onStop: { uniterm_janet_request_interrupt() },
+      onHangup: { ScriptSession.endHelper(ScriptSession.appQuitText, flushingOutput: false) })
 
     defer {
-      watchdog?.finish()
+      watchdog.finish()
       session.close()
     }
 
     let script = [invocation.script] + invocation.arguments
+
+    uniterm_janet_enable_run_sigint()
 
     guard
       let failure = ScriptVM.run(
         name: name, source: source, session: session, sandbox: denied, arguments: script)
     else { return Exit.ok }
 
-    return fail(failure.description, status: Exit.scriptFailed)
+    return fail(
+      failure.description,
+      status: failure.kind == .interrupted ? Exit.interrupted : Exit.scriptFailed)
   }
+
+  #if DEBUG
+    /// Removes `--memory-cap BYTES` when it comes right after `run`, so a script's own arguments
+    /// never carry it. Returns a message when the value is not a positive number.
+    static func takeMemoryCap(from arguments: inout [String]) -> String? {
+      guard arguments.count > 1, arguments[1] == "run", arguments.count > 2,
+        arguments[2] == memoryCapFlag
+      else { return nil }
+
+      guard arguments.count > 3, let bytes = UInt64(arguments[3]), bytes > 0 else {
+        return "\(memoryCapFlag) needs a number of bytes"
+      }
+
+      arguments.removeSubrange(2...3)
+      uniterm_janet_set_memory_cap(bytes)
+
+      return nil
+    }
+  #endif
 
   private static func fail(_ message: String, status: Int32) -> Int32 {
     FileHandle.standardError.write(Data((message + "\n").utf8))

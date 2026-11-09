@@ -274,8 +274,11 @@ final class ScriptHelperIntegrationTests: XCTestCase {
       case .closed:
         return true
 
-      case .attached, .replLine, .replEvaluating:
+      case .attached, .replLine, .replEvaluating, .replMemoryLimit:
         XCTFail("a script helper acted as a REPL")
+
+      case .pong:
+        break
 
       case .refused(_, let refusal):
         XCTFail("the helper was refused: \(refusal)")

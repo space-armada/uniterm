@@ -57,9 +57,17 @@ enum ScriptFixtures {
   /// Starts the helper on `script`. `socket` is the `--socket` flag, and nil leaves it out. The
   /// environment is the test's own without `UNITERM_SOCKET`, plus `environment`, so a variable the
   /// developer has set never decides where a test connects.
+  ///
+  /// `input` is the helper's standard input. The caller keeps the pipe alive, since its write end
+  /// closing is the end of the input. With none, the input is empty and a read ends at once.
+  ///
+  /// `memoryCap` is the allocator's cap in bytes, which only a debug helper accepts. A test that
+  /// leaves a helper running is ended by SIGTERM after 60 seconds and by SIGKILL after 70, since a
+  /// helper that handles SIGINT is not always ended by the first.
   static func start(
     socket: String?, script: URL, allow: [String] = [], arguments: [String] = [],
-    environment: [String: String] = [:], onExit: (@Sendable () -> Void)? = nil
+    environment: [String: String] = [:], memoryCap: UInt64? = nil, input: Pipe? = nil,
+    onExit: (@Sendable () -> Void)? = nil
   ) throws -> Process {
     let process = Process()
 
@@ -74,9 +82,10 @@ enum ScriptFixtures {
     process.environment = inherited.merging(environment) { _, new in new }
     process.executableURL = helper()
     process.arguments =
-      ["run"] + allow.flatMap { ["--allow", $0] } + (socket.map { ["--socket", $0] } ?? [])
+      ["run"] + (memoryCap.map { ["--memory-cap", String($0)] } ?? [])
+      + allow.flatMap { ["--allow", $0] } + (socket.map { ["--socket", $0] } ?? [])
       + [script.path] + arguments
-    process.standardInput = FileHandle.nullDevice
+    process.standardInput = input ?? FileHandle.nullDevice
     process.standardOutput = Pipe()
     process.standardError = Pipe()
 
@@ -86,6 +95,10 @@ enum ScriptFixtures {
 
     DispatchQueue.global().asyncAfter(deadline: .now() + 60) {
       if watchdog.isRunning { watchdog.terminate() }
+    }
+
+    DispatchQueue.global().asyncAfter(deadline: .now() + 70) {
+      if watchdog.isRunning { kill(watchdog.processIdentifier, SIGKILL) }
     }
 
     return process
@@ -115,12 +128,12 @@ enum ScriptFixtures {
 
   static func run(
     socket: String?, script: URL, allow: [String] = [], arguments: [String] = [],
-    environment: [String: String] = [:]
+    environment: [String: String] = [:], memoryCap: UInt64? = nil
   ) async throws -> HelperRun {
     await finish(
       try start(
         socket: socket, script: script, allow: allow, arguments: arguments,
-        environment: environment))
+        environment: environment, memoryCap: memoryCap))
   }
 
   /// The footprint of a process in bytes, or nil when it cannot be read.
@@ -166,4 +179,90 @@ extension ScriptListener {
       return finished
     }
   }
+}
+
+/// A clock a test moves by hand, so a bound of seconds never costs seconds.
+final class ManualClock: @unchecked Sendable {
+  private let lock = NSLock()
+  private var current = ContinuousClock.Instant.now
+
+  var now: ContinuousClock.Instant {
+    lock.lock()
+    defer { lock.unlock() }
+
+    return current
+  }
+
+  func advance(by amount: Duration) {
+    lock.lock()
+    current = current + amount
+    lock.unlock()
+  }
+}
+
+/// Footprints a test hands the app, by process ID.
+final class FakeFootprints: @unchecked Sendable {
+  private let lock = NSLock()
+  private var values: [pid_t: Int] = [:]
+
+  func set(_ footprint: Int, for pid: pid_t) {
+    lock.lock()
+    values[pid] = footprint
+    lock.unlock()
+  }
+
+  func read(_ pid: pid_t) -> Int? {
+    lock.lock()
+    defer { lock.unlock() }
+
+    return values[pid]
+  }
+}
+
+/// Waits until no process has the ID `pid`, for at most `timeout`.
+func processIsGone(_ pid: pid_t, timeout: Duration = .seconds(10)) async -> Bool {
+  let clock = ContinuousClock()
+  let deadline = clock.now + timeout
+
+  while clock.now < deadline {
+    if kill(pid, 0) != 0 && errno == ESRCH { return true }
+
+    try? await Task.sleep(for: .milliseconds(20))
+  }
+
+  return false
+}
+
+/// True when the process's main thread, the oldest thread it has, is blocked in the kernel. A
+/// helper stuck in a read is waiting, and a helper on its way to the read is running. A test uses
+/// it to know the call has begun before it sends the first interrupt.
+func mainThreadIsWaiting(_ pid: pid_t) -> Bool {
+  var identifiers = [UInt64](repeating: 0, count: 64)
+  let listed = identifiers.withUnsafeMutableBytes {
+    proc_pidinfo(pid, PROC_PIDLISTTHREADS, 0, $0.baseAddress, Int32($0.count))
+  }
+
+  guard listed > 0, let main = identifiers.prefix(Int(listed) / MemoryLayout<UInt64>.size).min()
+  else { return false }
+
+  var info = proc_threadinfo()
+  let size = Int32(MemoryLayout<proc_threadinfo>.size)
+
+  guard proc_pidinfo(pid, PROC_PIDTHREADINFO, main, &info, size) == size else { return false }
+
+  return info.pth_run_state == TH_STATE_WAITING
+}
+
+/// Waits until the process's main thread is blocked, for at most `timeout`.
+func waitUntilBlocked(_ pid: pid_t, timeout: Duration = .seconds(10)) async -> Bool {
+  let clock = ContinuousClock()
+  let deadline = clock.now + timeout
+
+  while clock.now < deadline {
+    if mainThreadIsWaiting(pid) { return true }
+
+    try? await Task.sleep(for: .milliseconds(10))
+  }
+
+  return mainThreadIsWaiting(pid)
 }

@@ -38,6 +38,16 @@ public final class ScriptHost {
 
   let reaper: ProcessReaper
 
+  /// What bounds a REPL helper, and how the app reads its footprint and the time.
+  let replLimits: ReplLimits
+  let replProbes: ReplProbes
+  var monitor: Task<Void, Never>?
+  var lastSample: ContinuousClock.Instant?
+
+  /// True from the first refusal for the budget until the total is back under it. One warning is
+  /// recorded for the episode, however many panes are refused.
+  var budgetEpisodeAnnounced = false
+
   /// The file each pane holds from a script's send. It is the only one the pane may still read.
   private struct Held {
     var file: URL
@@ -57,9 +67,12 @@ public final class ScriptHost {
     listener: ScriptListener, issueProducer: @escaping ProducerIssuer,
     windows: (any ScriptWindowAPI)? = nil, sentContent: ScriptSentContent? = nil,
     onRefusal: @escaping @MainActor (ScriptRefusal) -> Void = { _ in },
-    reaper: ProcessReaper = .live
+    reaper: ProcessReaper = .live, replLimits: ReplLimits = .live,
+    replProbes: ReplProbes = .live
   ) {
     self.reaper = reaper
+    self.replLimits = replLimits
+    self.replProbes = replProbes
     self.listener = listener
     self.issueProducer = issueProducer
     self.windows = windows
@@ -84,12 +97,16 @@ public final class ScriptHost {
         self?.handle(event)
       }
     }
+
+    startMonitor()
   }
 
   public func stop() {
     listener.stop()
     task?.cancel()
     task = nil
+    monitor?.cancel()
+    monitor = nil
 
     for session in sessions.values {
       session.producer?.retire()
@@ -114,7 +131,15 @@ public final class ScriptHost {
       if boundRepls[connection.id] == nil { connection.close() }
 
     case .replEvaluating(let connection, let running):
-      boundRepls[connection.id]?.onEvent?(.evaluating(running))
+      boundRepls[connection.id]?.evaluationChanged(running)
+
+      if boundRepls[connection.id] == nil { connection.close() }
+
+    case .pong(let connection, let nonce):
+      boundRepls[connection.id]?.pong(nonce, now: replProbes.now())
+
+    case .replMemoryLimit(let connection):
+      boundRepls[connection.id]?.helperReachedMemoryLimit()
 
       if boundRepls[connection.id] == nil { connection.close() }
 

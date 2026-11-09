@@ -154,6 +154,35 @@ final class ReplUITests: UnitermUITestCase {
     XCTAssertTrue(waitUntilGone(window.groups["pane-2"], timeout: 15))
   }
 
+  /// Catches a form stuck in a C call that nothing can end. `(file/read stdin 1)` waits on the
+  /// terminal in one C call, which Janet's interrupt flag never reaches. The first Ctrl-C leaves it
+  /// running. A second, a second later, ends the helper. The pane stays open with the reason and a
+  /// Restart button, and keeps its history.
+  func testASecondCtrlCEndsAFormStuckInACallThatIgnoresTheFirst() {
+    let app = launchApp()
+    let (window, _) = openRepl(in: app)
+
+    app.typeText("(file/read stdin 1)\n")
+
+    // The app must have heard that the form runs, and the first press must come well before the
+    // second, since a double tap is read as one.
+    Thread.sleep(forTimeInterval: 2)
+    app.typeKey("c", modifierFlags: .control)
+    Thread.sleep(forTimeInterval: 1.5)
+
+    let message = window.staticTexts["repl-ended-message"]
+
+    XCTAssertFalse(message.exists, "one Ctrl-C ended a REPL that was stuck in a C call")
+
+    app.typeKey("c", modifierFlags: .control)
+
+    XCTAssertTrue(message.waitForExistence(timeout: 20), "the second Ctrl-C did not end the REPL")
+    XCTAssertTrue(
+      message.label.contains("Ctrl-C twice"), "the pane gave another reason: \(message.label)")
+    XCTAssertTrue(window.groups["pane-2"].exists, "the pane closed")
+    XCTAssertTrue(window.buttons["repl-restart-button"].exists, "the pane offered no restart")
+  }
+
   /// Catches a history that does not survive close and undo, a restore that runs a saved line, and
   /// a restored REPL that cannot recall. The first line opens a pane through the host API, and a
   /// repeat would make a fourth. After Cmd-W and Cmd-Shift-T the REPL is back with a fresh helper,

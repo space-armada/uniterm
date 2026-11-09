@@ -18,9 +18,56 @@
  * The allocator wrapper. janetconf.h routes every Janet allocation here. The count is the heap's
  * own size for each block, so a realloc that grows in place is still exact.
  *
- * The count is only read for now. A later cap checks `live_bytes` before it grants a block.
+ * A block that would take the count past the cap is never granted. Janet's out-of-memory path is
+ * not safe to unwind, so the wrapper ends the process instead of returning null.
  */
 static uint64_t live_bytes;
+static uint64_t memory_cap = UNITERM_JANET_DEFAULT_MEMORY_CAP;
+
+/*
+ * The failure path formats nothing and uses no stdio. The text is built when the cap is set, and
+ * the default text is a literal for the default cap. The failure path only calls write.
+ */
+static char limit_message[160] =
+    "uniterm: out of memory. A script or REPL may hold at most 1024 MiB, so uniterm ended it.\n";
+static void (*limit_hook)(void *userdata);
+static void *limit_hook_userdata;
+
+void uniterm_janet_set_memory_cap(uint64_t bytes) {
+    memory_cap = bytes;
+
+    snprintf(limit_message, sizeof(limit_message),
+             "uniterm: out of memory. A script or REPL may hold at most %llu MiB, so uniterm ended "
+             "it.\n",
+             (unsigned long long)(bytes >> 20));
+}
+
+uint64_t uniterm_janet_memory_cap(void) {
+    return memory_cap;
+}
+
+void uniterm_janet_set_memory_limit_hook(void (*hook)(void *userdata), void *userdata) {
+    limit_hook_userdata = userdata;
+    limit_hook = hook;
+}
+
+static void memory_limit_exceeded(void) __attribute__((noreturn));
+
+/*
+ * Runs on the VM thread, inside an allocation. Stdout is not flushed, since a flush is stdio, and
+ * output the script printed but not yet flushed is lost. The hook sends the notice through the
+ * connection's own send, which takes the lock the watchdog's pong takes, so the two never
+ * interleave. The VM thread holds no connection lock while it allocates, so taking it cannot
+ * deadlock against itself.
+ */
+static void memory_limit_exceeded(void) {
+    if (limit_hook != NULL) limit_hook(limit_hook_userdata);
+
+    ssize_t ignored = write(STDERR_FILENO, limit_message, strlen(limit_message));
+
+    (void)ignored;
+    _exit(UNITERM_JANET_EXIT_MEMORY_LIMIT);
+}
 
 static void count_add(size_t bytes) {
     __atomic_fetch_add(&live_bytes, (uint64_t)bytes, __ATOMIC_RELAXED);
@@ -30,7 +77,16 @@ static void count_sub(size_t bytes) {
     __atomic_fetch_sub(&live_bytes, (uint64_t)bytes, __ATOMIC_RELAXED);
 }
 
+/* Ends the process when `extra` more bytes would pass the cap. */
+static void require_room(uint64_t extra) {
+    uint64_t live = __atomic_load_n(&live_bytes, __ATOMIC_RELAXED);
+
+    if (extra > memory_cap || live > memory_cap - extra) memory_limit_exceeded();
+}
+
 void *uniterm_janet_malloc(size_t size) {
+    require_room((uint64_t)size);
+
     void *block = malloc(size);
 
     if (block != NULL) count_add(malloc_size(block));
@@ -39,6 +95,12 @@ void *uniterm_janet_malloc(size_t size) {
 }
 
 void *uniterm_janet_calloc(size_t count, size_t size) {
+    uint64_t total = (uint64_t)count * (uint64_t)size;
+
+    if (count != 0 && total / count != (uint64_t)size) memory_limit_exceeded();
+
+    require_room(total);
+
     void *block = calloc(count, size);
 
     if (block != NULL) count_add(malloc_size(block));
@@ -48,6 +110,9 @@ void *uniterm_janet_calloc(size_t count, size_t size) {
 
 void *uniterm_janet_realloc(void *pointer, size_t size) {
     size_t old_size = pointer != NULL ? malloc_size(pointer) : 0;
+
+    if ((uint64_t)size > (uint64_t)old_size) require_room((uint64_t)size - (uint64_t)old_size);
+
     void *block = realloc(pointer, size);
 
     if (block != NULL) {
@@ -827,6 +892,109 @@ static int runtime_position(JanetFiber *fiber, int32_t *line, int32_t *column) {
     return 0;
 }
 
+/*
+ * Stopping a running form.
+ *
+ * One SIGINT handler serves a script run and the REPL. It raises Janet's interrupt only while a
+ * form runs. A signal that arrives with nothing running would leave the interrupt counter raised
+ * and stop the next form at its first instruction, so it does nothing then.
+ *
+ * Ctrl-C and the app's stop request meet here. The app's request arrives on the helper's reader
+ * thread, which signals the VM's own thread with pthread_kill. The handler is then the only code
+ * that raises the interrupt, so the gate and the count are kept by one thread.
+ *
+ * The handler only touches atomics and calls write.
+ */
+static JanetVM *interrupt_vm;
+static pthread_t interrupt_thread;
+static int interrupt_thread_set;
+static int interrupt_evaluating;
+static int interrupt_fired;
+static int interrupt_hard;
+static int interrupt_trace;
+static int run_sigint_requested;
+
+static void interrupt_on_sigint(int signal_number) {
+    (void)signal_number;
+
+    int running = __atomic_load_n(&interrupt_evaluating, __ATOMIC_SEQ_CST);
+
+    if (interrupt_trace) {
+        static const char evaluating[] = "[sigint evaluating]\n";
+        static const char idle[] = "[sigint idle]\n";
+        ssize_t ignored = running ? write(STDERR_FILENO, evaluating, sizeof(evaluating) - 1)
+                                  : write(STDERR_FILENO, idle, sizeof(idle) - 1);
+
+        (void)ignored;
+    }
+
+    JanetVM *vm = __atomic_load_n(&interrupt_vm, __ATOMIC_SEQ_CST);
+
+    if (vm == NULL || !running) return;
+
+    int before = __atomic_fetch_add(&interrupt_fired, 1, __ATOMIC_SEQ_CST);
+
+    janet_interpreter_interrupt(vm);
+
+    if (interrupt_hard && before >= 1) {
+        static const char again[] = "uniterm: interrupted again, so uniterm ended the script\n";
+        ssize_t ignored = write(STDERR_FILENO, again, sizeof(again) - 1);
+
+        (void)ignored;
+        _exit(UNITERM_JANET_EXIT_INTERRUPTED);
+    }
+}
+
+/* Ends the window in which a signal interrupts, and balances every interrupt it raised. */
+static int interrupt_settle(void) {
+    __atomic_store_n(&interrupt_evaluating, 0, __ATOMIC_SEQ_CST);
+
+    int fired = __atomic_exchange_n(&interrupt_fired, 0, __ATOMIC_SEQ_CST);
+
+    JanetVM *vm = __atomic_load_n(&interrupt_vm, __ATOMIC_SEQ_CST);
+
+    for (int index = 0; index < fired && vm != NULL; index++) {
+        janet_interpreter_interrupt_handled(vm);
+    }
+
+    return fired;
+}
+
+/* Starts the window for the calling thread's VM. `hard` makes a second signal end the process. */
+static void interrupt_attach(int hard) {
+    interrupt_thread = pthread_self();
+    interrupt_hard = hard;
+    __atomic_store_n(&interrupt_vm, janet_local_vm(), __ATOMIC_SEQ_CST);
+
+    __atomic_store_n(&interrupt_thread_set, 1, __ATOMIC_SEQ_CST);
+}
+
+/*
+ * Ends the window and leaves the handler installed. A stop request or a SIGINT that arrives late,
+ * after the form is over and while the helper is still shutting down, then finds a handler that
+ * does nothing. Putting the old disposition back would let it hit the default action and kill the
+ * process. The VM thread is the helper's main thread, so it outlives every late signal, and the
+ * thread stays recorded for the same reason. The helper process ends right after.
+ */
+static void interrupt_detach(void) {
+    interrupt_settle();
+    __atomic_store_n(&interrupt_vm, NULL, __ATOMIC_SEQ_CST);
+}
+
+void uniterm_janet_request_interrupt(void) {
+    if (__atomic_load_n(&interrupt_thread_set, __ATOMIC_SEQ_CST)) {
+        pthread_kill(interrupt_thread, SIGINT);
+    }
+}
+
+void uniterm_janet_enable_run_sigint(void) {
+    run_sigint_requested = 1;
+}
+
+void uniterm_janet_repl_trace_sigint(void) {
+    interrupt_trace = 1;
+}
+
 /* Parses, compiles, and runs each top-level form in order, as `janet_dobytes` does. */
 static uniterm_script_status evaluate(JanetTable *env, const char *name, const uint8_t *source,
                                       size_t length, uniterm_script_failure *failure) {
@@ -868,7 +1036,9 @@ static uniterm_script_status evaluate(JanetTable *env, const char *name, const u
 
             JanetSignal signal = janet_continue(fiber, janet_wrap_nil(), &value);
 
-            if (signal != JANET_SIGNAL_OK && signal != JANET_SIGNAL_EVENT) {
+            if (signal == JANET_SIGNAL_INTERRUPT) {
+                result = UNITERM_SCRIPT_INTERRUPTED;
+            } else if (signal != JANET_SIGNAL_OK && signal != JANET_SIGNAL_EVENT) {
                 int32_t line = 0;
                 int32_t column = 0;
 
@@ -924,6 +1094,7 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
 
     volatile uniterm_script_status result = UNITERM_SCRIPT_OK;
     volatile int evaluating = 0;
+    volatile int installed = 0;
     JanetTryState state;
 
     if (janet_try(&state) == JANET_SIGNAL_OK) {
@@ -941,7 +1112,22 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
         janet_table_put(env, janet_ckeywordv("args"), janet_wrap_array(args));
         janet_sandbox(sandbox_flags);
 
+        if (run_sigint_requested) {
+            struct sigaction action;
+
+            memset(&action, 0, sizeof(action));
+            action.sa_handler = interrupt_on_sigint;
+            action.sa_flags = SA_RESTART;
+            sigemptyset(&action.sa_mask);
+            installed = sigaction(SIGINT, &action, NULL) == 0;
+
+            interrupt_attach(1);
+        }
+
         evaluating = 1;
+
+        if (installed) __atomic_store_n(&interrupt_evaluating, 1, __ATOMIC_SEQ_CST);
+
         result = evaluate(env, name, source, length, failure);
 
         janet_restore(&state);
@@ -954,6 +1140,9 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
         result = evaluating ? UNITERM_SCRIPT_RUNTIME_ERROR : UNITERM_SCRIPT_START_FAILED;
     }
 
+    if (installed) interrupt_detach();
+
+    run_sigint_requested = 0;
     active_host = NULL;
     janet_deinit();
 
@@ -967,47 +1156,6 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
  * prompt through code that can be read here. Each form runs in a fiber of its own, as `evaluate`
  * runs a script's, and a signal other than OK ends that form and nothing else.
  */
-
-static int repl_evaluating;
-static int repl_fired;
-static JanetVM *repl_vm;
-static int repl_trace;
-
-/*
- * Runs in a signal handler on the REPL's thread, so it only touches atomics. Janet's interrupt
- * counter must stay balanced. A signal that arrives while no form runs would leave the counter
- * raised and stop the next form at its first instruction, so it does nothing.
- */
-static void repl_on_sigint(int signal_number) {
-    (void)signal_number;
-
-    if (repl_trace) {
-        static const char evaluating[] = "[sigint evaluating]\n";
-        static const char idle[] = "[sigint idle]\n";
-        int running = __atomic_load_n(&repl_evaluating, __ATOMIC_SEQ_CST);
-        ssize_t ignored =
-            running ? write(STDERR_FILENO, evaluating, sizeof(evaluating) - 1)
-                    : write(STDERR_FILENO, idle, sizeof(idle) - 1);
-
-        (void)ignored;
-    }
-
-    if (repl_vm != NULL && __atomic_load_n(&repl_evaluating, __ATOMIC_SEQ_CST)) {
-        __atomic_add_fetch(&repl_fired, 1, __ATOMIC_SEQ_CST);
-        janet_interpreter_interrupt(repl_vm);
-    }
-}
-
-/* Ends the window in which a signal interrupts, and balances every interrupt it raised. */
-static int repl_settle(void) {
-    __atomic_store_n(&repl_evaluating, 0, __ATOMIC_SEQ_CST);
-
-    int fired = __atomic_exchange_n(&repl_fired, 0, __ATOMIC_SEQ_CST);
-
-    for (int index = 0; index < fired; index++) janet_interpreter_interrupt_handled(repl_vm);
-
-    return fired;
-}
 
 /*
  * Puts the terminal's signal characters back before a form runs. The line editor restores the
@@ -1023,10 +1171,6 @@ static void repl_ensure_terminal_signals(void) {
 
     settings.c_lflag |= ISIG;
     tcsetattr(STDIN_FILENO, TCSANOW, &settings);
-}
-
-void uniterm_janet_repl_trace_sigint(void) {
-    repl_trace = 1;
 }
 
 void uniterm_janet_repl_block_sigint(void) {
@@ -1084,11 +1228,11 @@ static int repl_run_form(JanetTable *env, Janet form, JanetString where, size_t 
     janet_gcroot(janet_wrap_fiber(fiber));
 
     repl_report_running(repl, 1);
-    __atomic_store_n(&repl_evaluating, 1, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&interrupt_evaluating, 1, __ATOMIC_SEQ_CST);
 
     JanetSignal signal = janet_continue(fiber, janet_wrap_nil(), &value);
 
-    repl_settle();
+    interrupt_settle();
     repl_report_running(repl, 0);
 
     int interrupted = signal == JANET_SIGNAL_INTERRUPT;
@@ -1183,7 +1327,7 @@ static void repl_loop(JanetTable *env, const uniterm_repl_host *repl) {
         uniterm_line_result result;
         JanetTryState state;
 
-        repl_settle();
+        interrupt_settle();
         fflush(stdout);
         fflush(stderr);
 
@@ -1208,7 +1352,7 @@ static void repl_loop(JanetTable *env, const uniterm_repl_host *repl) {
             uniterm_script_failure described;
 
             janet_restore(&state);
-            repl_settle();
+            interrupt_settle();
             describe_value(payload, 0, 0, &described);
             janet_eprintf("error: %s\n", described.message);
         }
@@ -1232,7 +1376,6 @@ uniterm_script_status uniterm_janet_repl(const uniterm_host *host, const uniterm
     volatile uniterm_script_status result = UNITERM_SCRIPT_OK;
     volatile int installed = 0;
     JanetTryState state;
-    struct sigaction previous;
 
     if (janet_try(&state) == JANET_SIGNAL_OK) {
         JanetTable *core = janet_core_env(NULL);
@@ -1253,15 +1396,16 @@ uniterm_script_status uniterm_janet_repl(const uniterm_host *host, const uniterm
 
         janet_sandbox(sandbox_flags);
 
-        repl_vm = janet_local_vm();
+        interrupt_attach(0);
 
         struct sigaction action;
         sigset_t set;
 
         memset(&action, 0, sizeof(action));
-        action.sa_handler = repl_on_sigint;
+        action.sa_handler = interrupt_on_sigint;
+        action.sa_flags = SA_RESTART;
         sigemptyset(&action.sa_mask);
-        installed = sigaction(SIGINT, &action, &previous) == 0;
+        installed = sigaction(SIGINT, &action, NULL) == 0;
 
         sigemptyset(&set);
         sigaddset(&set, SIGINT);
@@ -1278,10 +1422,7 @@ uniterm_script_status uniterm_janet_repl(const uniterm_host *host, const uniterm
         result = UNITERM_SCRIPT_RUNTIME_ERROR;
     }
 
-    if (installed) sigaction(SIGINT, &previous, NULL);
-
-    repl_settle();
-    repl_vm = NULL;
+    interrupt_detach();
     active_host = NULL;
     uniterm_line_close();
     janet_deinit();

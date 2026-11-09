@@ -30,6 +30,8 @@ final class ScriptWireFuzzTests: XCTestCase {
         .frame(),
       ScriptHelperMessage.replLine("(+ 1 2)").frame(),
       ScriptHelperMessage.replEvaluating(true).frame(),
+      ScriptHelperMessage.pong(7).frame(),
+      ScriptHelperMessage.memoryLimit.frame(),
       ScriptHelperMessage.request(id: 3, call: .postStatus(level: .warning, text: "synthetic"))
         .frame(),
     ]
@@ -42,6 +44,8 @@ final class ScriptWireFuzzTests: XCTestCase {
         ScriptAppMessage.attachRefused("synthetic token refusal").frame(),
         ScriptAppMessage.history(lines: ["(+ 1 2)", "(def x 1)"], final: false).frame(),
         ScriptAppMessage.history(lines: [], final: true).frame(),
+        ScriptAppMessage.ping(7).frame(),
+        ScriptAppMessage.stop.frame(),
       ]
   }
 

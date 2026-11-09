@@ -11,15 +11,23 @@ enum ScriptSessionError: Error, Equatable {
 /// The helper's end of one connection to the app.
 ///
 /// The helper runs one script at a time on one thread, so a call sends its request and waits for
-/// the reply on that thread. Nothing else reads the socket. The watchdog thread only watches the
-/// descriptor for a hangup, and a later thread that handles Ctrl-C does the same.
+/// its reply on that thread. Once the watchdog thread starts, it is the only reader of the socket.
+/// It hands a reply to the VM thread through a one-slot mailbox, answers the app's ping itself, and
+/// carries out the app's stop request. A ping is therefore answered while the VM thread is busy in
+/// a loop, in a long call into C, or waiting for a reply. Any thread may send, since the socket's
+/// sends take a lock.
 ///
 /// A connection that is lost ends the helper. A script cannot go on without the app, and a script
 /// that catches the error must not be able to keep running either.
-final class ScriptSession {
+final class ScriptSession: @unchecked Sendable {
   private let socket: FramedSocket
   private let lost: @Sendable (String) -> Never
   private var nextRequest: UInt32 = 1
+
+  private let mailbox = NSCondition()
+  private var reply: ScriptAppMessage?
+  private var dispatching = false
+  private var dispatcherEnded = false
 
   /// What the helper says when the app's end of the connection closes. A REPL words it for a REPL.
   private(set) var quitText = ScriptSession.appQuitText
@@ -165,6 +173,77 @@ final class ScriptSession {
     socket.shutdownAndClose()
   }
 
+  /// From now on the watchdog thread reads the socket and calls `deliver` for each reply, so the
+  /// VM thread waits in the mailbox instead of reading. Call it before the thread starts.
+  func beginDispatching() {
+    mailbox.lock()
+    dispatching = true
+    mailbox.unlock()
+  }
+
+  /// Hands a reply to the VM thread. The app answers one call at a time, so a reply that arrives
+  /// while another waits in the slot is a protocol fault the caller reports.
+  func deliver(_ message: ScriptAppMessage) -> Bool {
+    mailbox.lock()
+    defer { mailbox.unlock() }
+
+    guard reply == nil else { return false }
+
+    reply = message
+    mailbox.broadcast()
+
+    return true
+  }
+
+  /// The watchdog thread has stopped reading. A VM thread that waits for a reply stops waiting.
+  func dispatcherDidEnd() {
+    mailbox.lock()
+    dispatcherEnded = true
+    mailbox.broadcast()
+    mailbox.unlock()
+  }
+
+  /// One frame from the app, for the watchdog thread.
+  func readForDispatcher() throws -> ScriptAppMessage {
+    try readMessage()
+  }
+
+  /// Answers the app's ping. It runs on the watchdog thread.
+  func sendPong(_ nonce: UInt32) throws {
+    try socket.send(ScriptHelperMessage.pong(nonce).frame())
+  }
+
+  /// Tells the app the helper's allocator is about to end the process for the cap. It runs on the VM
+  /// thread, which holds no connection lock while it allocates, so taking the send lock here
+  /// waits at most for the watchdog's pong. A send that fails is ignored, since the process ends
+  /// next and the app then reports a lost connection.
+  func sendMemoryLimitNotice() {
+    try? socket.send(ScriptHelperMessage.memoryLimit.frame())
+  }
+
+  private func awaitReply() throws -> ScriptAppMessage {
+    mailbox.lock()
+    let useMailbox = dispatching
+    mailbox.unlock()
+
+    guard useMailbox else { return try readMessage() }
+
+    mailbox.lock()
+    defer { mailbox.unlock() }
+
+    while reply == nil {
+      if dispatcherEnded { throw WireError.closed }
+
+      mailbox.wait()
+    }
+
+    let message = reply!
+
+    reply = nil
+
+    return message
+  }
+
   /// Posts a status message and waits for the app to answer.
   func postStatus(level: ScriptStatusLevel, text: String) throws {
     _ = try call(.postStatus(level: level, text: text))
@@ -177,8 +256,8 @@ final class ScriptSession {
     do {
       try socket.send(ScriptHelperMessage.request(id: id, call: call).frame())
 
-      guard case .reply(let replyID, let result) = try readMessage() else {
-        throw WireError.badValue("the app sent a hello instead of a reply")
+      guard case .reply(let replyID, let result) = try awaitReply() else {
+        throw WireError.badValue("the app answered a call with something else")
       }
 
       guard replyID == id else {

@@ -7,7 +7,7 @@ import Foundation
 /// The hello is one message with one field, in every version. A peer built against another
 /// version can therefore always read the other's hello, and the refusal names the version.
 public enum ScriptProtocol {
-  public static let version: UInt16 = 3
+  public static let version: UInt16 = 4
 
   /// What the user is told when the two sides disagree. The app and its command are two binaries
   /// in one bundle, so replacing the bundle under a running app pairs an old app with a new one.
@@ -66,6 +66,14 @@ public enum ScriptProtocol {
   /// The most lines of a restored history the helper keeps to recall. It is the line editor's own
   /// limit, and the app sends no more than this.
   public static let recallLines = 100
+
+  /// The most memory one helper's Janet VM may hold, in bytes. The helper's allocator enforces it.
+  /// It matches `UNITERM_JANET_DEFAULT_MEMORY_CAP` in the Janet shim, which a test proves.
+  public static let helperMemoryCap = 1 << 30
+
+  /// How far past the cap a REPL helper's footprint may go before the app kills it. The cap counts
+  /// only what Janet's allocator hands out, and the footprint counts everything the process holds.
+  public static let footprintKillMargin = helperMemoryCap / 4
 }
 
 /// Which way a new pane splits the pane beside it.
@@ -318,6 +326,14 @@ public enum ScriptHelperMessage: Equatable, Sendable {
   /// Whether the REPL is evaluating a form now. The app asks it before it closes the pane.
   case replEvaluating(Bool)
 
+  /// The answer to the app's ping. The helper's watchdog thread sends it, never the VM thread, so
+  /// a busy VM still answers.
+  case pong(UInt32)
+
+  /// The helper's allocator is about to end the process for passing its memory cap. The helper
+  /// writes this frame itself, in one write, before it exits.
+  case memoryLimit
+
   /// The frame type of the one call that carries content.
   static let sendType: UInt8 = 4
 
@@ -332,6 +348,8 @@ public enum ScriptHelperMessage: Equatable, Sendable {
     case .attach: return 5
     case .replLine: return 6
     case .replEvaluating: return 7
+    case .pong: return 8
+    case .memoryLimit: return 9
     }
   }
 
@@ -342,6 +360,10 @@ public enum ScriptHelperMessage: Equatable, Sendable {
     case .hello(let version): body.put(version)
 
     case .begin(let name): body.put(string: name, limit: ScriptProtocol.maxNameBytes)
+
+    case .pong(let nonce): body.put(nonce)
+
+    case .memoryLimit: break
 
     case .attach(let token): body.put(raw: token)
 
@@ -404,6 +426,10 @@ public enum ScriptHelperMessage: Equatable, Sendable {
       default: throw WireError.badValue("an evaluating flag is not 0 or 1")
       }
 
+    case 8: message = .pong(try reader.u32())
+
+    case 9: message = .memoryLimit
+
     default: throw WireError.unknownType(type)
     }
 
@@ -438,12 +464,22 @@ public enum ScriptAppMessage: Equatable, Sendable {
   /// empty message with it set, so the helper always knows the app accepted its token.
   case history(lines: [String], final: Bool)
 
+  /// A liveness probe. The helper's watchdog thread answers with a pong that carries the same
+  /// nonce, whatever the VM thread is doing.
+  case ping(UInt32)
+
+  /// The user asked to stop what the helper is running. The watchdog thread carries it out by
+  /// interrupting the VM, as Ctrl-C does. It changes nothing when no form is running.
+  case stop
+
   var wireType: UInt8 {
     switch self {
     case .hello: return 1
     case .reply: return 2
     case .attachRefused: return 3
     case .history: return 4
+    case .ping: return 5
+    case .stop: return 6
     }
   }
 
@@ -468,6 +504,10 @@ public enum ScriptAppMessage: Equatable, Sendable {
 
     case .attachRefused(let text):
       body.put(string: text, limit: ScriptProtocol.maxFailureBytes)
+
+    case .ping(let nonce): body.put(nonce)
+
+    case .stop: break
 
     case .history(let lines, let final):
       body.put(final ? UInt8(1) : UInt8(0))
@@ -542,6 +582,17 @@ public enum ScriptAppMessage: Equatable, Sendable {
       try reader.finished()
 
       return .history(lines: lines, final: final)
+
+    case 5:
+      let nonce = try reader.u32()
+      try reader.finished()
+
+      return .ping(nonce)
+
+    case 6:
+      try reader.finished()
+
+      return .stop
 
     default:
       throw WireError.unknownType(type)

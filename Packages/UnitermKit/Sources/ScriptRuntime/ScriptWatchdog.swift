@@ -1,49 +1,40 @@
 import Darwin
 import Foundation
+import ScriptWire
 
-/// The helper's watchdog thread. It watches the connection to the app while the VM thread runs a
-/// script, so a script stuck in a loop still ends when the app goes away.
+/// The helper's watchdog thread. It owns every read from the connection to the app, so the app
+/// always hears from the helper, however busy the VM thread is.
 ///
-/// The thread never reads the socket. Its kqueue only reports that the descriptor changed, and the
-/// VM thread alone consumes frames. When the app closes its end, the thread says why and ends the
-/// process, since nothing else in the helper can run while the script holds the VM.
+/// The VM thread may be in a loop, in a long call into C that no interrupt reaches, or waiting for
+/// a reply. None of that stops this thread. It does four jobs:
 ///
-/// Ctrl-C and the app's stop request belong to this thread too. Each is one more event source on
-/// the same queue, handled in `run`.
+/// - It hands each reply to the VM thread through the session's mailbox.
+/// - It answers each ping with a pong, so the app can tell a busy helper from a hung one.
+/// - It carries out the app's stop request by signalling the VM thread, which takes the same gated
+///   path as Ctrl-C.
+/// - When the app closes the connection, it says why and ends the process, since nothing else in
+///   the helper can run while the VM thread is stuck.
 final class ScriptWatchdog: @unchecked Sendable {
   /// What the watchdog does when the app's end of the connection closes. It must not return. The
   /// default says why and ends the process.
   typealias Hangup = @Sendable () -> Never
 
-  private let queue: Int32
-  private let descriptor: Int32
+  private let session: ScriptSession
   private let hangup: Hangup
+  private let stop: @Sendable () -> Void
   private let lock = NSLock()
   private var finished = false
 
-  /// Starts the thread, or returns nil when the system gives no kqueue or refuses the watch. A
-  /// helper without a watchdog still runs, and still ends when it next reads the connection.
-  static func start(watching descriptor: Int32, onHangup: @escaping Hangup) -> ScriptWatchdog? {
-    let queue = kqueue()
-
-    guard queue >= 0 else { return nil }
-
-    _ = fcntl(queue, F_SETFD, FD_CLOEXEC)
-
-    // EV_CLEAR makes the event edge-triggered. A reply the VM thread has not read yet then does
-    // not wake the thread again and again.
-    var change = kevent(
-      ident: UInt(descriptor), filter: Int16(EVFILT_READ), flags: UInt16(EV_ADD | EV_CLEAR),
-      fflags: 0, data: 0, udata: nil)
-
-    guard kevent(queue, &change, 1, nil, 0, nil) == 0 else {
-      Darwin.close(queue)
-
-      return nil
-    }
-
-    let watchdog = ScriptWatchdog(queue: queue, descriptor: descriptor, hangup: onHangup)
+  /// Starts the thread. It reads from `session` until the connection ends. `onStop` runs on the
+  /// thread for each stop request, and `onHangup` runs when the app closes its end.
+  static func start(
+    reading session: ScriptSession, onStop: @escaping @Sendable () -> Void = {},
+    onHangup: @escaping Hangup
+  ) -> ScriptWatchdog {
+    let watchdog = ScriptWatchdog(session: session, hangup: onHangup, stop: onStop)
     let thread = Thread { watchdog.run() }
+
+    session.beginDispatching()
 
     thread.name = "uniterm.script.watchdog"
     thread.stackSize = 256 * 1024
@@ -52,10 +43,12 @@ final class ScriptWatchdog: @unchecked Sendable {
     return watchdog
   }
 
-  private init(queue: Int32, descriptor: Int32, hangup: @escaping Hangup) {
-    self.queue = queue
-    self.descriptor = descriptor
+  private init(
+    session: ScriptSession, hangup: @escaping Hangup, stop: @escaping @Sendable () -> Void
+  ) {
+    self.session = session
     self.hangup = hangup
+    self.stop = stop
   }
 
   /// Says that the script is over and the helper is closing the connection itself, so the watchdog
@@ -74,21 +67,35 @@ final class ScriptWatchdog: @unchecked Sendable {
   }
 
   private func run() {
-    var events = Array(repeating: kevent(), count: 4)
+    defer { session.dispatcherDidEnd() }
 
     while true {
-      let count = kevent(queue, nil, 0, &events, Int32(events.count), nil)
+      do {
+        switch try session.readForDispatcher() {
+        case .ping(let nonce):
+          try? session.sendPong(nonce)
 
-      if count < 0 {
-        if errno == EINTR { continue }
+        case .stop:
+          stop()
 
-        return
-      }
+        case .reply(let id, let result):
+          guard session.deliver(.reply(id: id, result: result)) else {
+            ScriptSession.endHelper("the app sent a reply nobody asked for", flushingOutput: false)
+          }
 
-      for event in events.prefix(Int(count)) where event.ident == UInt(descriptor) {
-        guard event.flags & UInt16(EV_EOF) != 0, !isFinished else { continue }
+        case .hello, .attachRefused, .history:
+          ScriptSession.endHelper(
+            "the app sent a message the helper does not expect now", flushingOutput: false)
+        }
+      } catch WireError.closed {
+        guard !isFinished else { return }
 
         hangup()
+      } catch {
+        guard !isFinished else { return }
+
+        ScriptSession.endHelper(
+          "the connection to uniterm failed: \(error)", flushingOutput: false)
       }
     }
   }

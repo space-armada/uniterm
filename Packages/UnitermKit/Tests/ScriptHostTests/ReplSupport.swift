@@ -22,12 +22,15 @@ final class ReplProcess: @unchecked Sendable {
   /// Starts `ScriptHelper repl --socket address` with only `environment`, never the test's own.
   /// `shell` starts it through `/bin/sh -c` with each word single-quoted, as the terminal does.
   ///
+  /// `login` starts it as libghostty does on macOS: under `login`, then `bash`, then `exec -l`. With
+  /// `direct` the helper is the `exec -l` target itself. Without it, `/bin/sh -c` stands between.
+  ///
   /// `session` starts it under `script`, which gives it a pty of its own as a session leader in
   /// the foreground, as a terminal does. A Ctrl-C written to the input then reaches the helper
   /// through the pty's line discipline, and not through a signal the test sends.
   init(
     address: String, environment: [String: String], arguments: [String] = [], shell: Bool = false,
-    session: Bool = false, login: Bool = false, prelude: String = ""
+    session: Bool = false, login: Bool = false, direct: Bool = false, prelude: String = ""
   ) throws {
     let words = ["repl", "--socket", address] + arguments
     let helper = ScriptFixtures.helper().path
@@ -36,7 +39,12 @@ final class ReplProcess: @unchecked Sendable {
       process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
 
       let inner = ([helper] + words).map { Self.quote($0) }.joined(separator: " ")
-      let outer = "stty cols 80 rows 24; \(prelude) exec -l /bin/sh -c " + Self.quote(inner)
+      // libghostty hands bash `exec -l` and the quoted words, with no `/bin/sh -c` between them. The
+      // helper's argv[0] is then its path with a dash in front.
+      let outer =
+        direct
+        ? "stty cols 80 rows 24; \(prelude) exec -l " + inner
+        : "stty cols 80 rows 24; \(prelude) exec -l /bin/sh -c " + Self.quote(inner)
 
       process.arguments = [
         "-q", "/dev/null", "/usr/bin/login", "-flp", NSUserName(), "/bin/bash", "--noprofile",

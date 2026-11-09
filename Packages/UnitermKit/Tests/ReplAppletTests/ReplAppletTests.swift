@@ -68,6 +68,7 @@ final class ReplAppletTests: XCTestCase {
   private var suite = ""
   private var windows: WindowSet?
   private let killed = Killed()
+  private var extraHosts: [(host: ScriptHost, directory: URL)] = []
 
   override func setUp() async throws {
     directory = FileManager.default.temporaryDirectory
@@ -101,13 +102,20 @@ final class ReplAppletTests: XCTestCase {
 
     host.stop()
     try? FileManager.default.removeItem(at: directory)
+
+    for extra in extraHosts {
+      extra.host.stop()
+      try? FileManager.default.removeItem(at: extra.directory)
+    }
+
     UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite)
   }
 
   private var services: ReplServices {
     ReplServices(
       helper: { URL(fileURLWithPath: "/synthetic/uniterm") },
-      openChannel: { [host] history in host?.openRepl(history: history) })
+      openChannel: { [host] history in host?.admitRepl(history: history) ?? .refused(.scriptingOff)
+      })
   }
 
   private func makeApplet(
@@ -373,7 +381,8 @@ final class ReplAppletTests: XCTestCase {
   func testAMissingHelperOrNoScriptingIsAMessageWithARestart() {
     let missing = ReplApplet(
       engine: engine,
-      services: ReplServices(helper: { nil }, openChannel: { _ in nil }), home: "/synthetic/home")
+      services: ReplServices(helper: { nil }, openChannel: { _ in .refused(.scriptingOff) }),
+      home: "/synthetic/home")
 
     missing.start(origin: .user)
     applets.append(missing)
@@ -385,7 +394,8 @@ final class ReplAppletTests: XCTestCase {
     let off = ReplApplet(
       engine: engine,
       services: ReplServices(
-        helper: { URL(fileURLWithPath: "/synthetic/uniterm") }, openChannel: { _ in nil }),
+        helper: { URL(fileURLWithPath: "/synthetic/uniterm") },
+        openChannel: { _ in .refused(.scriptingOff) }),
       home: "/synthetic/home")
 
     off.start(origin: .user)
@@ -577,5 +587,279 @@ final class Killed: @unchecked Sendable {
     defer { lock.unlock() }
 
     return pids
+  }
+}
+
+// MARK: Limits
+
+/// A footprint and a clock a test sets by hand.
+private final class Knobs: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedFootprint = 0
+  private var storedNow = ContinuousClock.Instant.now
+
+  var footprint: Int {
+    get { lock.withLock { storedFootprint } }
+    set { lock.withLock { storedFootprint = newValue } }
+  }
+
+  var now: ContinuousClock.Instant { lock.withLock { storedNow } }
+
+  func advance(by amount: Duration) {
+    lock.withLock { storedNow = storedNow + amount }
+  }
+}
+
+extension ReplAppletTests {
+  /// A host with a small budget and a hand-set footprint, whose timer never fires.
+  private func makeLimitedHost(knobs: Knobs, budget: Int) throws -> ReplServices {
+    let local = FileManager.default.temporaryDirectory
+      .appendingPathComponent("ut-\(UUID().uuidString.prefix(8))", isDirectory: true)
+
+    try FileManager.default.createDirectory(at: local, withIntermediateDirectories: true)
+
+    let killed = killed
+    let limited = ScriptHost(
+      listener: try ScriptListener.start(directory: local), issueProducer: { _ in nil },
+      reaper: ProcessReaper(
+        delay: .milliseconds(20), isRunning: { _ in true }, kill: { killed.add($0) }),
+      replLimits: ReplLimits(
+        helperCap: 1 << 30, killMargin: 1 << 28, budget: budget, sampleInterval: .seconds(3600),
+        pongGrace: .seconds(3600)),
+      replProbes: ReplProbes(footprint: { _ in knobs.footprint }, now: { knobs.now }))
+
+    limited.start()
+    extraHosts.append((limited, local))
+
+    return ReplServices(
+      helper: { URL(fileURLWithPath: "/synthetic/uniterm") },
+      openChannel: { [limited] history in limited.admitRepl(history: history) })
+  }
+
+  private func makeApplet(services: ReplServices, host recorder: RecordingHost? = nil) -> ReplApplet
+  {
+    let applet = ReplApplet(engine: engine, services: services, home: "/synthetic/home")
+
+    applet.host = recorder
+    applet.start(origin: .user)
+    applets.append(applet)
+
+    return applet
+  }
+
+  /// Catches a new REPL that starts while the others hold more than the budget, a pane that gives
+  /// no reason, a retry that runs on its own, a warning that repeats, and a running REPL that is
+  /// ended for the total. The refused pane says why and offers Restart. The history holds one
+  /// warning. A restored pane over the budget never retries, and the REPL that runs is untouched.
+  func testANewReplOverTheBudgetSaysWhyOffersARetryAndWarnsOnce() async throws {
+    let knobs = Knobs()
+    let services = try makeLimitedHost(knobs: knobs, budget: 1000)
+    let recorder = RecordingHost()
+
+    let running = makeApplet(services: services)
+    let session = try XCTUnwrap(engine.sessions.first)
+    let (_, _) = try await attach(session)
+    let local = try XCTUnwrap(extraHosts.last?.host)
+
+    knobs.footprint = 5000
+
+    await local.sampleRepls()
+
+    let refused = makeApplet(services: services, host: recorder)
+
+    XCTAssertEqual(engine.sessions.count, 1, "a REPL started over the budget")
+
+    let message = try XCTUnwrap(refused.endedMessage)
+
+    XCTAssertTrue(message.contains("did not start"), message)
+    XCTAssertTrue(message.contains("Restart"), message)
+    XCTAssertEqual(recorder.admitted.count, 1)
+    XCTAssertEqual(recorder.admitted.first?.level, .warning)
+
+    refused.restart()
+
+    XCTAssertEqual(engine.sessions.count, 1, "a retry started a REPL while still over")
+    XCTAssertEqual(recorder.admitted.count, 1, "the warning repeated")
+    XCTAssertNil(running.endedMessage, "a running REPL was ended for the total")
+    XCTAssertEqual(killed.all, [])
+
+    knobs.footprint = 10
+
+    await local.sampleRepls()
+
+    refused.restart()
+
+    XCTAssertEqual(engine.sessions.count, 2)
+    XCTAssertNil(refused.endedMessage)
+  }
+
+  /// Catches a warning for every refused pane. Three panes are refused in one episode, and the
+  /// history holds one warning. Once the total is back under the budget the episode is over, and
+  /// a pane refused in a later one warns again.
+  func testSeveralPanesRefusedInOneEpisodeGiveOneWarning() async throws {
+    let knobs = Knobs()
+    let services = try makeLimitedHost(knobs: knobs, budget: 1000)
+    let recorder = RecordingHost()
+
+    _ = makeApplet(services: services)
+
+    let (_, _) = try await attach(try XCTUnwrap(engine.sessions.first))
+    let local = try XCTUnwrap(extraHosts.last?.host)
+
+    knobs.footprint = 5000
+
+    let refused = (0..<3).map { _ in makeApplet(services: services, host: recorder) }
+
+    XCTAssertTrue(refused.allSatisfy { $0.endedMessage != nil })
+    XCTAssertEqual(recorder.admitted.count, 1)
+
+    knobs.footprint = 10
+
+    await local.sampleRepls()
+
+    knobs.footprint = 5000
+
+    _ = makeApplet(services: services, host: recorder)
+
+    XCTAssertEqual(recorder.admitted.count, 2, "a new episode did not warn")
+  }
+
+  /// Catches a restored pane that retries a refused start by itself. The pane starts once, is
+  /// refused, and stays refused with no timer behind it, however long it waits.
+  func testARestoredPaneOverTheBudgetNeverRetriesOnItsOwn() async throws {
+    let knobs = Knobs()
+    let services = try makeLimitedHost(knobs: knobs, budget: 1000)
+
+    _ = makeApplet(services: services)
+
+    let (_, _) = try await attach(try XCTUnwrap(engine.sessions.first))
+    let local = try XCTUnwrap(extraHosts.last?.host)
+
+    knobs.footprint = 5000
+
+    await local.sampleRepls()
+
+    let description = try ReplDescription(history: ["(+ 1 2)"]).appletDescription()
+    let restored = try ReplApplet(
+      engine: engine, services: services, restoring: description, home: "/synthetic/home")
+
+    restored.start(origin: .restore)
+    applets.append(restored)
+
+    XCTAssertNotNil(restored.endedMessage)
+
+    knobs.footprint = 10
+
+    await local.sampleRepls()
+    try await Task.sleep(for: .milliseconds(300))
+
+    XCTAssertEqual(engine.sessions.count, 1, "a restored pane retried on its own")
+    XCTAssertEqual(restored.historyLines, ["(+ 1 2)"])
+  }
+
+  /// Catches a Ctrl-C key that is read wrongly. Only Control and C, as a fresh press, counts.
+  func testOnlyAFreshControlCPressIsTheInterruptKey() throws {
+    func event(
+      _ characters: String, _ flags: NSEvent.ModifierFlags, repeating: Bool = false
+    ) throws -> NSEvent {
+      try XCTUnwrap(
+        NSEvent.keyEvent(
+          with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
+          context: nil, characters: characters, charactersIgnoringModifiers: characters,
+          isARepeat: repeating, keyCode: 8))
+    }
+
+    XCTAssertTrue(ReplApplet.isInterruptKey(try event("c", .control)))
+    XCTAssertFalse(ReplApplet.isInterruptKey(try event("c", [])))
+    XCTAssertFalse(ReplApplet.isInterruptKey(try event("c", [.control, .shift])))
+    XCTAssertFalse(ReplApplet.isInterruptKey(try event("c", [.control, .command])))
+    XCTAssertFalse(ReplApplet.isInterruptKey(try event("c", [.control, .option])))
+    XCTAssertFalse(ReplApplet.isInterruptKey(try event("d", .control)))
+    XCTAssertFalse(ReplApplet.isInterruptKey(try event("c", .control, repeating: true)))
+  }
+
+  /// Catches a Ctrl-C in the pane that never reaches the helper over the control channel. The
+  /// first press while a form runs sends the stop request, and a press with nothing running sends
+  /// none. A second press after the gap, with the form still running, ends the helper and the pane
+  /// says why, keeps its history, and offers Restart.
+  func testCtrlCInThePaneSendsAStopAndASecondEndsAStuckHelper() async throws {
+    let knobs = Knobs()
+    let services = try makeLimitedHost(knobs: knobs, budget: 1 << 40)
+    let applet = makeApplet(services: services)
+    let (peer, _) = try await attach(try XCTUnwrap(engine.sessions.first))
+
+    try peer.send(ScriptHelperMessage.replLine("(while true)").frame())
+    try peer.send(ScriptHelperMessage.replEvaluating(false).frame())
+
+    let recorded = await waitUntil { applet.historyLines == ["(while true)"] }
+
+    XCTAssertTrue(recorded)
+
+    applet.interruptKeyPressed()
+
+    let idleFrames = await Task.detached {
+      var timeout = timeval(tv_sec: 0, tv_usec: 300_000)
+
+      _ = setsockopt(
+        peer.rawDescriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+        socklen_t(MemoryLayout<timeval>.size))
+
+      return (try? peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))) == nil
+    }.value
+
+    XCTAssertTrue(idleFrames, "a press with nothing running sent a message")
+
+    try peer.send(ScriptHelperMessage.replEvaluating(true).frame())
+
+    let running = await waitUntil { applet.isRunningSomething }
+
+    XCTAssertTrue(running)
+
+    applet.interruptKeyPressed()
+
+    let stop = try await Task.detached {
+      var timeout = timeval(tv_sec: 10, tv_usec: 0)
+
+      _ = setsockopt(
+        peer.rawDescriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+        socklen_t(MemoryLayout<timeval>.size))
+
+      let frame = try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
+
+      return try ScriptAppMessage.decode(type: frame.type, body: frame.body)
+    }.value
+
+    XCTAssertEqual(stop, .stop)
+    XCTAssertNil(applet.endedMessage)
+
+    knobs.advance(by: .seconds(1))
+    applet.interruptKeyPressed()
+
+    let message = try XCTUnwrap(applet.endedMessage)
+
+    XCTAssertTrue(message.contains("Ctrl-C twice"), message)
+    XCTAssertEqual(applet.historyLines, ["(while true)"])
+    XCTAssertEqual(killed.all.first, getpid())
+  }
+
+  /// Catches a helper that ran out of memory being shown as a lost connection. The helper's notice
+  /// arrives first, and the pane names the cap and offers Restart.
+  func testAMemoryLimitNoticeGivesThePaneItsReason() async throws {
+    let knobs = Knobs()
+    let services = try makeLimitedHost(knobs: knobs, budget: 1 << 40)
+    let applet = makeApplet(services: services)
+    let (peer, _) = try await attach(try XCTUnwrap(engine.sessions.first))
+
+    try peer.send(ScriptHelperMessage.memoryLimit.frame())
+    peer.shutdownAndClose()
+
+    let ended = await waitUntil { applet.endedMessage != nil }
+
+    XCTAssertTrue(ended)
+
+    let message = try XCTUnwrap(applet.endedMessage)
+
+    XCTAssertTrue(message.contains("1 GiB"), message)
+    XCTAssertTrue(message.contains("Restart"), message)
   }
 }

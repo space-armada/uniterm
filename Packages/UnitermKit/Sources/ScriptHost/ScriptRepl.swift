@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import HelperHost
 import ScriptWire
 
 /// What a REPL's helper needs to start: where to connect, and the token that binds its connection
@@ -25,6 +26,10 @@ public enum ScriptReplEvent: Sendable, Equatable {
 
   /// The helper's connection closed, so the helper is gone or about to be.
   case ended
+
+  /// The helper was ended for a reason the pane can say. It comes before `ended`, and the app has
+  /// already killed the helper when it comes from the app.
+  case terminated(ScriptReplEnd)
 }
 
 /// How the app makes sure a helper it started is gone. The app never trusts a process ID alone,
@@ -50,6 +55,12 @@ public struct ProcessReaper: Sendable {
 
   public static let live = ProcessReaper(
     delay: .seconds(2), isRunning: { $0.isRunning }, kill: { _ = Darwin.kill($0, SIGKILL) })
+
+  /// Kills the process now, when it is still the one that was recorded. A process ID that the
+  /// system has given to another process is left alone.
+  func killNow(_ identity: ProcessIdentity) {
+    if isRunning(identity) { kill(identity.pid) }
+  }
 
   /// Kills the process after the delay, when it is still the one that was recorded.
   func reap(_ identity: ProcessIdentity) {
@@ -84,17 +95,34 @@ public final class ScriptReplChannel {
   private weak var host: ScriptHost?
   private var connection: ScriptConnection?
   private let reaper: ProcessReaper
+  private let limits: ReplLimits
+  private let probes: ReplProbes
   private var ended = false
+  private var liveness: HelperLiveness
+  private var escalation = ReplInterruptEscalation()
+
+  /// True from the helper's report that a form started until its report that the form ended.
+  public private(set) var isEvaluating = false
+
+  /// How many pongs the helper has sent, so a test waits for an answer and not for a delay.
+  private(set) var pongsReceived = 0
+
+  /// The helper's footprint at the last look, which the app-wide budget adds up.
+  var lastFootprint = 0
 
   init(
     launch: ScriptReplLaunch, tokenData: Data, history: [String], host: ScriptHost,
-    reaper: ProcessReaper
+    reaper: ProcessReaper, limits: ReplLimits, probes: ReplProbes
   ) {
     self.launch = launch
     self.tokenData = tokenData
     self.history = history
     self.host = host
     self.reaper = reaper
+    self.limits = limits
+    self.probes = probes
+    self.liveness = HelperLiveness(
+      timeBound: nil, pongGrace: limits.pongGrace, footprintCap: Int.max)
   }
 
   /// True from the moment the helper attaches until its connection closes.
@@ -106,6 +134,7 @@ public final class ScriptReplChannel {
     let started = ProcessIdentity.startTime(of: connection.peer.pid) ?? 0
 
     helper = ProcessIdentity(pid: connection.peer.pid, started: started)
+    liveness.markBusy(now: probes.now())
     onEvent?(.attached(helper!))
   }
 
@@ -114,6 +143,94 @@ public final class ScriptReplChannel {
 
     connection = nil
     onEvent?(.ended)
+  }
+
+  func evaluationChanged(_ running: Bool) {
+    isEvaluating = running
+
+    if !running { escalation = ReplInterruptEscalation() }
+
+    onEvent?(.evaluating(running))
+  }
+
+  func pong(_ nonce: UInt32, now: ContinuousClock.Instant) {
+    pongsReceived += 1
+    liveness.pong(nonce, now: now)
+  }
+
+  /// Forgets a ping the app left outstanding while its own main actor was busy, so the helper is
+  /// not held to a deadline the app itself missed.
+  func forgetOutstandingPing(now: ContinuousClock.Instant) {
+    liveness.markBusy(now: now)
+  }
+
+  /// Acts on one look at the helper. A footprint past the cap and its margin kills the helper. An
+  /// unanswered ping past the grace kills it as hung. A helper that answers is never ended for how
+  /// long it works.
+  func observe(footprint: Int?, now: ContinuousClock.Instant, limits: ReplLimits) {
+    guard isAttached else { return }
+
+    if let footprint {
+      lastFootprint = footprint
+
+      if footprint > limits.killThreshold {
+        terminate(.overFootprint(footprint))
+
+        return
+      }
+    }
+
+    switch liveness.probe(footprint: nil, now: now) {
+    case .healthy:
+      break
+
+    case .sendPing(let nonce):
+      connection?.send(.ping(nonce))
+
+    case .end:
+      terminate(.unresponsive)
+    }
+  }
+
+  /// The helper's allocator reached the cap and is ending the process. The helper says so before
+  /// it goes, so the pane can name the reason instead of reporting a lost connection.
+  func helperReachedMemoryLimit() {
+    guard !ended else { return }
+
+    onEvent?(.terminated(.memoryLimit))
+  }
+
+  /// Asks the helper to stop the form it is running. It is the same request Ctrl-C makes through
+  /// the pty, and it reaches the helper whether or not the pty's signal does.
+  public func requestStop() {
+    connection?.send(.stop)
+  }
+
+  /// One Ctrl-C press in the pane. The first while a form runs asks the helper to stop it. A
+  /// second after a short gap, with the form still running, ends the helper.
+  @discardableResult
+  public func interruptPressed() -> ReplInterruptAction {
+    guard isAttached else { return .ignore }
+
+    let action = escalation.press(evaluating: isEvaluating, now: probes.now())
+
+    switch action {
+    case .stop: requestStop()
+    case .kill: terminate(.stoppedByUser)
+    case .ignore: break
+    }
+
+    return action
+  }
+
+  /// Kills the helper, when it is still the process that attached, and says why.
+  func terminate(_ reason: ScriptReplEnd) {
+    guard !ended, let helper else { return }
+
+    reaper.killNow(helper)
+    connection?.close()
+    connection = nil
+    onEvent?(.terminated(reason))
   }
 
   /// Ends the helper. The token is withdrawn when no helper has used it yet. The connection
@@ -181,7 +298,7 @@ extension ScriptHost {
     let token = bytes.map { String(format: "%02x", $0) }.joined()
     let channel = ScriptReplChannel(
       launch: ScriptReplLaunch(address: instanceAddress, token: token), tokenData: bytes,
-      history: history, host: self, reaper: reaper)
+      history: history, host: self, reaper: reaper, limits: replLimits, probes: replProbes)
 
     pendingRepls[bytes] = channel
 

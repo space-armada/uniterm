@@ -302,7 +302,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // channel after the listener has started, and a REPL opened later finds it the same way.
     let replServices = ReplServices(
       helper: { ScriptCommandInstaller.command(in: Bundle.main.bundleURL) },
-      openChannel: { [weak self] history in self?.scriptHost?.openRepl(history: history) })
+      openChannel: { [weak self] history in
+        self?.scriptHost?.admitRepl(history: history) ?? .refused(.scriptingOff)
+      })
 
     let restoreApplet: AppletRestorer = { description in
       switch description.type {

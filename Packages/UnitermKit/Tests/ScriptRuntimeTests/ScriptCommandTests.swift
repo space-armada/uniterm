@@ -1,5 +1,7 @@
+import CJanet
 import Darwin
 import Foundation
+import ScriptWire
 import XCTest
 
 @testable import ScriptRuntime
@@ -231,5 +233,26 @@ private enum ScriptAddressDirectory {
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
     return directory
+  }
+
+  /// Catches a cap that the helper's allocator and the app's kill margin disagree on. The app sizes
+  /// its margin from the wire's number, and the allocator enforces the shim's. They must be the
+  /// same 1 GiB.
+  func testTheAllocatorsCapIsTheWiresCap() {
+    XCTAssertEqual(uniterm_janet_memory_cap(), UInt64(ScriptProtocol.helperMemoryCap))
+    XCTAssertEqual(UInt64(ScriptProtocol.helperMemoryCap), UInt64(UNITERM_JANET_DEFAULT_MEMORY_CAP))
+  }
+
+  /// Catches a `--memory-cap` that leaks into a script's own arguments or is read from anywhere but
+  /// right after `run`.
+  func testTheMemoryCapFlagIsReadOnlyRightAfterRun() {
+    var arguments = ["uniterm", "run", "script.janet", "--memory-cap", "5"]
+
+    XCTAssertNil(ScriptHelperMain.takeMemoryCap(from: &arguments))
+    XCTAssertEqual(arguments, ["uniterm", "run", "script.janet", "--memory-cap", "5"])
+
+    var bad = ["uniterm", "run", "--memory-cap", "nonsense", "script.janet"]
+
+    XCTAssertNotNil(ScriptHelperMain.takeMemoryCap(from: &bad))
   }
 }
