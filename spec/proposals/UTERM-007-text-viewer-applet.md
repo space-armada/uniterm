@@ -100,8 +100,9 @@ uniterm's own process. Amended 2026-11-08; see Decision Log.
 - Colors come from CSS variables generated from the `ThemePalette` the host pushes through `apply(_:)`.
 - The page pushes its scroll position and headings to the host through the message handler. The host caches them, so
   `describe()` stays synchronous and never waits on the page.
-- The parser and sanitizer assets are each pinned by version and content hash, and their license notices join
-  `Licenses/` through the collect script.
+- The parser and sanitizer assets are each pinned by version and content hash. Their license notices join `Licenses/`
+  through the collect script, with the notices of the five packages that the parser's build inlines. Amended
+  2026-11-08; see Decision Log.
 
 Rationale: the Motivation asks for READMEs rendered properly, and many README headers are raw HTML, so showing that
 HTML as text puts markup at the top of the page. A README comes from clones and downloads, so it is untrusted input. WebKit's content process is sandboxed and
@@ -444,7 +445,8 @@ None.
 - A 20 MB Markdown file opens without stalling the main thread
 - A layout save taken after the page's scroll report arrives, one message after the scroll, reopens on that scroll
   position. Amended 2026-11-08; see Decision Log.
-- The parser and sanitizer assets are pinned by version and hash, and their license notices are collected
+- The parser and sanitizer assets are pinned by version and hash, and their license notices are collected, including
+  those of the packages the parser inlines. Amended 2026-11-08; see Decision Log.
 - Dropping a file on rendered Markdown opens it in the pane
 - An image path through `/net`, `/Volumes`, or any other mount point, directly or through a symlink in any component,
   is refused without triggering a mount
@@ -580,7 +582,7 @@ None.
 - The contents sidebar lists the PDF outline, Markdown headings, and RTF and Word headings where the reader sets a
   heading level. Selecting an entry scrolls there
 - A document with no outline disables Show Contents while the sidebar is hidden. A huge or cyclic outline is capped, and
-  the sidebar says it was cut. Amended 2026-11-08; see Decision Log
+  the sidebar says it was cut. Amended 2026-11-08; see Decision Log.
 - The sidebar's visibility survives reopen and relaunch
 - RTF and Word heading levels survive the trip through the helper, so the sidebar lists them
 - Searching an RTF or Word document at the decoded cap never blocks the main thread
@@ -861,11 +863,19 @@ None.
   holds one line and the engines do not match across line breaks alike. It then makes the first match inside the
   selection current, so Next steps on from it. Closing the bar drops the query. A selection of one line is the query
   whole. (work-queue best guess)
-- 2026-11-08: Amended "Search and navigation" and M4, in one marker on the decision and one on the M4 outline check. The text said the page's find
-  returns highlight ranges, and that a document with no outline gets a disabled Show Contents. The page marks its
-  matches with `mark` elements and returns a count. Show Contents stays on while the sidebar is showing, so a sidebar
-  left shown by one document can be hidden when the next has no outline, and it is off only when the sidebar is hidden
-  and the document lists nothing. Show Contents sits in View beside Reload with no key. (work-queue best guess)
+- 2026-11-08: Amended "Search and navigation" and M4, in one marker on the decision and one on the M4 outline check. The
+  text said the page's find returns highlight ranges, and that a document with no outline gets a disabled Show Contents.
+  The page marks its matches with `mark` elements and returns a count. Show Contents stays on while the sidebar is
+  showing, so a sidebar left shown by one document can be hidden when the next has no outline, and it is off only when
+  the sidebar is hidden and the document lists nothing. Show Contents sits in View beside Reload with no key.
+  (work-queue best guess)
+- 2026-11-08: Amended "Design" and the M2 license check. The parser build inlines `entities`, `linkify-it`, `mdurl`,
+  `punycode.js`, and `uc.micro`, as the build's source map shows. Collecting only markdown-it's own notice missed the
+  BSD-2-Clause notice of `entities` and the MIT notices of the rest. Each is now pinned by version, tarball hash, and
+  integrity string in `web-assets.pin`, fetched by the fetch script, kept in `ThirdParty/web`, and written to
+  `Licenses/web-assets/` by `make licenses`. The tarball carries no lockfile. Each version is the highest that
+  markdown-it's dependency ranges allow, as published before markdown-it 15.0.3. DOMPurify has no runtime
+  dependencies. (work-queue best guess)
 - 2026-11-08: M4 contents caps. A list holds at most 5,000 entries and follows an outline at most 32 levels deep, and
   a title is cut at 200 characters. The Markdown page reports a `headingsCut` flag, since the host could not tell that
   the page stopped at its heading cap. A Markdown entry scrolls by the heading's position in the page's list, not by

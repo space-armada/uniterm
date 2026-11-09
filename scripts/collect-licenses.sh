@@ -12,8 +12,8 @@
 #     named in Licenses/README.txt.
 #   - Every Swift package that Packages/UnitermKit/Package.resolved pins, from its resolved checkout
 #     under .build/SourcePackages or .build/swiftpm. The checkout must be at the pinned revision.
-#   - The web assets the Markdown viewer bundles, markdown-it and DOMPurify. Their notices are kept in
-#     ThirdParty/web, and the shipped files are checked against web-assets.pin first.
+#   - The web assets the Markdown viewer bundles, markdown-it and DOMPurify, and the five packages
+#     that markdown-it's build inlines. Their notices are kept in ThirdParty/web, and the shipped files are checked against web-assets.pin first.
 #   - Catppuccin, whose palette uniterm uses.
 #
 # Rerun it when ghostty.pin changes, and commit the result. The Xcode build copies Licenses/ into
@@ -122,15 +122,21 @@ with open(web_pin) as handle:
 web_assets = [
     ("markdown-it", web_values["MARKDOWN_IT_VERSION"], "markdown-it.umd.min.js", web_values["MARKDOWN_IT_SHA256"],
      [("markdown-it.LICENSE", "LICENSE")]),
+    ("entities", web_values["ENTITIES_VERSION"], None, None, [("entities.LICENSE", "LICENSE")]),
+    ("linkify-it", web_values["LINKIFY_IT_VERSION"], None, None, [("linkify-it.LICENSE", "LICENSE")]),
+    ("mdurl", web_values["MDURL_VERSION"], None, None, [("mdurl.LICENSE", "LICENSE")]),
+    ("punycode.js", web_values["PUNYCODE_JS_VERSION"], None, None, [("punycode.js.LICENSE", "LICENSE")]),
+    ("uc.micro", web_values["UC_MICRO_VERSION"], None, None, [("uc.micro.LICENSE", "LICENSE")]),
     ("DOMPurify", web_values["DOMPURIFY_VERSION"], "purify.min.js", web_values["DOMPURIFY_SHA256"],
      [("dompurify.LICENSE", "LICENSE"), ("dompurify.LICENSE-MPL", "LICENSE-MPL")]),
 ]
 
 for name, version, shipped, digest, notices in web_assets:
-    with open(os.path.join(web_resources, shipped), "rb") as handle:
-        actual = hashlib.sha256(handle.read()).hexdigest()
-    if actual != digest:
-        sys.exit("error: %s is %s, and web-assets.pin pins %s for %s %s." % (shipped, actual, digest, name, version))
+    if shipped is not None:
+        with open(os.path.join(web_resources, shipped), "rb") as handle:
+            actual = hashlib.sha256(handle.read()).hexdigest()
+        if actual != digest:
+            sys.exit("error: %s is %s, and web-assets.pin pins %s for %s %s." % (shipped, actual, digest, name, version))
     for source_name, _ in notices:
         if not os.path.isfile(os.path.join(web_notices, source_name)):
             sys.exit("error: %s has no notice %s in %s." % (name, source_name, web_notices))
@@ -267,7 +273,7 @@ lines = [
     "Ghostty/                  Ghostty %s and its bundled font notices" % tag,
     "ghostty-dependencies/     the libraries that Ghostty's build fetched, one folder each",
     "swift-packages/           the Swift packages that uniterm pins, one folder each",
-    "web-assets/               the parser and sanitizer that the Markdown viewer bundles",
+    "web-assets/               the parser and sanitizer that the Markdown viewer bundles, and the packages the parser inlines",
     "Catppuccin/               the Catppuccin color palette",
     "",
 ]

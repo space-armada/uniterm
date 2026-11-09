@@ -5,11 +5,38 @@
 # integrity string that the npm registry publishes for it. The file that ships is pinned by its own
 # sha256. A test hashes the shipped files against this file, so an edit to one without the other
 # fails the package tests.
+#
+# The markdown-it build inlines five of its dependencies. They are the packages that its source map
+# names under node_modules. Their notices ship with the parser, so each is pinned as a version, a
+# tarball sha256, an integrity string, and the license file that the tarball carries. The tarball
+# holds no lockfile. Each version is the highest one that the dependency ranges in markdown-it
+# 15.0.3's package.json allow, as published before 15.0.3 itself. DOMPurify has no runtime
+# dependencies, so it needs no such entries.
 MARKDOWN_IT_VERSION=15.0.3
 MARKDOWN_IT_TARBALL_SHA256=98a7453983ab0e268c17dbd5260bf7190ba46b4cca912327fc1c1a2578e4b56d
 MARKDOWN_IT_INTEGRITY=sha512-+Az7Ojz3iRGu8KYMvJ6xVhvrxP3eE+vEtJX75Ow88XBpcQNV/0lGX5ZynIIBftREo4DC2jsveAMDaeltmm8QvQ==
 MARKDOWN_IT_DIST=dist/browser/markdown-it.umd.min.js
 MARKDOWN_IT_SHA256=391f2aa638e75e6c7859d0a5c5650ef0956722a45998f17e05b83bc655778e1e
+ENTITIES_VERSION=8.1.0
+ENTITIES_TARBALL_SHA256=e9a27d66db0d0a6f2d76454219d94f5729ae2a29f08ab06c92e5f6eaa37cbe68
+ENTITIES_INTEGRITY=sha512-kxL7msIffSuh9aaFAMD7rxAIuTRMAHMeBtgHW2yUdWw732ZNh4MehkF2gdjvtdmikkaIP9bFDDJOPlsvm7avrA==
+ENTITIES_LICENSE=LICENSE
+LINKIFY_IT_VERSION=6.1.0
+LINKIFY_IT_TARBALL_SHA256=780a9e8232ea7e4c9f04348e2e2a567485c34abed805a15cfff8fff2029076b8
+LINKIFY_IT_INTEGRITY=sha512-wJ/TwpSDTLepCrQoYWYIExIKg5Zchex2Nn5yk2mFnB+6PtdkHtyLx742md9csRjjOnGkKIS/RrbY7l8D6gT9Vw==
+LINKIFY_IT_LICENSE=LICENSE
+MDURL_VERSION=2.1.0
+MDURL_TARBALL_SHA256=23fc27c3d70e776c3aa40ec019c2be21ef43ed33b73f8476ada8715c5aabd11d
+MDURL_INTEGRITY=sha512-1+HBaOx0zi/dQWht8rNv9MYf9qqpqL/kxI0hXImU6Y547zM6Sni8BQibt7ifgMcYtQg41ao3Ivd6cnSM86inpg==
+MDURL_LICENSE=LICENSE
+PUNYCODE_JS_VERSION=2.3.1
+PUNYCODE_JS_TARBALL_SHA256=8768d89aa6359164220014ba575e1464e3ddff11bedff1cc268e39a21f7324a8
+PUNYCODE_JS_INTEGRITY=sha512-uxFIHU0YlHYhDQtV4R9J6a52SLx28BCjT+4ieh7IGbgwVJWO+km431c4yRlREUAsAmt/uMjQUyQHNEPf0M39CA==
+PUNYCODE_JS_LICENSE=LICENSE-MIT.txt
+UC_MICRO_VERSION=3.0.0
+UC_MICRO_TARBALL_SHA256=23a2704905d2f7a773f89c97be1102a4a2eb3a69b58c0e8c326a649c75552981
+UC_MICRO_INTEGRITY=sha512-U3PppEkleoTnIfi8BozMx3yju3qc/L6SwqWo2Sw+54PX+PX0q9I+r1Um5HCmqD7n9VDX5/v3vQH/AjA6deDdtw==
+UC_MICRO_LICENSE=LICENSE.txt
 DOMPURIFY_VERSION=3.4.17
 DOMPURIFY_TARBALL_SHA256=056cbdae276897208b88c21d1d779adfa09ad7be488a2f510a28e900d3bbffe7
 DOMPURIFY_INTEGRITY=sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==

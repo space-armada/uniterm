@@ -9,8 +9,10 @@ branch.
 ## Run state
 
 UTERM-007 M1 to M4 are `DONE`, and the row moved to `history.md`. The proposal stays `accepted`, because M5 waits on
-UTERM-004 M3 in its own row. The final review is next. Before M1, the user asked for the branch to be rebased onto main. Local `main` matched the fork's
-`origin/main`, which the branch already held, so the run rebased onto `upstream/main` at "Merge pull request #37 from
+UTERM-004 M3 in its own row. The final review ran over the whole run.
+
+Before M1, the user asked for the branch to be rebased onto main. Local `main` matched the fork's `origin/main`, which
+the branch already held, so the run rebased onto `upstream/main` at "Merge pull request #37 from
 ripta/agent/petunia-land/scroll-flake". The commits already upstream dropped out. "Wait for the reloaded title in the
 browser recovery test" dropped too, since its patch was already upstream. The run's base, and the row's base, is
 "Allowlist debugging commands in cg".
@@ -541,3 +543,36 @@ the document's volume, is already in the Decision Log as Undecided.
 | `proposals.py freeze` with the row's commits | 0S1R2Y | `[]` |
 
 `settle()` is now called three times, about 4.5 s in total.
+
+## Final review
+
+### Commits
+
+- "Collect license notices for the packages bundled into markdown-it". It also carries this section and the run-state
+  reflow.
+
+### Findings
+
+The final review covered the whole run. It found no blocking issue. `proposals.py check` and `freeze` both returned
+`[]`. `queue.md`, `history.md`, and the proposal index agree. The web asset hashes match the pin, and no debug artifact
+was committed. The range adds and edits no ADR file. The ADR-impact pass found no conflict. ADR-10 is honored by the
+second sandboxed helper.
+
+| Finding | Disposition |
+|---|---|
+| The markdown-it bundle inlines other packages whose notices were not collected (PLAUSIBLE) | Confirmed from the shipped source map: entities (BSD-2-Clause), linkify-it, mdurl, punycode.js, and uc.micro. Each is now pinned with its version and integrity, and its notice is collected into `Licenses/web-assets/`. DOMPurify bundles nothing |
+| A 146-column Decision Log line, and a marker missing its period | Fixed |
+| The report's run-state paragraph ran two thoughts together | Fixed |
+
+The inlined packages' versions are a best guess. markdown-it publishes no lockfile, so each is the highest release its
+dependency range allowed before markdown-it 15.0.3 was published. If the build used an older release, only a license
+year or holder line could differ.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make licenses` | HWRXSM | pass |
+| `make fmt-check`, `make lint`, `make check` | 1AC9PR, 0B9PCS, GCWKKQ | pass |
+| `caffeinate -dimsu make test-package` | 1EG62R | pass |
+| `proposals.py check` and `freeze` | K2YT8T, 2EGMNY | `[]` |

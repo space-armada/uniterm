@@ -30,6 +30,8 @@ trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$RESOURCES" "$NOTICES"
 
+# An empty DIST and SHIPPED_NAME fetches only the notices, for a package that a shipped file inlines.
+#
 # fetch NAME VERSION TARBALL_SHA256 INTEGRITY DIST DIST_SHA256 SHIPPED_NAME NOTICE_FROM NOTICE_TO...
 fetch() {
   local name="$1" version="$2" tarball_sha="$3" integrity="$4" dist="$5" dist_sha="$6" shipped="$7"
@@ -50,10 +52,12 @@ fetch() {
 
   tar -xzf "$dir/download/$name-$version.tgz" -C "$dir/unpacked"
 
-  actual="$(shasum -a 256 "$dir/unpacked/package/$dist" | cut -d' ' -f1)"
-  [ "$actual" = "$dist_sha" ] || die "$name $version $dist sha256 is $actual, and the pin says $dist_sha."
+  if [ -n "$dist" ]; then
+    actual="$(shasum -a 256 "$dir/unpacked/package/$dist" | cut -d' ' -f1)"
+    [ "$actual" = "$dist_sha" ] || die "$name $version $dist sha256 is $actual, and the pin says $dist_sha."
 
-  cp "$dir/unpacked/package/$dist" "$RESOURCES/$shipped"
+    cp "$dir/unpacked/package/$dist" "$RESOURCES/$shipped"
+  fi
 
   while [ "$#" -gt 0 ]; do
     cp "$dir/unpacked/package/$1" "$NOTICES/$2"
@@ -64,6 +68,22 @@ fetch() {
 fetch markdown-it "$MARKDOWN_IT_VERSION" "$MARKDOWN_IT_TARBALL_SHA256" "$MARKDOWN_IT_INTEGRITY" \
   "$MARKDOWN_IT_DIST" "$MARKDOWN_IT_SHA256" markdown-it.umd.min.js \
   LICENSE markdown-it.LICENSE
+
+# These five are inlined into markdown-it.umd.min.js. The build's source map names them.
+fetch entities "$ENTITIES_VERSION" "$ENTITIES_TARBALL_SHA256" "$ENTITIES_INTEGRITY" "" "" "" \
+  "$ENTITIES_LICENSE" entities.LICENSE
+
+fetch linkify-it "$LINKIFY_IT_VERSION" "$LINKIFY_IT_TARBALL_SHA256" "$LINKIFY_IT_INTEGRITY" "" "" "" \
+  "$LINKIFY_IT_LICENSE" linkify-it.LICENSE
+
+fetch mdurl "$MDURL_VERSION" "$MDURL_TARBALL_SHA256" "$MDURL_INTEGRITY" "" "" "" \
+  "$MDURL_LICENSE" mdurl.LICENSE
+
+fetch punycode.js "$PUNYCODE_JS_VERSION" "$PUNYCODE_JS_TARBALL_SHA256" "$PUNYCODE_JS_INTEGRITY" "" "" "" \
+  "$PUNYCODE_JS_LICENSE" punycode.js.LICENSE
+
+fetch uc.micro "$UC_MICRO_VERSION" "$UC_MICRO_TARBALL_SHA256" "$UC_MICRO_INTEGRITY" "" "" "" \
+  "$UC_MICRO_LICENSE" uc.micro.LICENSE
 
 fetch dompurify "$DOMPURIFY_VERSION" "$DOMPURIFY_TARBALL_SHA256" "$DOMPURIFY_INTEGRITY" \
   "$DOMPURIFY_DIST" "$DOMPURIFY_SHA256" purify.min.js \
