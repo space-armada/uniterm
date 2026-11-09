@@ -8,7 +8,8 @@ branch.
 
 ## Run state
 
-The run is in progress. Before M1, the user asked for the branch to be rebased onto main. Local `main` matched the fork's
+UTERM-007 M1 to M4 are `DONE`, and the row moved to `history.md`. The proposal stays `accepted`, because M5 waits on
+UTERM-004 M3 in its own row. The final review is next. Before M1, the user asked for the branch to be rebased onto main. Local `main` matched the fork's
 `origin/main`, which the branch already held, so the run rebased onto `upstream/main` at "Merge pull request #37 from
 ripta/agent/petunia-land/scroll-flake". The commits already upstream dropped out. "Wait for the reloaded title in the
 browser recovery test" dropped too, since its patch was already upstream. The run's base, and the row's base, is
