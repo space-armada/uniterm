@@ -108,7 +108,6 @@ final class TextViewerAppletTests: XCTestCase {
     let cases: [(String, Data, String)] = [
       ("bad.pdf", Data("nope".utf8), "not a PDF"),
       ("pic.png", Data([1, 2, 3]), "does not open"),
-      ("notes.md", Data("# hi".utf8), "Markdown"),
       ("bad.rtf", Data("not rtf".utf8), "could not be read"),
     ]
 
@@ -457,7 +456,7 @@ final class TextViewerAppletTests: XCTestCase {
   /// Catches a description from a newer build that this build rebuilds into an applet.
   func testANewerDescriptionIsRefused() throws {
     let newer = AppletDescription(
-      type: TextViewerDescription.typeID, version: 2,
+      type: TextViewerDescription.typeID, version: TextViewerDescription.currentVersion + 1,
       payload: try TextViewerDescription(path: "/a.pdf").appletDescription().payload)
 
     XCTAssertThrowsError(try TextViewerApplet(restoring: newer))
@@ -557,6 +556,7 @@ final class TextViewerAppletTests: XCTestCase {
         OpenedType("public.rtf", rank: .owner),
         OpenedType("com.microsoft.word.doc", rank: .owner),
         OpenedType("org.openxmlformats.wordprocessingml.document", rank: .owner),
+        OpenedType("net.daringfireball.markdown", rank: .owner),
       ])
   }
 }

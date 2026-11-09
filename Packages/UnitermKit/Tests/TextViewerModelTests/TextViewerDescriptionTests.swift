@@ -42,6 +42,35 @@ final class TextViewerDescriptionTests: XCTestCase {
       try TextViewerDescription.decode(original.appletDescription()).anchor?.characterIndex, 1234)
   }
 
+  /// Catches a Markdown anchor that is lost over a save, and a payload with no Markdown fields
+  /// that stops reading.
+  func testAMarkdownAnchorRoundTripsAndAPayloadWithoutItStillReads() throws {
+    let original = TextViewerDescription(
+      path: "/a.md", anchor: .markdown(line: 120, fraction: 0.25))
+
+    XCTAssertEqual(try TextViewerDescription.decode(original.appletDescription()), original)
+
+    let plain = AppletDescription(
+      type: TextViewerDescription.typeID, version: 1,
+      payload: .object(["path": .string("/a.pdf"), "anchor": .object(["page": .number(2)])]))
+    let back = try TextViewerDescription.decode(plain)
+
+    XCTAssertEqual(back.anchor?.page, 2)
+    XCTAssertNil(back.anchor?.sourceLine)
+    XCTAssertNil(back.anchor?.fraction)
+  }
+
+  func testAMarkdownAnchorWithANegativeLineOrANonFiniteFractionIsRefused() {
+    XCTAssertThrowsError(
+      try TextViewerDescription.decode(
+        TextViewerDescription(path: "/a.md", anchor: .markdown(line: -1, fraction: 0))
+          .appletDescription()))
+    XCTAssertThrowsError(
+      try TextViewerDescription.decode(
+        TextViewerDescription(path: "/a.md", anchor: .markdown(line: 1, fraction: .infinity))
+          .appletDescription()))
+  }
+
   /// Catches a description this build reads that it should refuse, so a bad one is kept byte for
   /// byte by the caller.
   func testWrongTypeNewerVersionAndBadShapesAreRefused() {
@@ -53,7 +82,7 @@ final class TextViewerDescriptionTests: XCTestCase {
     XCTAssertThrowsError(
       try TextViewerDescription.decode(
         AppletDescription(
-          type: TextViewerDescription.typeID, version: 2,
+          type: TextViewerDescription.typeID, version: TextViewerDescription.currentVersion + 1,
           payload: try! good.appletDescription().payload)))
     XCTAssertThrowsError(
       try TextViewerDescription.decode(

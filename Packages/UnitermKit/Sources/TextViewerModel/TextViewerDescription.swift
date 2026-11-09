@@ -12,11 +12,23 @@ public struct TextViewerAnchor: Codable, Equatable, Sendable {
   /// The character index at the top of an RTF or Word document, in UTF-16 units.
   public var characterIndex: Int?
 
-  public init(page: Int? = nil, x: Double? = nil, y: Double? = nil, characterIndex: Int? = nil) {
+  /// The source line, counted from zero, where the top block of a Markdown document starts. The
+  /// parser's own token map gives it.
+  public var sourceLine: Int?
+
+  /// How far down that block the top of the view is, from 0 to 1.
+  public var fraction: Double?
+
+  public init(
+    page: Int? = nil, x: Double? = nil, y: Double? = nil, characterIndex: Int? = nil,
+    sourceLine: Int? = nil, fraction: Double? = nil
+  ) {
     self.page = page
     self.x = x
     self.y = y
     self.characterIndex = characterIndex
+    self.sourceLine = sourceLine
+    self.fraction = fraction
   }
 
   public static func pdf(page: Int, x: Double, y: Double) -> TextViewerAnchor {
@@ -25,6 +37,10 @@ public struct TextViewerAnchor: Codable, Equatable, Sendable {
 
   public static func text(characterIndex: Int) -> TextViewerAnchor {
     TextViewerAnchor(characterIndex: characterIndex)
+  }
+
+  public static func markdown(line: Int, fraction: Double) -> TextViewerAnchor {
+    TextViewerAnchor(sourceLine: line, fraction: fraction)
   }
 }
 
@@ -36,7 +52,8 @@ public struct TextViewerDescription: Codable, Equatable, Sendable {
   public static let typeID = "text-viewer"
 
   /// The version of the payload this build reads and writes. A change an older build cannot
-  /// round-trip bumps it.
+  /// round-trip bumps it. The Markdown anchor's source line and fraction are optional fields of
+  /// version 1, and a payload without them reads unchanged.
   public static let currentVersion = 1
 
   /// The directory the pane started in. An empty pane reports it as its current directory.
@@ -118,6 +135,15 @@ public struct TextViewerDescription: Codable, Equatable, Sendable {
 
       if let index = anchor.characterIndex, index < 0 {
         throw AppletRestoreError.corrupt("text viewer description anchors a negative character")
+      }
+
+      if let line = anchor.sourceLine, line < 0 {
+        throw AppletRestoreError.corrupt("text viewer description anchors a negative source line")
+      }
+
+      if let fraction = anchor.fraction, !fraction.isFinite {
+        throw AppletRestoreError.corrupt(
+          "text viewer description anchors a fraction that is not finite")
       }
 
       if [anchor.x, anchor.y].contains(where: { $0.map { !$0.isFinite } ?? false }) {

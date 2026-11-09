@@ -2,9 +2,8 @@ import AppletKit
 import TextViewerModel
 
 extension TextViewerApplet {
-  /// The text viewer opens PDF, RTF, and Word documents and is the default for all of them.
-  /// Markdown joins the list when its renderer lands. Until then a Markdown file opened through
-  /// the pane's own Open shows a message that names the type.
+  /// The text viewer opens PDF, RTF, Word, and Markdown documents and is the default for all of
+  /// them.
   public nonisolated static let typeDeclaration = AppletTypeDeclaration(
     typeID: TextViewerDescription.typeID, displayName: "Text Viewer", symbolName: "doc.text",
     opens: [
@@ -12,6 +11,7 @@ extension TextViewerApplet {
       OpenedType("public.rtf", rank: .owner),
       OpenedType(TextFormatRule.word97Identifier, rank: .owner),
       OpenedType(TextFormatRule.wordXMLIdentifier, rank: .owner),
+      OpenedType(TextFormatRule.markdownIdentifier, rank: .owner),
     ])
 
   /// The text viewer's own commands. Open has no key, since Cmd-O belongs to the window's File >

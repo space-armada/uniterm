@@ -136,8 +136,12 @@ check-ghosttykit-imports: ## Fail when any module but TerminalSurface can reach 
 	scripts/check-ghosttykit-imports.sh
 
 .PHONY: licenses
-licenses: ## Collect the license notices for Ghostty, its libraries, and the Swift packages into Licenses/
+licenses: ## Collect the license notices for Ghostty, its libraries, the Swift packages, and the web assets into Licenses/
 	scripts/collect-licenses.sh
+
+.PHONY: web-assets
+web-assets: ## Fetch the pinned Markdown parser and sanitizer, verify them, and copy them in. Needs the network
+	scripts/fetch-web-assets.sh
 
 # CI runs ci-package, ci-app, and ghostty-offline-check as three jobs side by side, and skips the
 # offline rebuild once an earlier run proved the same Ghostty inputs on the same runner image. The

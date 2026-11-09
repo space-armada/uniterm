@@ -96,6 +96,70 @@ final class TextViewerUITests: UnitermUITestCase {
     return file
   }
 
+  /// A small image, so a README's relative image has pixels to draw.
+  @discardableResult
+  private func writePNG(_ name: String, in folder: URL) throws -> URL {
+    let rep = NSBitmapImageRep(
+      bitmapDataPlanes: nil, pixelsWide: 96, pixelsHigh: 32, bitsPerSample: 8, samplesPerPixel: 4,
+      hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+
+    for x in 0..<96 {
+      for y in 0..<32 {
+        rep.setColor(
+          NSColor(calibratedRed: CGFloat(x) / 96, green: 0.4, blue: CGFloat(y) / 32, alpha: 1),
+          atX: x, y: y)
+      }
+    }
+
+    let file = folder.appendingPathComponent(name)
+    try rep.representation(using: .png, properties: [:])!.write(to: file)
+
+    return file
+  }
+
+  /// A README with the constructs the viewer renders: a centered raw-HTML header, a list, a code
+  /// block, a table, `<details>`, `<kbd>`, and a relative image.
+  @discardableResult
+  private func writeREADME(in folder: URL, filler: Int = 0) throws -> URL {
+    try writePNG("logo.png", in: folder)
+
+    let padding = (0..<filler).map { "## Section \($0)\n\nParagraph \($0) of filler text.\n" }
+      .joined(separator: "\n")
+
+    let text = """
+      <h1 align="center">uniterm sample</h1>
+
+      <p align="center"><img src="logo.png" width="96" alt="logo"></p>
+
+      ## Install
+
+      - Build with <kbd>make</kbd>
+      - Run with <kbd>make run</kbd>
+
+      ```swift
+      let greeting = "hello"
+      ```
+
+      | Name  | Value |
+      |:------|------:|
+      | alpha | 1     |
+      | beta  | 2     |
+
+      <details><summary>More</summary>
+
+      Hidden until opened.
+
+      </details>
+
+      \(padding)
+      """
+
+    let file = folder.appendingPathComponent("README.md")
+    try Data(text.utf8).write(to: file)
+
+    return file
+  }
+
   /// Attaches a screenshot of the uniterm window only, so it carries nothing of the user's other
   /// windows.
   private func attachScreenshot(_ name: String, of window: XCUIElement) {
@@ -122,23 +186,6 @@ final class TextViewerUITests: UnitermUITestCase {
 
   private func segment(_ index: Int, in window: XCUIElement) -> XCUIElement {
     window.descendants(matching: .any).matching(identifier: "status-applet-\(index)").firstMatch
-  }
-
-  private func choose(_ file: URL, in app: XCUIApplication, window: XCUIElement) {
-    let panel = window.sheets.firstMatch
-    XCTAssertTrue(panel.waitForExistence(timeout: 10), "no open panel")
-
-    app.typeKey("g", modifierFlags: [.command, .shift])
-
-    let goTo = panel.sheets.firstMatch
-    XCTAssertTrue(goTo.waitForExistence(timeout: 5), "no go-to-folder sheet")
-
-    app.typeText(file.path)
-    app.typeKey(.return, modifierFlags: [])
-    XCTAssertTrue(waitUntilGone(goTo, timeout: 5), "the go-to-folder sheet never closed")
-
-    app.typeKey(.return, modifierFlags: [])
-    XCTAssertTrue(waitForNoSheet(in: window, timeout: 10), "the panel never closed")
   }
 
   /// Catches a launcher without the text viewer, a pane that does not offer to open a document,
@@ -215,6 +262,61 @@ final class TextViewerUITests: UnitermUITestCase {
     XCTAssertTrue(written.contains(file.path), "the path was not saved: \(written)")
     XCTAssertTrue(written.contains(#""page":1"#), "the page was not saved: \(written)")
     XCTAssertLessThan(written.utf8.count, 4096, "the document was saved in the layout")
+  }
+
+  /// Catches Markdown that does not render in the real app, in either theme. A planted pane restores
+  /// a README with a raw-HTML header, a list, a code block, a table, `<details>`, `<kbd>`, and a
+  /// relative image, and the status bar reports its line count once the page has rendered. The
+  /// screenshots show the page in the light and the dark theme.
+  func testAREADMERendersInTheLightAndDarkThemes() throws {
+    let file = try writeREADME(in: try makeFolder())
+
+    try plantViewer(path: file.path)
+
+    for appearance in ["light", "dark"] {
+      let app = launchApp(settings: ["appearance": appearance])
+      let window = mainWindow(in: app)
+
+      XCTAssertTrue(viewer(in: window).waitForExistence(timeout: 20), "no text viewer pane")
+      XCTAssertTrue(
+        waitFor(segment(0, in: window), timeout: 30) { $0.hasSuffix(" lines") },
+        "the README never rendered in the \(appearance) theme")
+
+      Thread.sleep(forTimeInterval: 1)
+      attachScreenshot("text viewer, Markdown README, \(appearance) theme", of: window)
+      app.terminate()
+    }
+  }
+
+  /// Catches a Markdown pane that loses its place over a relaunch. A planted pane restores a long
+  /// README at a source line, and the layout a quit saves holds the line and no document text.
+  func testARestoredREADMEKeepsItsSourceLineAcrossAQuit() throws {
+    let file = try writeREADME(in: try makeFolder(), filler: 300)
+
+    try plantViewer(
+      path: file.path, anchor: #","anchor":{"sourceLine":400,"fraction":0}"#)
+
+    let app = launchApp(
+      environment: ["UNITERM_LAYOUT_DEBOUNCE": "3600"], arguments: closeWindowsOnQuit)
+    let window = mainWindow(in: app)
+
+    XCTAssertTrue(viewer(in: window).waitForExistence(timeout: 20), "no text viewer pane")
+    XCTAssertTrue(waitFor(segment(0, in: window), timeout: 30) { $0.hasSuffix(" lines") })
+
+    Thread.sleep(forTimeInterval: 1)
+    attachScreenshot("text viewer, Markdown README restored at line 400", of: window)
+
+    app.typeKey("q", modifierFlags: .command)
+    XCTAssertTrue(app.wait(for: .notRunning, timeout: 15))
+
+    let written = try String(
+      contentsOf: layoutDirectory.appendingPathComponent("layout.json"), encoding: .utf8
+    ).replacingOccurrences(of: "\\/", with: "/")
+
+    XCTAssertTrue(written.contains(file.path), "the path was not saved: \(written)")
+    XCTAssertTrue(written.contains(#""sourceLine":"#), "the source line was not saved: \(written)")
+    XCTAssertFalse(written.contains("Paragraph 100"), "the document was saved in the layout")
+    XCTAssertLessThan(written.utf8.count, 4096)
   }
 
   /// Catches a closed viewer pane that asks, since a read-only viewer never counts as running

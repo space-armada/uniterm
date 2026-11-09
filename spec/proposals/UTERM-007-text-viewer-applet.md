@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-03
+**Updated:** 2026-11-08
 
 ## Dependencies
 
@@ -69,7 +69,7 @@ tables and code blocks. Render HTML in a `WKWebView`, use a native Swift Markdow
 
 Decision: Markdown is parsed and laid out inside a `WKWebView`, by a pinned, bundled JavaScript Markdown parser such as
 markdown-it. Raw HTML in the Markdown renders through a pinned sanitizer's allowlist. Nothing parses Markdown or HTML in
-uniterm's own process. Amended 2026-11-03; see Decision Log.
+uniterm's own process. Amended 2026-11-08; see Decision Log.
 
 - The parser runs as a `WKUserScript` in its own `WKContentWorld`. Page JavaScript is off
   (`allowsContentJavaScript = false`), so nothing in the document can run script, even if the parser emits markup it
@@ -80,9 +80,10 @@ uniterm's own process. Amended 2026-11-03; see Decision Log.
   `<summary>`, `<img width>`, `<picture>`, `<kbd>`, `<sup>`, and in-page anchors render. It drops `script`, `style`,
   inline `style` attributes, `iframe`, `object`, `embed`, `form`, `input`, `audio`, `video`, `base`, `meta`, `link`,
   and event attributes.
-- The scheme handler sends a Content-Security-Policy that allows images only from its own scheme and denies scripts in
-  the page, frames, forms, objects, and media. A `WKContentRuleList` also blocks every load outside the handler's
-  scheme, whichever world started it, since WebKit may let loads from an isolated world skip the page's policy.
+- The scheme handler sends a Content-Security-Policy that allows images, the page's stylesheet, and the document's own
+  text, each only from its own scheme, and denies scripts in the page, frames, forms, objects, and media. A
+  `WKContentRuleList` also blocks every load outside the handler's scheme, whichever world started it, since WebKit may
+  let loads from an isolated world skip the page's policy.
 - The web view's light or dark appearance follows the uniterm theme, not the system, so `<picture>` sources that
   test `prefers-color-scheme` match the theme.
 - Each pane's `WKWebView` uses its own non-persistent data store. It shares no cookies, cache, or storage with other
@@ -414,7 +415,7 @@ None.
 
 ### M2: Markdown
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - The viewer renders Markdown headings, lists, code blocks, tables, and links
 - Rendered Markdown uses the current theme's colors
@@ -435,7 +436,8 @@ None.
   nothing
 - A link opens in the default browser only when clicked, and only for `http`, `https`, or `mailto`
 - A 20 MB Markdown file opens without stalling the main thread
-- After a scroll and an immediate layout save, reopen lands on that scroll position
+- A layout save taken after the page's scroll report arrives, one message after the scroll, reopens on that scroll
+  position. Amended 2026-11-08; see Decision Log.
 - The parser and sanitizer assets are pinned by version and hash, and their license notices are collected
 - Dropping a file on rendered Markdown opens it in the pane
 - An image path through `/net`, `/Volumes`, or any other mount point, directly or through a symlink in any component,
@@ -445,6 +447,62 @@ None.
 - Reload fetches images again, never WebKit's cached copies
 - Two Markdown panes, and the browser applet, share no web storage or cache
 - After reopen at a different pane width, the same heading or paragraph is at the top
+
+**As built:**
+
+- The page is three user scripts in one named content world, the pinned markdown-it and DOMPurify and the viewer's own
+  script, with page JavaScript off. The one message handler is registered for that world. A WebKit content process
+  runs all of it. A probe confirmed that user scripts in a world still run with `allowsContentJavaScript = false`, and
+  that the page's own scripts do not.
+- Each Markdown pane builds its web view when the first Markdown file opens, and removes it when the pane shows
+  anything else. A PDF or RTF pane starts no web content process. The data store is non-persistent, so no pane shares
+  cookies, cache, or storage with another pane or with the browser.
+- The scheme handler serves four routes: the page, its stylesheet, the document's text, and `image`. The world's
+  script rewrites each plain relative `src`, `srcset`, and `<source>` reference to an `image` request that carries the
+  path whole in one query value, so a `..` reaches the handler intact. A page URL would have collapsed it. Every other
+  image reference loses its attribute and shows alt text. The handler allows only image types by extension, and
+  answers 404 with no body for anything else.
+- Relative image files open through a new walk in `SourceAccess`. It goes one component at a time from the document's
+  folder, refuses any directory or file whose device differs from the folder's, follows links by splicing their target
+  into the walk, and refuses `net`, `home`, `Volumes`, and `Network` by name at the root before looking them up. The
+  system and Data volumes share one device on macOS, so the walk treats them as one volume. A path that reaches `/dev`,
+  an automount, or another volume's mount point stops at the mount. The final file is judged from its descriptor by
+  the same regular-file check as every other read, so a link to a device or a pipe loads nothing.
+- Raw HTML runs through DOMPurify with GitHub's published README allowlist as its configuration. The pin file records
+  the allowlist's source and commit. Three narrowings follow the proposal's "minus anything that needs the network": the
+  `longdesc` attribute is dropped, `srcset` is kept only on `<source>`, and links keep only `http`, `https`, and
+  `mailto`, where the published list also keeps `ftp` and others. The form attributes on the list stay and do
+  nothing, since no form element is allowed.
+- The source anchor comes from the parser's token map, kept in the world's state against each block's elements. The page
+  never reads a DOM attribute to learn a line. A block of raw HTML reports the line it starts at, and restores within
+  itself by fraction. The page pushes the anchor from its scroll handler, and `describe()` returns the last one pushed.
+  A save taken before that message arrives sees the position before the scroll. Every page message carries the
+  document's generation, and the host drops a message from an earlier document.
+- A debug build can swap the sanitizer for a pass-through that builds executable markup. The tests use it to show that
+  the Content-Security-Policy and the rule list each keep every request off the network without the other, and that
+  the sanitizer is not what holds the line. Release builds contain no such switch. WebKit's own fragment parser drops
+  script elements and handlers while page script is off, so the test also appends hand-built scripts.
+- Reload is a method on the pane with no key and no registry command. The message that shows when WebKit's content
+  process ends carries a Reload button, and the pane keeps its last position in the description meanwhile. Cmd-R
+  belongs to the next milestone.
+- Raw HTML that opens an element in one block and closes it in a later one, as `<details>` does around Markdown, would
+  strand its body outside the element if each block were sanitized alone. A block that leaves an element open starts a
+  unit, and the unit takes the following blocks until the element closes, up to 400 blocks, then sanitizes as one. A
+  unit counts as one block for scroll anchors, so a long `<details>` restores by fraction within it. Headings inside it
+  carry the unit's first line.
+- The `.md` extension types as another app's `com.unknown.md` on the machine this was built on. That type does not
+  conform to Markdown, and the router has no extension fallback, so such a file would be refused. `Info.plist` now
+  imports `net.daringfireball.markdown` with the Markdown extensions, and a router test shows why the type matters.
+  Whether Launch Services prefers that import over another app's claim on a given machine is not provable in a test.
+  The built app was not registered to check it.
+- The page renders in slices and yields between them. WebKit lays out everything inserted so far while the page is idle,
+  and fixed 30 ms slices made that cost quadratic. Each slice is now three times the last yield's duration. A 20 MB file
+  went from 87 s to 4 s, and the host's longest main-thread gap stayed under 30 ms. See Decision Log.
+- Not done here: find, the contents sidebar, and the rule for a `<details>` match are M4. Live reload is M3. Task-list
+  checkboxes render as text, since `input` is off the allowlist. A drop on rendered Markdown is covered by the web
+  view registering for no drag types and the pane view receiving the drop, not by a real drag.
+- The viewer now declares the Markdown type and lists it in the open panel. M1's note that Markdown shows the
+  unsupported-type message no longer holds.
 
 ### M3: Live reload
 
@@ -637,6 +695,35 @@ None.
   sample on the macOS used. Embedded pictures therefore do not appear in this run, though the path for them is built
   and tested with attachments made in code. Revisit when a reader that does return attachments is found on a supported
   macOS.
+- 2026-11-08: Amended "Markdown rendering" while building M2. The CSP sentence said "allows
+  images only from its own scheme". The page also reads its stylesheet and the document's text from the scheme, by
+  fetch, so the policy allows `style-src` and `connect-src` for that scheme alone, and `script-src 'none'` still holds
+  because WebKit exempts user scripts in a content world from the page's policy. (work-queue best guess)
+- 2026-11-08: The payload stays at version 1. The Markdown anchor's source line and fraction are optional fields of it,
+  and a payload without them reads unchanged. ADR-06 bumps the version for a field that an older reader would drop. No
+  build outside this branch has read a version 1 text viewer payload, since M1 has not left it, so no older reader
+  exists to drop them. An entry written earlier today called the bump required and set version 2. This entry replaces
+  that reading. (work-queue best guess)
+- 2026-11-08: Amended M2's check "After a scroll and an immediate layout save, reopen lands on that scroll position".
+  `describe()` is synchronous and reads the host's cache, and the page reports a scroll by message from its scroll
+  handler. A save taken in the same turn as the scroll, before that message arrives, cannot hold the new position,
+  and no host call can read the page without waiting for it. The check now says a save taken after the page's scroll
+  report arrives lands there. The report follows the scroll by one message, with no timer. (work-queue best guess)
+- 2026-11-08: M2 caps and mechanics. A Markdown file reads up to 32 MiB, and one image up to 16 MiB. The parse happens
+  in WebKit, so the cap bounds the content process and the host's one read. Relative image references are rewritten
+  by the world's script to `image?p=<path>` after sanitizing, because a relative URL collapses `..` before the handler
+  sees it. Links keep only `http`, `https`, and `mailto`, and `srcset` stays only on `<source>`. The rule list is
+  compiled once into WebKit's default rule list store, and a pane that cannot compile it shows a message and loads
+  nothing. Reload is a pane method and a button on the process-ended message, with no key and no command. (work-queue
+  best guess)
+- 2026-11-08: M2 measurement. A 20 MB Markdown file of 285,000 short paragraphs reached its rendered state in 87 s with
+  fixed 30 ms slices, because each yield made WebKit lay out the whole document again. Slices that grow with the last
+  yield's cost brought it to 4 s. Parsing took 0.6 s and sanitizing 2.6 s of the original run. The host's longest
+  main-thread gap was 0.03 s either way. One run on one machine. (work-queue best guess)
+- 2026-11-08: ADR candidate (cuts across the system): a path named by a document's content never leaves the
+  document's volume and never triggers an automount, whatever viewer follows it. M2's Markdown images are the first
+  case, and the map viewer and any later viewer of linked files would follow the same rule. Undecided. Found in
+  UTERM-007 M2.
 
 ## References
 

@@ -84,14 +84,14 @@ enum Harness {
   static func settled(_ applet: TextViewerApplet) async -> Bool {
     await eventually {
       switch applet.content.body {
-      case .pdf, .text: return true
-      case .message(let text, _): return text != "Opening\u{2026}"
+      case .pdf, .text, .markdown: return true
+      case .message(let text, _, _): return text != "Opening\u{2026}"
       }
     }
   }
 
   static func message(_ applet: TextViewerApplet) -> String? {
-    if case .message(let text, _) = applet.content.body { return text }
+    if case .message(let text, _, _) = applet.content.body { return text }
 
     return nil
   }

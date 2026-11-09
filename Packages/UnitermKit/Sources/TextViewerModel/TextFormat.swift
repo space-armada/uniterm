@@ -76,7 +76,8 @@ public enum TextFormatRule {
 
   /// The types the open panel accepts, so the panel greys out what the viewer would refuse.
   public static var openPanelTypes: [UTType] {
-    [.pdf, .rtf, UTType(word97Identifier), UTType(wordXMLIdentifier)].compactMap { $0 }
+    [.pdf, .rtf, UTType(word97Identifier), UTType(wordXMLIdentifier), UTType(markdownIdentifier)]
+      .compactMap { $0 }
   }
 
   /// What the pane says about a file it does not read.

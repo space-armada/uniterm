@@ -4,10 +4,12 @@ import Theme
 
 /// What the pane shows now.
 enum TextViewerBody: Equatable {
-  /// A message in place of a document. It may offer the Open button.
-  case message(String, offersOpen: Bool)
+  /// A message in place of a document. It may offer the Open button, or the Reload button for a
+  /// page that stopped.
+  case message(String, offersOpen: Bool, offersReload: Bool)
   case pdf
   case text
+  case markdown
 }
 
 /// A PDF view that gives file drops to the pane instead of taking them.
@@ -40,6 +42,7 @@ final class DropThroughTextView: NSTextView {
 @MainActor
 final class TextViewerView: NSView {
   var onOpen: (() -> Void)?
+  var onReload: (() -> Void)?
 
   /// Gets the dropped files. Returns false to refuse them.
   var onDrop: (([URL]) -> Bool)?
@@ -52,8 +55,10 @@ final class TextViewerView: NSView {
   let textView: DropThroughTextView
   private let messageLabel = NSTextField(wrappingLabelWithString: "")
   private let openButton = NSButton(title: "Open\u{2026}", target: nil, action: nil)
+  private let reloadButton = NSButton(title: "Reload", target: nil, action: nil)
+  private(set) var markdownView: MarkdownView?
   private let messageStack = NSStackView()
-  private(set) var body = TextViewerBody.message("", offersOpen: false)
+  private(set) var body = TextViewerBody.message("", offersOpen: false, offersReload: false)
 
   override var isFlipped: Bool { true }
 
@@ -119,12 +124,18 @@ final class TextViewerView: NSView {
     openButton.action = #selector(openPressed)
     openButton.setAccessibilityIdentifier("text-viewer-open")
 
+    reloadButton.bezelStyle = .rounded
+    reloadButton.target = self
+    reloadButton.action = #selector(reloadPressed)
+    reloadButton.setAccessibilityIdentifier("text-viewer-reload")
+
     messageStack.orientation = .vertical
     messageStack.alignment = .centerX
     messageStack.spacing = 12
     messageStack.translatesAutoresizingMaskIntoConstraints = false
     messageStack.addArrangedSubview(messageLabel)
     messageStack.addArrangedSubview(openButton)
+    messageStack.addArrangedSubview(reloadButton)
 
     addSubview(pdfView)
     addSubview(scrollView)
@@ -145,7 +156,7 @@ final class TextViewerView: NSView {
       messageStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
     ])
 
-    show(.message("", offersOpen: false))
+    show(.message("", offersOpen: false, offersReload: false))
   }
 
   @available(*, unavailable)
@@ -158,19 +169,50 @@ final class TextViewerView: NSView {
 
     pdfView.isHidden = body != .pdf
     scrollView.isHidden = body != .text
-    messageStack.isHidden = body == .pdf || body == .text
+    markdownView?.isHidden = body != .markdown
 
-    if case .message(let text, let offersOpen) = body {
+    if case .message(let text, let offersOpen, let offersReload) = body {
+      messageStack.isHidden = false
       messageLabel.stringValue = text
       messageLabel.isHidden = text.isEmpty
       openButton.isHidden = !offersOpen
+      reloadButton.isHidden = !offersReload
+    } else {
+      messageStack.isHidden = true
     }
+  }
+
+  /// Takes the Markdown page out and ends its web content process.
+  func removeMarkdown() {
+    markdownView?.close()
+    markdownView?.removeFromSuperview()
+    markdownView = nil
+  }
+
+  /// Puts the Markdown page in the pane. The web view is built when the first Markdown document
+  /// opens, so a PDF or RTF pane never starts a web content process.
+  func install(markdown view: MarkdownView) {
+    markdownView?.removeFromSuperview()
+    markdownView = view
+
+    view.translatesAutoresizingMaskIntoConstraints = false
+    view.isHidden = body != .markdown
+
+    addSubview(view, positioned: .below, relativeTo: messageStack)
+
+    NSLayoutConstraint.activate([
+      view.leadingAnchor.constraint(equalTo: leadingAnchor),
+      view.trailingAnchor.constraint(equalTo: trailingAnchor),
+      view.topAnchor.constraint(equalTo: topAnchor),
+      view.bottomAnchor.constraint(equalTo: bottomAnchor),
+    ])
   }
 
   func focusBody() {
     switch body {
     case .pdf: window?.makeFirstResponder(pdfView)
     case .text: window?.makeFirstResponder(textView)
+    case .markdown: markdownView?.focusPage()
     case .message: break
     }
   }
@@ -178,12 +220,13 @@ final class TextViewerView: NSView {
   /// A document is laid out for paper, so its page stays white and keeps its own text colors. The
   /// theme colors the surround and the messages.
   func apply(_ palette: ThemePalette) {
-    appearance = NSAppearance(named: palette.flavor == .mocha ? .darkAqua : .aqua)
+    appearance = NSAppearance(named: palette.flavor.isDark ? .darkAqua : .aqua)
     layer?.backgroundColor = palette[.base].cgColor
     scrollView.backgroundColor = palette[.mantle].nsColor
     textView.backgroundColor = .white
     pdfView.backgroundColor = palette[.mantle].nsColor
     messageLabel.textColor = palette.secondaryText.nsColor
+    markdownView?.apply(palette)
   }
 
   override func layout() {
@@ -193,6 +236,10 @@ final class TextViewerView: NSView {
 
   @objc private func openPressed() {
     onOpen?()
+  }
+
+  @objc private func reloadPressed() {
+    onReload?()
   }
 
   // MARK: Drop

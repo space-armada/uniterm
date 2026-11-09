@@ -42,6 +42,7 @@ final class BuiltInAppletsTests: XCTestCase {
             OpenedType("public.rtf", rank: .owner),
             OpenedType("com.microsoft.word.doc", rank: .owner),
             OpenedType("org.openxmlformats.wordprocessingml.document", rank: .owner),
+            OpenedType("net.daringfireball.markdown", rank: .owner),
           ]),
       ])
   }

@@ -79,6 +79,25 @@ final class InfoPlistDriftTests: XCTestCase {
         in: declarations, types: SystemContentTypes(), imported: imported), [])
   }
 
+  /// Catches a Markdown import that drops an extension or its conformance. A `.md` file can type as
+  /// another app's `com.unknown.md`, which does not conform to Markdown, and the router then finds
+  /// no viewer for it. The import tells Launch Services that uniterm's Markdown type owns the
+  /// extensions. Whether the system prefers it over another app's claim depends on the machine, and
+  /// no test can prove that.
+  func testTheMarkdownTypeIsImportedWithItsExtensions() throws {
+    let plist = try loadPlist()
+    let entries = try XCTUnwrap(plist["UTImportedTypeDeclarations"] as? [[String: Any]])
+    let markdown = try XCTUnwrap(
+      entries.first { $0["UTTypeIdentifier"] as? String == "net.daringfireball.markdown" })
+    let tags = try XCTUnwrap(markdown["UTTypeTagSpecification"] as? [String: Any])
+
+    XCTAssertEqual(markdown["UTTypeConformsTo"] as? [String], ["public.plain-text"])
+    XCTAssertEqual(
+      Set(tags["public.filename-extension"] as? [String] ?? []),
+      ["md", "markdown", "mdown", "mkd", "mkdn"])
+    XCTAssertEqual(tags["public.mime-type"] as? String, "text/markdown")
+  }
+
   // MARK: The checker can fail
 
   private func entry(types: [String], rank: String?) -> [String: Any] {
@@ -125,6 +144,7 @@ final class InfoPlistDriftTests: XCTestCase {
       [
         .undeclared(type: "com.adobe.pdf"),
         .undeclared(type: "com.microsoft.word.doc"),
+        .undeclared(type: "net.daringfireball.markdown"),
         .undeclared(type: "org.openxmlformats.spreadsheetml.sheet"),
         .undeclared(type: "org.openxmlformats.wordprocessingml.document"),
         .undeclared(type: "public.comma-separated-values-text"),
@@ -141,6 +161,7 @@ final class InfoPlistDriftTests: XCTestCase {
       [
         .undeclared(type: "com.adobe.pdf"),
         .undeclared(type: "com.microsoft.word.doc"),
+        .undeclared(type: "net.daringfireball.markdown"),
         .undeclared(type: "org.openxmlformats.spreadsheetml.sheet"),
         .undeclared(type: "org.openxmlformats.wordprocessingml.document"),
         .undeclared(type: "public.comma-separated-values-text"),

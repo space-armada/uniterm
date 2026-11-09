@@ -150,6 +150,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
   private func wire() {
     content.onOpen = { [weak self] in self?.showOpenPanel() }
+    content.onReload = { [weak self] in self?.reload() }
     content.onDrop = { [weak self] urls in self?.handleDrop(urls) ?? false }
     content.onLayout = { [weak self] in self?.applyPendingAnchor() }
     content.textView.delegate = links
@@ -268,8 +269,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
         file: file, kind: kind, format: format, anchor: anchor, generation: generation)
 
     case .markdown:
-      fail(
-        TextFormatRule.unsupportedMessage(fileName: name, description: "a Markdown file"))
+      await loadMarkdown(file: file, anchor: anchor, generation: generation)
 
     case .unsupported(let description):
       fail(TextFormatRule.unsupportedMessage(fileName: name, description: description))
@@ -337,6 +337,48 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     }
   }
 
+  private func loadMarkdown(file: URL, anchor: TextViewerAnchor?, generation: Int) async {
+    let name = file.lastPathComponent
+    let limits = settings.limits
+    let result = await MarkdownLoading.load(path: file.path, limit: limits.maxMarkdownBytes)
+
+    guard generation == openGeneration, !closed else { return }
+
+    switch result {
+    case .failure(.access(let error)):
+      fail(error.errorDescription ?? "The file could not be opened.")
+
+    case .failure(.tooLarge(_, let bytes, _)):
+      fail(limits.tooLargeMessage(fileName: name, bytes: bytes, format: .markdown))
+
+    case .success(let document):
+      guard let view = await markdownView(limits: limits) else {
+        if generation == openGeneration, !closed {
+          fail("The Markdown viewer could not start, so \u{201C}\(name)\u{201D} was not opened.")
+        }
+
+        return
+      }
+
+      guard generation == openGeneration, !closed else {
+        if content.markdownView !== view { view.close() }
+        return
+      }
+
+      show(markdown: view, document: document, anchor: anchor)
+    }
+  }
+
+  /// The pane's Markdown page. It is built when the first Markdown document opens and stays until
+  /// the pane shows something else. A pane that never shows Markdown starts no web content process.
+  private func markdownView(limits: TextViewerLimits) async -> MarkdownView? {
+    if let existing = content.markdownView { return existing }
+
+    guard case .success(let assets) = MarkdownAssets.shared else { return nil }
+
+    return await MarkdownView.make(assets: assets, limits: limits)
+  }
+
   @concurrent
   private static func openForHelper(path: String) async -> Result<
     OpenedDocumentFile, SourceAccessError
@@ -385,7 +427,72 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
   // MARK: Showing
 
+  private func show(
+    markdown view: MarkdownView, document: MarkdownDocument, anchor: TextViewerAnchor?
+  ) {
+    opening = nil
+    messageText = nil
+    textLength = nil
+    content.pdfView.document = nil
+    content.textView.textStorage?.setAttributedString(NSAttributedString())
+
+    if content.markdownView !== view {
+      view.onRendered = { [weak self] in self?.markdownRendered() }
+      view.onFailed = { [weak self] reason in self?.markdownFailed(reason) }
+      view.onTerminated = { [weak self] in self?.markdownTerminated() }
+      view.onLink = { [weak self] url in self?.links.handle(url) }
+
+      content.install(markdown: view)
+      view.apply(palette)
+    }
+
+    content.show(.markdown)
+
+    pendingAnchor = nil
+    anchorApplied = anchor == nil
+
+    if anchor == nil { describesFromRecord = false }
+
+    let start = anchor?.sourceLine.map {
+      MarkdownAnchor(line: $0, fraction: anchor?.fraction ?? 0)
+    }
+
+    view.show(document: document, anchor: start)
+    refresh()
+  }
+
+  private func markdownRendered() {
+    anchorApplied = true
+    describesFromRecord = false
+    refresh()
+  }
+
+  private func markdownFailed(_ reason: String) {
+    let name = record.path.map { ($0 as NSString).lastPathComponent } ?? Self.untitled
+    let detail = reason.isEmpty ? "" : " \(reason)"
+
+    fail("\u{201C}\(name)\u{201D} could not be shown.\(detail)")
+  }
+
+  /// WebKit's content process ended. The pane keeps the last position in its description, says
+  /// what happened, and offers Reload.
+  private func markdownTerminated() {
+    if let anchor = content.markdownView?.anchor {
+      record.anchor = .markdown(line: anchor.line, fraction: anchor.fraction)
+    }
+
+    describesFromRecord = true
+    anchorApplied = true
+
+    let text = "The page for this document stopped. Reload to show it again."
+
+    showMessage(text, offersOpen: false, offersReload: true)
+    messageText = text
+    refresh()
+  }
+
   private func show(pdf document: PDFDocument, anchor: TextViewerAnchor?) {
+    content.removeMarkdown()
     opening = nil
     messageText = nil
     textLength = nil
@@ -401,6 +508,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   }
 
   private func show(text: NSAttributedString, anchor: TextViewerAnchor?) {
+    content.removeMarkdown()
     opening = nil
     messageText = nil
     textLength = text.length
@@ -438,7 +546,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
       content.layoutSubtreeIfNeeded()
       scrollText(toCharacter: anchor.characterIndex ?? 0)
 
-    case .message:
+    case .markdown, .message:
       return
     }
 
@@ -449,6 +557,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   }
 
   private func fail(_ text: String) {
+    content.removeMarkdown()
     opening = nil
     describesFromRecord = false
     anchorApplied = true
@@ -462,13 +571,13 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     refresh()
   }
 
-  private func showMessage(_ text: String, offersOpen: Bool) {
+  private func showMessage(_ text: String, offersOpen: Bool, offersReload: Bool = false) {
     messageText = nil
     content.pdfView.document = nil
-    content.show(.message(text, offersOpen: offersOpen))
+    content.show(.message(text, offersOpen: offersOpen, offersReload: offersReload))
   }
 
-  static let emptyText = "Open a PDF, RTF, or Word document, or drop one here."
+  static let emptyText = "Open a PDF, Markdown, RTF, or Word document, or drop one here."
 
   // MARK: Anchor
 
@@ -521,6 +630,11 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
       return .text(characterIndex: index)
 
+    case .markdown:
+      guard let anchor = content.markdownView?.anchor else { return nil }
+
+      return .markdown(line: anchor.line, fraction: anchor.fraction)
+
     case .message:
       return nil
     }
@@ -569,10 +683,25 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     open(path: path, bookmark: record.bookmark, anchor: record.anchor, origin: origin.loadOrigin)
   }
 
+  /// Reads the file again and shows it at the position the pane holds. A pane whose web content
+  /// process ended comes back this way, with its images fetched afresh.
+  public func reload() {
+    guard let path = record.path else { return }
+
+    let anchor = content.markdownView?.anchor.map {
+      TextViewerAnchor.markdown(line: $0.line, fraction: $0.fraction)
+    }
+
+    open(
+      path: path, bookmark: record.bookmark, anchor: anchor ?? currentAnchor() ?? record.anchor,
+      origin: .user)
+  }
+
   public func close() {
     closed = true
     alerts.discard()
     cancelLoad()
+    content.removeMarkdown()
 
     if let pageObserver { NotificationCenter.default.removeObserver(pageObserver) }
 
@@ -672,6 +801,13 @@ public final class TextViewerApplet: Applet, SourceReplacing {
       return [
         AppletSegment(
           symbolName: "doc.text", text: "\(textLength.formatted()) characters")
+      ]
+
+    case .markdown:
+      guard let view = content.markdownView, view.isRendered else { return [] }
+
+      return [
+        AppletSegment(symbolName: "text.alignleft", text: "\(view.lineCount.formatted()) lines")
       ]
 
     case .message:

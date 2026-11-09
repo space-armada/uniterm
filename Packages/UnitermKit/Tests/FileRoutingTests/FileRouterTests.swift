@@ -33,6 +33,32 @@ final class FileRouterTests: XCTestCase {
   private let table = applet("table", [("com.example.json", .alternate)])
   private let map = applet("map", [("com.example.geojson", .alternate)])
 
+  // MARK: Markdown
+
+  /// Catches a router that finds no viewer for a `.md` file. The router reads a file's type from the
+  /// system, with no extension fallback. A `.md` file typed as the Markdown type routes to the
+  /// viewer. The same file typed as another app's plain-text type, which does not conform to
+  /// Markdown, is refused. That second case is why the app imports the Markdown type.
+  func testAMarkdownFileRoutesOnlyWhenItsTypeIsMarkdown() throws {
+    let viewer = applet("viewer", [("net.daringfireball.markdown", .owner)])
+    let parents = [
+      "net.daringfireball.markdown": ["public.text"], "com.unknown.md": ["public.text"],
+    ]
+    let markdownTyped = FixtureTypes(
+      parents: parents, byExtension: ["md": "net.daringfireball.markdown"])
+    let otherTyped = FixtureTypes(parents: parents, byExtension: ["md": "com.unknown.md"])
+
+    XCTAssertEqual(
+      openedApplet(
+        FileRouter(declarations: [viewer], types: markdownTyped).decide(try file("README.md"))),
+      "viewer")
+
+    guard
+      case .refused = FileRouter(declarations: [viewer], types: otherTyped)
+        .decide(try file("README.md"))
+    else { return XCTFail("a .md file of an unrelated type routed to the Markdown viewer") }
+  }
+
   // MARK: Matching
 
   /// Catches a router that lets rank beat specificity. The map is only an alternate, but its type

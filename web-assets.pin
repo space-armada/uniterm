@@ -1,0 +1,24 @@
+# The web assets that the Markdown viewer bundles, and where they came from.
+# scripts/fetch-web-assets.sh reads this file. Bump it deliberately, and rerun make licenses.
+#
+# Each package is pinned three ways: the version, the sha256 of the npm tarball, and the sha512
+# integrity string that the npm registry publishes for it. The file that ships is pinned by its own
+# sha256. A test hashes the shipped files against this file, so an edit to one without the other
+# fails the package tests.
+MARKDOWN_IT_VERSION=15.0.3
+MARKDOWN_IT_TARBALL_SHA256=98a7453983ab0e268c17dbd5260bf7190ba46b4cca912327fc1c1a2578e4b56d
+MARKDOWN_IT_INTEGRITY=sha512-+Az7Ojz3iRGu8KYMvJ6xVhvrxP3eE+vEtJX75Ow88XBpcQNV/0lGX5ZynIIBftREo4DC2jsveAMDaeltmm8QvQ==
+MARKDOWN_IT_DIST=dist/browser/markdown-it.umd.min.js
+MARKDOWN_IT_SHA256=391f2aa638e75e6c7859d0a5c5650ef0956722a45998f17e05b83bc655778e1e
+DOMPURIFY_VERSION=3.4.17
+DOMPURIFY_TARBALL_SHA256=056cbdae276897208b88c21d1d779adfa09ad7be488a2f510a28e900d3bbffe7
+DOMPURIFY_INTEGRITY=sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==
+DOMPURIFY_DIST=dist/purify.min.js
+DOMPURIFY_SHA256=cd37898f9782adf54820c413191b5691803f0f137c799d6edcfd38523b4c2c31
+
+# The allowlist that the sanitizer's configuration in viewer.js copies. It is GitHub's published
+# README sanitization allowlist, as html-pipeline ships it. The configuration drops longdesc, since
+# it names a resource, and the viewer rewrites or removes every image URL after sanitizing.
+ALLOWLIST_SOURCE=https://github.com/gjtorikian/html-pipeline/blob/c99d76dbfe817598387c371af342e25abdccd363/lib/html_pipeline/sanitization_filter.rb
+ALLOWLIST_COMMIT=c99d76dbfe817598387c371af342e25abdccd363
+ALLOWLIST_FILE_SHA256=0329513598e50058530bcf0aa8be201adbcf12ed7f994ca9af849f5d16193b8c

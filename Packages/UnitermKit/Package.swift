@@ -157,7 +157,8 @@ let package = Package(
       dependencies: [
         "AppletKit", "BrowserApplet", "DocumentWire", "HelperHost", "SourceAccess", "StatusKit",
         "TextViewerModel", "Theme",
-      ]),
+      ],
+      resources: [.copy("Resources/web")]),
     .target(
       name: "AppletCatalog",
       dependencies: [
@@ -237,9 +238,9 @@ let package = Package(
       name: "TextViewerAppletTests",
       dependencies: [
         "TextViewerApplet", "TextViewerModel", "DocumentWire", "DocumentDecoderHelper",
-        "HelperHost",
+        "HelperHost", "SourceAccess",
         "BrowserApplet", "AppletKit", "StatusKit", "Theme", "AppletTestSupport",
-        "DocumentTestSupport", "TableTestSupport",
+        "DocumentTestSupport", "TableTestSupport", "BrowserTestSupport",
       ]),
     .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
     .testTarget(name: "AppletKitTests", dependencies: ["AppletKit", "AppletTestSupport"]),

@@ -14,6 +14,13 @@ public struct TextViewerLimits: Equatable, Sendable {
   /// The most bytes of an RTF or Word file the app hands the helper.
   public var maxDocumentBytes = 64 << 20
 
+  /// The most bytes read from a Markdown file. The page parses it in WebKit's content process, so a
+  /// large file costs that process, never the app.
+  public var maxMarkdownBytes = 32 << 20
+
+  /// The most bytes served for one image a Markdown document names.
+  public var maxMarkdownImageBytes = 16 << 20
+
   /// The most characters, in UTF-16 units, a decoded document may hold.
   public var maxDecodedLength = 4_000_000
 
@@ -38,7 +45,11 @@ public struct TextViewerLimits: Equatable, Sendable {
   public static let standard = TextViewerLimits()
 
   public func fileLimit(for format: TextFormat) -> Int {
-    format == .pdf ? maxPDFBytes : maxDocumentBytes
+    switch format {
+    case .pdf: return maxPDFBytes
+    case .markdown: return maxMarkdownBytes
+    default: return maxDocumentBytes
+    }
   }
 
   public var replyLimits: DocumentReplyLimits {

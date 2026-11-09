@@ -156,25 +156,6 @@ final class ImageViewerUITests: UnitermUITestCase {
     add(attachment)
   }
 
-  /// Chooses a file in the open panel that is already showing, by typing its path into the
-  /// go-to-folder sheet.
-  private func choose(_ file: URL, in app: XCUIApplication, window: XCUIElement) {
-    let panel = window.sheets.firstMatch
-    XCTAssertTrue(panel.waitForExistence(timeout: 10), "no open panel")
-
-    app.typeKey("g", modifierFlags: [.command, .shift])
-
-    let goTo = panel.sheets.firstMatch
-    XCTAssertTrue(goTo.waitForExistence(timeout: 5), "no go-to-folder sheet")
-
-    app.typeText(file.path)
-    app.typeKey(.return, modifierFlags: [])
-    XCTAssertTrue(waitUntilGone(goTo, timeout: 5), "the go-to-folder sheet never closed")
-
-    app.typeKey(.return, modifierFlags: [])
-    XCTAssertTrue(waitForNoSheet(in: window, timeout: 10), "the panel never closed")
-  }
-
   /// Catches a launcher without the image viewer, a pane that does not offer to open an image, and
   /// an open panel that does not end in a picture. Cmd-D shows the launcher, Cmd-6 picks the image
   /// viewer, and the pane's Open button opens a panel that loads the chosen PNG and reports its

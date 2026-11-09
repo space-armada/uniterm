@@ -1,0 +1,162 @@
+/* The viewer's page. The colors are variables that the host sets from the theme palette. The
+   values here are the Latte flavor, which applies until the host pushes the real ones. */
+:root {
+  --um-background: #eff1f5;
+  --um-surface: #e6e9ef;
+  --um-text: #4c4f69;
+  --um-muted: #5c5f77;
+  --um-border: #bcc0cc;
+  --um-link: #1e66f5;
+  --um-mark: #f9e2af;
+  --um-code: #d20f39;
+  color-scheme: light;
+}
+
+html {
+  background: var(--um-background);
+}
+
+body {
+  margin: 0;
+  padding: 24px 32px 64px;
+  color: var(--um-text);
+  background: var(--um-background);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  overflow-wrap: break-word;
+}
+
+main {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.6em 0 0.6em;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--um-border); }
+h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--um-border); }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+h5 { font-size: 0.875em; }
+h6 { font-size: 0.85em; color: var(--um-muted); }
+
+main > :first-child {
+  margin-top: 0;
+}
+
+p, ul, ol, dl, table, blockquote, pre, details, figure {
+  margin: 0 0 1em;
+}
+
+a {
+  color: var(--um-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+ul, ol {
+  padding-left: 2em;
+}
+
+li + li {
+  margin-top: 0.25em;
+}
+
+blockquote {
+  padding: 0 1em;
+  color: var(--um-muted);
+  border-left: 0.25em solid var(--um-border);
+}
+
+blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+code, kbd, samp, tt {
+  font: 0.875em ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+code, tt {
+  padding: 0.2em 0.4em;
+  background: var(--um-surface);
+  border-radius: 4px;
+}
+
+pre {
+  padding: 14px 16px;
+  overflow: auto;
+  background: var(--um-surface);
+  border-radius: 6px;
+  line-height: 1.45;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.875em;
+}
+
+kbd {
+  padding: 2px 6px;
+  background: var(--um-surface);
+  border: 1px solid var(--um-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
+table {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 6px 13px;
+  border: 1px solid var(--um-border);
+}
+
+th {
+  font-weight: 600;
+}
+
+tr:nth-child(even) td {
+  background: var(--um-surface);
+}
+
+hr {
+  height: 1px;
+  margin: 1.5em 0;
+  border: 0;
+  background: var(--um-border);
+}
+
+details {
+  padding: 0.25em 0;
+}
+
+summary {
+  cursor: default;
+  font-weight: 600;
+}
+
+mark {
+  color: inherit;
+  background: var(--um-mark);
+}
+
+figcaption {
+  color: var(--um-muted);
+  font-size: 0.875em;
+}

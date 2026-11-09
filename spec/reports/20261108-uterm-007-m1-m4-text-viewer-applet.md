@@ -20,7 +20,7 @@ work is stashed. No commands need the user's credentials.
 | Milestone | Run status | Commit |
 |---|---|---|
 | UTERM-007 M1: PDF and RTF | DONE | "Add a text viewer for PDF, RTF, and Word documents" |
-| UTERM-007 M2: Markdown | QUEUED | |
+| UTERM-007 M2: Markdown | DONE | "Render Markdown in the text viewer inside an isolated web view" |
 | UTERM-007 M3: Live reload | QUEUED | |
 | UTERM-007 M4: Find and contents | QUEUED | |
 
@@ -166,3 +166,119 @@ code, and no test fails on it.
 | `TextViewerUITests`, 4 tests | 34 s |
 
 The package suite went from 1,767 tests in 130 s to 1,867 tests in 123 s.
+
+## UTERM-007 M2: Markdown
+
+### Commits
+
+- "Render Markdown in the text viewer inside an isolated web view". The review fixes, the shared open-panel helper,
+  and this report's M2 section are in the same commit.
+
+### What landed
+
+- markdown-it 15.0.3 and DOMPurify 3.4.17, pinned by version and sha256 in `web-assets.pin`.
+  `scripts/fetch-web-assets.sh` reproduces them byte for byte from the npm registry, and a package test hashes the
+  shipped files against the pin. The sanitizer allowlist follows `gjtorikian/html-pipeline`'s sanitization filter at
+  a recorded commit. `make licenses` collects both notices.
+- Each Markdown pane gets its own web view with a non-persistent store and page JavaScript off. The parser, sanitizer,
+  and viewer scripts run in one named content world, with one message handler there. A scheme handler serves the page,
+  the text, and relative images. A CSP header and a content rule list each block every load outside the scheme. With
+  the sanitizer bypassed in a debug build, either one alone stopped every request.
+- Relative images resolve through a new device-checked walk, `ConfinedFile`. It refuses mount points, automount roots,
+  devices, and FIFOs.
+- Scroll anchors come from markdown-it's token map, held in the isolated world. No DOM attribute is read.
+- Messages from the page carry a page generation, and the host drops stale ones.
+- A content-process crash shows a message with a Reload button.
+- `App/Info.plist` imports `net.daringfireball.markdown` with its extensions, since `.md` resolved to another app's
+  `com.unknown.md` on this machine and the router matches by type conformance only.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | 1GKPHV, Q9QKYB, 58N0KN, then 9BZ4ZR, 4AG299 | pass |
+| `make build` | 4V0AF4 | pass |
+| `make swiftpm-offline-check` | ZXSKYE | pass |
+| `make licenses` | 8TRR7X | pass, only the new notices changed |
+| `proposals.py check` and `freeze` | JQ5T5T, 9M9QTC | `[]` |
+| Text viewer UI tests, first M2 run | K49RR0 | 6 tests, 0 failures. The screenshot showed a closed `<details>` leaking its body |
+| Text viewer UI tests, after the review fixes | 7HHRBQ | 1 failure: the PDF open-panel test typed its path. See "Unowned failures" |
+| Text, data, image, and map viewer UI tests, after the shared paste helper | M5G46B | 36 tests, 0 failures |
+| `make test-package`, coordinator, before commit | SAKK8J | 1,909 tests, 7 skipped, 0 failures, 207 s |
+
+The coordinator looked at the light and dark README screenshots, and at the restore screenshot. The heading and the
+image are centered, and the code block and the table render. Theme colors follow the uniterm theme. The closed
+`<details>` hides its body after the fix. The restored README lands at Section 94 for its stored line 400.
+
+Before each UI run, the coordinator checked the other sessions' running commands by directory. They were elastane's
+CLI tests and nitipan's Go `make ci`, and neither uses the screen. After each run, the crash folder held only the
+helpers' fault-injection reports from package tests and another project's reports.
+
+### Best guesses
+
+Each is a Decision Log entry tagged as a work-queue best guess.
+
+- The payload stays at version 1, with the Markdown anchor fields optional. No reader outside this branch has seen a
+  version 1 payload.
+- The CSP also allows `style-src` and `connect-src` for the viewer's scheme only, since the page fetches its text and
+  stylesheet from it.
+- A Markdown file reads up to 32 MiB, and one image up to 16 MiB.
+- Sanitizer narrowings against GitHub's list: `longdesc` dropped, `srcset` only on `<source>`, and links limited to
+  `http`, `https`, and `mailto`. Task-list checkboxes render as text, since `input` is off the allowlist.
+- A raw-HTML element left open by one Markdown block groups the following blocks until it closes, up to 400 blocks,
+  and the group is sanitized as one unit. That is what keeps a `<details>` body inside its element.
+- The rule list compiles into WebKit's default rule-list store. A failed compile fails closed with a message, and the
+  next pane compiles again.
+- Reload has no key or registry command in M2. M3 binds Cmd-R.
+- M2's check "After a scroll and an immediate layout save, reopen lands on that scroll position" was amended. A save
+  taken after the page's scroll report arrives, one message after the scroll, reopens there. `describe()` is
+  synchronous, so a save in the same turn as the scroll cannot hold the new position.
+
+### Review findings
+
+| Finding | Disposition |
+|---|---|
+| A closed `<details>` showed its body (coordinator, from the screenshot) | Fixed. Each block was sanitized alone, which closed the element early. A test failed on the old code |
+| The immediate-save check was not met as written | Narrowed: the anchor pushes from the scroll handler. Check amended, as above |
+| `.md` files may not route by type | Traced: the router matches by conformance only. Fixed with the type import. Whether Launch Services prefers uniterm's import over another app's claim is not provable in tests |
+| A failed rule-list compile was cached until relaunch (CONFIRMED) | Fixed, with a test of the injected compiler |
+| Payload bumped to version 2 | Reverted to version 1, and the Decision Log entry corrected |
+| Scheme tasks keyed by object identity could be answered by a stale read (PLAUSIBLE) | Fixed with a per-request serial. Not reproduced |
+| Page messages carried no generation (PLAUSIBLE) | Fixed. A test feeds stale messages |
+| Test-only hooks on the scheme handler | Removed. The tests observe image loads through rendered image sizes |
+
+The ADR-impact pass found no conflicts. One candidate passed the bar and is in the Decision Log as Undecided: a path
+named by a document's content never leaves the document's volume and never triggers an automount. The second, the web
+view lockdown for untrusted markup, has one consumer today, so it stays in the proposal.
+
+### Left for the user
+
+- A real file drag onto rendered Markdown. Only the drag registration is tested.
+- Whether `.md` files route to the viewer through Finder or Cmd-O on a machine where another app claims `.md`.
+
+### Unowned failures
+
+`testLauncherOpensAnEmptyViewerAndItsOpenButtonLoadsAPDF` failed once in 7HHRBQ: "the go-to-folder sheet never closed".
+Typing the path took 12 s against about 2.5 s in passing runs. The test, written in M1, typed the path into the open
+panel. `spec/flaky-tests.md` records the same flake as fixed for the data viewer by pasting. The paste helper moved
+into `UnitermUITestCase`, and the text, data, image, and map viewer tests all use it now. The four classes then passed
+together in M5G46B. One clean run does not prove the fix. It rests on the data viewer's earlier diagnosis.
+
+### Test cost
+
+| Class | Tests | Wall time alone |
+|---|---|---|
+| `ConfinedFileTests` | 6 | 0.005 s |
+| `MarkdownPureTests` | 6 | 0.006 s |
+| `MarkdownViewTests` | 16 at first count | 9.8 s, about 4 s of it the 20 MB test |
+| `MarkdownAppletTests` | 7 at first count | 1.4 s |
+| `TextViewerUITests` | 6 | 48 s |
+
+The 20 MB test is the only package test over 2 s. It proves a stated milestone check that no cheaper layer can show.
+It rendered in 3.75 s in SAKK8J, with a longest main-thread gap of 0.025 s.
+
+The package suite took 207 s in SAKK8J, against 123 s after M1. 60 s of that is two `BrowserDownloadCancelTests`
+cases, `testACancelWithNoByteYetWaitsForOne` and `testADeferredDownloadThatFailsFirstCleansUpQuietly`, at 30.1 s each.
+Both passed. The same code took 0.08 s and 0.09 s for them in the implementer's T8BTYF. Run alone in 1FBDJX, the class
+took 1.5 s. The 30 s looks like a wait running out its time bound, not slow work. SAKK8J ran right after a 36-test UI
+run, while two other sessions ran CI. The cause is unresolved. M2 changed no browser code.

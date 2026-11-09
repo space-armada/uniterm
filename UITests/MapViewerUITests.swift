@@ -208,30 +208,6 @@ final class MapViewerUITests: UnitermUITestCase {
     return file
   }
 
-  /// Chooses a file in the open panel that is already showing, by typing its path into the
-  /// go-to-folder sheet.
-  private func choose(_ file: URL, in app: XCUIApplication, window: XCUIElement) {
-    let panel = window.sheets.firstMatch
-    XCTAssertTrue(panel.waitForExistence(timeout: 10), "no open panel")
-
-    app.typeKey("g", modifierFlags: [.command, .shift])
-
-    let goTo = panel.sheets.firstMatch
-    XCTAssertTrue(goTo.waitForExistence(timeout: 5), "no go-to-folder sheet")
-
-    app.typeText(file.path)
-
-    let typed = goTo.textFields.firstMatch
-    XCTAssertTrue(
-      waitFor(typed, timeout: 5) { $0 == file.path }, "the go-to field holds the wrong path")
-
-    app.typeKey(.return, modifierFlags: [])
-    XCTAssertTrue(waitUntilGone(goTo, timeout: 5), "the go-to-folder sheet never closed")
-
-    app.typeKey(.return, modifierFlags: [])
-    XCTAssertTrue(waitForNoSheet(in: window, timeout: 10), "the panel never closed")
-  }
-
   /// Catches Cmd-O routing a GeoJSON file anywhere but the map, and a map that shows no pins for
   /// it. The file opens in a new pane beside the terminal, with three pins and a segment that says
   /// so. The line in the file is skipped.
