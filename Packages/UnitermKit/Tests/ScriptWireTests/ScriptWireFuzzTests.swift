@@ -28,10 +28,14 @@ final class ScriptWireFuzzTests: XCTestCase {
       ScriptHelperMessage.begin(name: "synthetic.janet").frame(),
       ScriptHelperMessage.request(id: 3, call: .postStatus(level: .warning, text: "synthetic"))
         .frame(),
-      ScriptAppMessage.hello(version: 1).frame(),
-      ScriptAppMessage.reply(id: 3, result: .ok(Data([1, 2]))).frame(),
-      ScriptAppMessage.reply(id: 4, result: .failure(.refused, "synthetic refusal")).frame(),
     ]
+      + ScriptCodecTests.calls.map { ScriptHelperMessage.request(id: 3, call: $0).frame() }
+      + [
+        ScriptAppMessage.hello(version: 1).frame(),
+        ScriptAppMessage.reply(id: 3, result: .ok(Data([1, 2]))).frame(),
+        ScriptAppMessage.reply(id: 5, result: .failure(.notFound, "synthetic miss")).frame(),
+        ScriptAppMessage.reply(id: 4, result: .failure(.refused, "synthetic refusal")).frame(),
+      ]
   }
 
   /// Catches a mutated frame that traps a decoder, or a decoded message that does not survive its
@@ -74,6 +78,32 @@ final class ScriptWireFuzzTests: XCTestCase {
             type: againType, body: again.dropFirst(FrameHeader.size).prefix(againLength)),
           message, "seed \(seed), iteration \(iteration)")
       }
+    }
+  }
+
+  /// Catches a mutated reply value that traps the Swift value decoder, or one that decodes and
+  /// does not encode back to the same value. It does not exercise the shim's reader, which
+  /// `ScriptReplyReaderTests` holds against crafted bytes.
+  func testMutatedValuesDecodeWithoutTrappingAndRoundTrip() throws {
+    var random = SplitMix64(seed: seed &+ 1)
+
+    let seeds = try [
+      ScriptValue.record([
+        "window": .integer(1), "title": .string("synthetic"),
+        "tabs": .array([.record(["tab": .integer(2), "selected": .bool(true)])]),
+      ]),
+      .array([.integer(ScriptProtocol.maxID), .null, .bool(false), .string("caf\u{00E9}")]),
+    ].map { try $0.encoded() }
+
+    for iteration in 0..<iterations {
+      var bytes = [UInt8](seeds[Int(random.next() % UInt64(seeds.count))])
+
+      for _ in 0..<Int(random.next() % 3) { mutate(&bytes, using: &random) }
+
+      guard let value = try? ScriptValue.decode(Data(bytes)) else { continue }
+
+      XCTAssertEqual(
+        try ScriptValue.decode(try value.encoded()), value, "seed \(seed), iteration \(iteration)")
     }
   }
 

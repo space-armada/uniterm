@@ -1,6 +1,8 @@
 #include "uniterm_janet.h"
 
 #include <malloc/malloc.h>
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -125,6 +127,553 @@ static Janet cfun_post_status(int32_t argc, Janet *argv) {
     return janet_wrap_nil();
 }
 
+/*
+ * The calls other than post-status. Each function checks its script's arguments here, writes the
+ * call in the wire's encoding, and hands the bytes to the host in one callback. The reply comes
+ * back as bytes, and this file turns them into Janet values, so no Swift frame ever sits between
+ * a Janet error and the code that catches it.
+ */
+
+enum {
+    CALL_LIST_WINDOWS = 2,
+    CALL_LIST_PANES = 3,
+    CALL_OPEN_PANE = 4,
+    CALL_OPEN_TAB = 5,
+    CALL_SEND = 6
+};
+
+/* The largest ID a script may hold. Every integer below it is exact in a double. */
+#define MAX_ID 9007199254740991.0
+#define MAX_VALUE_DEPTH 8
+#define MAX_VALUE_STRING 4096
+#define MAX_VALUE_KEY 32
+#define MAX_VALUE_FIELDS 64
+
+static void put_u8(JanetBuffer *buffer, uint8_t value) {
+    janet_buffer_push_u8(buffer, value);
+}
+
+static void put_u16(JanetBuffer *buffer, uint16_t value) {
+    put_u8(buffer, (uint8_t)(value >> 8));
+    put_u8(buffer, (uint8_t)(value & 0xFF));
+}
+
+static void put_u32(JanetBuffer *buffer, uint32_t value) {
+    put_u16(buffer, (uint16_t)(value >> 16));
+    put_u16(buffer, (uint16_t)(value & 0xFFFF));
+}
+
+static void put_id(JanetBuffer *buffer, uint64_t value) {
+    put_u32(buffer, (uint32_t)(value >> 32));
+    put_u32(buffer, (uint32_t)(value & 0xFFFFFFFF));
+}
+
+/* Strict UTF-8: no overlong forms, no surrogates, nothing above U+10FFFF. */
+static int valid_utf8(const uint8_t *bytes, int32_t length) {
+    int32_t index = 0;
+
+    while (index < length) {
+        uint8_t lead = bytes[index];
+        int32_t extra;
+        uint32_t scalar;
+
+        if (lead < 0x80) {
+            index += 1;
+            continue;
+        } else if (lead >= 0xC2 && lead <= 0xDF) {
+            extra = 1;
+            scalar = lead & 0x1F;
+        } else if (lead >= 0xE0 && lead <= 0xEF) {
+            extra = 2;
+            scalar = lead & 0x0F;
+        } else if (lead >= 0xF0 && lead <= 0xF4) {
+            extra = 3;
+            scalar = lead & 0x07;
+        } else {
+            return 0;
+        }
+
+        if (index + extra >= length) return 0;
+
+        for (int32_t step = 1; step <= extra; step++) {
+            uint8_t next = bytes[index + step];
+
+            if ((next & 0xC0) != 0x80) return 0;
+
+            scalar = (scalar << 6) | (next & 0x3F);
+        }
+
+        if (extra == 2 && (scalar < 0x800 || (scalar >= 0xD800 && scalar <= 0xDFFF))) return 0;
+        if (extra == 3 && (scalar < 0x10000 || scalar > 0x10FFFF)) return 0;
+
+        index += extra + 1;
+    }
+
+    return 1;
+}
+
+/*
+ * An ID is an exact integer from zero to 2^53 - 1. A number that is not finite, not whole, or out
+ * of that range is the script's mistake, and the message says which.
+ */
+static uint64_t checked_id(Janet value, const char *what) {
+    if (!janet_checktype(value, JANET_NUMBER)) janet_panicf("%s must be a number", what);
+
+    double number = janet_unwrap_number(value);
+
+    if (isnan(number) || isinf(number)) janet_panicf("%s must be a finite number", what);
+    if (number != floor(number)) janet_panicf("%s must be a whole number", what);
+    if (number < 0) janet_panicf("%s must not be negative", what);
+    if (number > MAX_ID) janet_panicf("%s is too large", what);
+
+    return (uint64_t)number;
+}
+
+static void require_reference(Janet reference) {
+    if (!janet_checktype(reference, JANET_STRUCT) && !janet_checktype(reference, JANET_TABLE)) {
+        janet_panic("a reference must be a struct such as {:window 1 :pane 2}");
+    }
+}
+
+static uint64_t required_id(Janet reference, const char *key) {
+    Janet value = janet_get(reference, janet_ckeywordv(key));
+
+    if (janet_checktype(value, JANET_NIL)) janet_panicf("the reference has no :%s", key);
+
+    char what[32];
+
+    snprintf(what, sizeof(what), "the :%s", key);
+
+    return checked_id(value, what);
+}
+
+static uint64_t window_of(Janet reference) {
+    require_reference(reference);
+
+    return required_id(reference, "window");
+}
+
+/*
+ * A pane reference holds a window and a pane. It may hold a tab too, as a tab reference does. Keys
+ * beyond these are ignored, so a script may pass a reference it got from a longer one.
+ */
+static void put_pane_reference(JanetBuffer *buffer, Janet reference) {
+    require_reference(reference);
+
+    put_id(buffer, required_id(reference, "window"));
+    put_id(buffer, required_id(reference, "pane"));
+
+    Janet tab = janet_get(reference, janet_ckeywordv("tab"));
+
+    if (janet_checktype(tab, JANET_NIL)) {
+        put_u8(buffer, 0);
+    } else {
+        put_u8(buffer, 1);
+        put_id(buffer, checked_id(tab, "the :tab"));
+    }
+}
+
+static void check_text(JanetString text, const char *what, int32_t limit, int forbid_slash) {
+    int32_t length = janet_string_length(text);
+
+    if (length == 0) janet_panicf("%s must not be empty", what);
+
+    if (length > limit) janet_panicf("%s is %d bytes, and the most is %d", what, length, limit);
+
+    if (memchr(text, 0, (size_t)length) != NULL) janet_panicf("%s must not hold a NUL byte", what);
+
+    if (forbid_slash && memchr(text, '/', (size_t)length) != NULL) {
+        janet_panicf("%s must be a name, not a path", what);
+    }
+
+    if (!valid_utf8(text, length)) janet_panicf("%s is not UTF-8", what);
+}
+
+static void put_text(JanetBuffer *buffer, JanetString text) {
+    put_u16(buffer, (uint16_t)janet_string_length(text));
+    janet_buffer_push_bytes(buffer, text, janet_string_length(text));
+}
+
+/* A directory must be an absolute path. A relative one would resolve against the helper's own. */
+static JanetString checked_directory(Janet value) {
+    if (!janet_checktype(value, JANET_STRING)) janet_panic("the :directory must be a string");
+
+    JanetString text = janet_unwrap_string(value);
+
+    check_text(text, "the :directory", UNITERM_JANET_MAX_DIRECTORY_BYTES, 0);
+
+    if (text[0] != '/') {
+        janet_panic("the :directory must be an absolute path, because the script's own "
+                    "directory is never used");
+    }
+
+    return text;
+}
+
+static void put_optional_directory(JanetBuffer *buffer, Janet value) {
+    if (janet_checktype(value, JANET_NIL)) {
+        put_u8(buffer, 0);
+
+        return;
+    }
+
+    put_u8(buffer, 1);
+    put_text(buffer, checked_directory(value));
+}
+
+/*
+ * Options follow the positional arguments as keyword and value pairs. A nil value stands for an
+ * option left out. An unknown or repeated option is the script's mistake.
+ */
+typedef struct call_options {
+    Janet axis;
+    Janet directory;
+} call_options;
+
+static call_options parse_options(int32_t argc, Janet *argv, int32_t first, int allow_axis) {
+    call_options options = {janet_wrap_nil(), janet_wrap_nil()};
+    int seen_axis = 0;
+    int seen_directory = 0;
+
+    if ((argc - first) % 2 != 0) janet_panic("each option needs a value, as in :directory \"/tmp\"");
+
+    for (int32_t index = first; index < argc; index += 2) {
+        if (allow_axis && janet_keyeq(argv[index], "axis")) {
+            if (seen_axis++) janet_panic("the :axis is given twice");
+
+            options.axis = argv[index + 1];
+        } else if (janet_keyeq(argv[index], "directory")) {
+            if (seen_directory++) janet_panic("the :directory is given twice");
+
+            options.directory = argv[index + 1];
+        } else {
+            janet_panic(allow_axis ? "the options are :axis and :directory"
+                                   : "the only option is :directory");
+        }
+    }
+
+    return options;
+}
+
+/* Reads one value from a reply and moves past it. Returns 0 when the bytes are not a value. */
+static int skip_value(const uint8_t **cursor, const uint8_t *end, int depth) {
+    if (depth > MAX_VALUE_DEPTH || *cursor >= end) return 0;
+
+    uint8_t tag = *(*cursor)++;
+
+    switch (tag) {
+    case 0:
+    case 1:
+    case 2:
+        return 1;
+
+    case 3: {
+        if (end - *cursor < 8) return 0;
+
+        uint64_t value = 0;
+
+        for (int step = 0; step < 8; step++) value = (value << 8) | *(*cursor)++;
+
+        return value <= (uint64_t)MAX_ID;
+    }
+
+    case 4: {
+        if (end - *cursor < 4) return 0;
+
+        uint32_t length = 0;
+
+        for (int step = 0; step < 4; step++) length = (length << 8) | *(*cursor)++;
+
+        if (length > MAX_VALUE_STRING || (size_t)(end - *cursor) < length) return 0;
+        if (!valid_utf8(*cursor, (int32_t)length)) return 0;
+
+        *cursor += length;
+
+        return 1;
+    }
+
+    case 5: {
+        if (end - *cursor < 2) return 0;
+
+        uint32_t count = ((uint32_t)(*cursor)[0] << 8) | (*cursor)[1];
+
+        *cursor += 2;
+
+        for (uint32_t index = 0; index < count; index++) {
+            if (!skip_value(cursor, end, depth + 1)) return 0;
+        }
+
+        return 1;
+    }
+
+    case 6: {
+        if (end - *cursor < 2) return 0;
+
+        uint32_t count = ((uint32_t)(*cursor)[0] << 8) | (*cursor)[1];
+
+        *cursor += 2;
+
+        if (count > MAX_VALUE_FIELDS) return 0;
+
+        const uint8_t *keys[MAX_VALUE_FIELDS];
+        uint8_t key_lengths[MAX_VALUE_FIELDS];
+
+        for (uint32_t index = 0; index < count; index++) {
+            if (*cursor >= end) return 0;
+
+            uint8_t length = *(*cursor)++;
+
+            if (length == 0 || length > MAX_VALUE_KEY || end - *cursor < length) return 0;
+
+            for (uint8_t step = 0; step < length; step++) {
+                if ((*cursor)[step] <= 0x20 || (*cursor)[step] >= 0x7F) return 0;
+            }
+
+            for (uint32_t earlier = 0; earlier < index; earlier++) {
+                if (key_lengths[earlier] == length && memcmp(keys[earlier], *cursor, length) == 0) {
+                    return 0;
+                }
+            }
+
+            keys[index] = *cursor;
+            key_lengths[index] = length;
+            *cursor += length;
+
+            if (!skip_value(cursor, end, depth + 1)) return 0;
+        }
+
+        return 1;
+    }
+
+    default:
+        return 0;
+    }
+}
+
+/* Builds a Janet value from bytes that skip_value accepted, so it never has to refuse any. */
+static Janet decode_value(const uint8_t **cursor) {
+    uint8_t tag = *(*cursor)++;
+
+    switch (tag) {
+    case 1:
+        return janet_wrap_false();
+
+    case 2:
+        return janet_wrap_true();
+
+    case 3: {
+        uint64_t value = 0;
+
+        for (int step = 0; step < 8; step++) value = (value << 8) | *(*cursor)++;
+
+        return janet_wrap_number((double)value);
+    }
+
+    case 4: {
+        uint32_t length = 0;
+
+        for (int step = 0; step < 4; step++) length = (length << 8) | *(*cursor)++;
+
+        Janet text = janet_wrap_string(janet_string(*cursor, (int32_t)length));
+
+        *cursor += length;
+
+        return text;
+    }
+
+    case 5: {
+        uint32_t count = ((uint32_t)(*cursor)[0] << 8) | (*cursor)[1];
+
+        *cursor += 2;
+
+        JanetArray *array = janet_array((int32_t)count);
+
+        for (uint32_t index = 0; index < count; index++) {
+            janet_array_push(array, decode_value(cursor));
+        }
+
+        return janet_wrap_array(array);
+    }
+
+    case 6: {
+        uint32_t count = ((uint32_t)(*cursor)[0] << 8) | (*cursor)[1];
+
+        *cursor += 2;
+
+        JanetKV *record = janet_struct_begin((int32_t)count);
+
+        for (uint32_t index = 0; index < count; index++) {
+            uint8_t length = *(*cursor)++;
+            Janet key = janet_wrap_keyword(janet_keyword(*cursor, length));
+
+            *cursor += length;
+
+            janet_struct_put(record, key, decode_value(cursor));
+        }
+
+        return janet_wrap_struct(janet_struct_end(record));
+    }
+
+    default:
+        return janet_wrap_nil();
+    }
+}
+
+/* Runs one call through the host and turns its reply into a Janet value. */
+static Janet invoke(JanetBuffer *request) {
+    const uniterm_host *host = active_host;
+
+    if (host == NULL || host->call == NULL) janet_panic("this function is not available");
+
+    char error[UNITERM_JANET_ERROR_CAPACITY];
+    uint8_t *reply = NULL;
+    size_t reply_length = 0;
+
+    error[0] = '\0';
+
+    int32_t status = host->call(host->userdata, request->data, (size_t)request->count, &reply,
+                                &reply_length, error, sizeof(error));
+
+    error[sizeof(error) - 1] = '\0';
+
+    if (status != 0) {
+        free(reply);
+        janet_panicf("%s", error[0] != '\0' ? error : "the host refused the call");
+    }
+
+    if (reply == NULL || reply_length == 0) {
+        free(reply);
+
+        return janet_wrap_nil();
+    }
+
+    const uint8_t *cursor = reply;
+    const uint8_t *end = reply + reply_length;
+    int readable = skip_value(&cursor, end, 0) && cursor == end;
+
+    if (!readable) {
+        free(reply);
+        janet_panic("uniterm sent a reply that could not be read");
+    }
+
+    cursor = reply;
+
+    Janet value = decode_value(&cursor);
+
+    free(reply);
+
+    return value;
+}
+
+static Janet cfun_list_windows(int32_t argc, Janet *argv) {
+    (void)argv;
+    janet_fixarity(argc, 0);
+
+    JanetBuffer *request = janet_buffer(8);
+
+    put_u16(request, CALL_LIST_WINDOWS);
+
+    return invoke(request);
+}
+
+static Janet cfun_list_panes(int32_t argc, Janet *argv) {
+    janet_fixarity(argc, 1);
+
+    JanetBuffer *request = janet_buffer(16);
+
+    put_u16(request, CALL_LIST_PANES);
+    put_id(request, window_of(argv[0]));
+
+    return invoke(request);
+}
+
+static Janet cfun_open_pane(int32_t argc, Janet *argv) {
+    janet_arity(argc, 2, -1);
+
+    if (!janet_checktype(argv[0], JANET_KEYWORD)) {
+        janet_panic("the applet kind must be a keyword such as :terminal");
+    }
+
+    JanetString kind = janet_unwrap_keyword(argv[0]);
+
+    check_text(kind, "the applet kind", UNITERM_JANET_MAX_KIND_BYTES, 1);
+
+    call_options options = parse_options(argc, argv, 2, 1);
+    JanetBuffer *request = janet_buffer(64);
+
+    put_u16(request, CALL_OPEN_PANE);
+    put_text(request, kind);
+    put_pane_reference(request, argv[1]);
+
+    if (janet_checktype(options.axis, JANET_NIL)) {
+        put_u8(request, 0);
+    } else if (janet_keyeq(options.axis, "row")) {
+        put_u8(request, 1);
+    } else if (janet_keyeq(options.axis, "column")) {
+        put_u8(request, 2);
+    } else {
+        janet_panic("the :axis must be :row or :column");
+    }
+
+    put_optional_directory(request, options.directory);
+
+    return invoke(request);
+}
+
+static Janet cfun_open_tab(int32_t argc, Janet *argv) {
+    janet_arity(argc, 1, -1);
+
+    call_options options = parse_options(argc, argv, 1, 0);
+    JanetBuffer *request = janet_buffer(64);
+
+    put_u16(request, CALL_OPEN_TAB);
+    put_pane_reference(request, argv[0]);
+    put_optional_directory(request, options.directory);
+
+    return invoke(request);
+}
+
+static Janet cfun_send(int32_t argc, Janet *argv) {
+    janet_fixarity(argc, 3);
+
+    if (!janet_checktype(argv[1], JANET_STRING)) janet_panic("the file name must be a string");
+
+    JanetString name = janet_unwrap_string(argv[1]);
+
+    check_text(name, "the file name", UNITERM_JANET_MAX_FILE_NAME_BYTES, 1);
+
+    if (name[0] == '.') janet_panic("the file name must not start with a dot");
+
+    const uint8_t *bytes = NULL;
+    int32_t length = 0;
+
+    if (janet_checktype(argv[2], JANET_STRING)) {
+        bytes = janet_unwrap_string(argv[2]);
+        length = janet_string_length(bytes);
+    } else if (janet_checktype(argv[2], JANET_BUFFER)) {
+        JanetBuffer *content = janet_unwrap_buffer(argv[2]);
+
+        bytes = content->data;
+        length = content->count;
+    } else {
+        janet_panic("the content must be a string or a buffer");
+    }
+
+    if (length > UNITERM_JANET_MAX_SEND_BYTES) {
+        janet_panicf("the content is %d bytes, and the most is %d", length,
+                     UNITERM_JANET_MAX_SEND_BYTES);
+    }
+
+    JanetBuffer *request = janet_buffer(length + 64);
+
+    put_u16(request, CALL_SEND);
+    put_pane_reference(request, argv[0]);
+    put_text(request, name);
+    janet_buffer_push_bytes(request, bytes, length);
+
+    return invoke(request);
+}
+
 static const JanetReg uniterm_cfuns[] = {
     {"api-version", cfun_api_version,
      "(uniterm/api-version)\n\nThe version of the host API. A change that breaks a script "
@@ -132,6 +681,26 @@ static const JanetReg uniterm_cfuns[] = {
     {"post-status", cfun_post_status,
      "(uniterm/post-status level text)\n\nPosts a message to the status bar. The level is "
      ":info, :warning, or :error."},
+    {"list-windows", cfun_list_windows,
+     "(uniterm/list-windows)\n\nReturns the open windows, oldest first, as an array of "
+     "{:window id :title text :key bool}."},
+    {"list-panes", cfun_list_panes,
+     "(uniterm/list-panes window)\n\nReturns the panes of a window as an array of structs with "
+     ":window, :pane, :applet, :title, :focused, :tabs, and :directory when the applet reports "
+     "one. Returns nil when the window is not open."},
+    {"open-pane", cfun_open_pane,
+     "(uniterm/open-pane kind pane &named axis directory)\n\nSplits a pane and starts an applet "
+     "in the new one. The kind is :terminal, :data-viewer, :map-viewer, :image-viewer, "
+     ":text-viewer, or :browser. The axis is :row or :column. The directory is an absolute path, "
+     "and defaults to the one the pane reports. Returns the new pane's reference."},
+    {"open-tab", cfun_open_tab,
+     "(uniterm/open-tab pane &named directory)\n\nOpens a tab in a pane that has tabs and "
+     "returns the tab's reference. The directory is an absolute path, and defaults to the one the "
+     "pane reports."},
+    {"send", cfun_send,
+     "(uniterm/send pane name content)\n\nSends content to a viewer pane. The name is a file "
+     "name such as \"report.csv\", and its extension picks how the viewer reads the content. "
+     "The pane of a terminal refuses it."},
     {NULL, NULL, NULL}};
 
 /*

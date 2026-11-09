@@ -18,6 +18,15 @@
 /* The most bytes of status text a script may post. */
 #define UNITERM_JANET_MAX_STATUS_BYTES 2048
 
+/*
+ * The limits the wire shares. ScriptProtocol in ScriptWire holds the same numbers, and a script
+ * that sends the most bytes proves they agree.
+ */
+#define UNITERM_JANET_MAX_KIND_BYTES 32
+#define UNITERM_JANET_MAX_DIRECTORY_BYTES 1024
+#define UNITERM_JANET_MAX_FILE_NAME_BYTES 255
+#define UNITERM_JANET_MAX_SEND_BYTES (1024 * 1024)
+
 /* Levels as scripts name them: :info, :warning, :error. */
 #define UNITERM_STATUS_INFO 0
 #define UNITERM_STATUS_WARNING 1
@@ -28,11 +37,18 @@
  * script, with arguments already checked. It returns 0 on success. On failure it writes a message
  * into `error` and returns nonzero, and the shim raises it to the script as a Janet error. A
  * callback must not unwind or trap.
+ *
+ * `call` runs every function but post-status. The shim writes the call in the wire's encoding and
+ * passes the bytes. The callback hands back the reply's bytes in memory from malloc, which the
+ * shim frees, or none when the function returns nothing. The shim builds the Janet values, so no
+ * Janet error can unwind a Swift frame.
  */
 typedef struct uniterm_host {
     void *userdata;
     int32_t (*post_status)(void *userdata, int32_t level, const uint8_t *text, size_t length,
                            char *error, size_t capacity);
+    int32_t (*call)(void *userdata, const uint8_t *request, size_t length, uint8_t **reply,
+                    size_t *reply_length, char *error, size_t capacity);
 } uniterm_host;
 
 typedef enum uniterm_script_status {

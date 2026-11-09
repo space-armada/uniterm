@@ -136,6 +136,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return try ScriptSocketDirectory.defaultDirectory()
   }
 
+  /// UI tests set `UNITERM_SENT_DIR` so content that scripts send stays out of the developer's
+  /// Application Support folder. Only debug builds honor it, for the same reason as the layout
+  /// folder.
+  private func sentContentDirectory() throws -> URL {
+    #if DEBUG
+      if let path = debugEnvironment["UNITERM_SENT_DIR"] {
+        return URL(fileURLWithPath: path, isDirectory: true)
+      }
+    #endif
+
+    return try ScriptSentContent.defaultRoot()
+  }
+
+  /// The folder for content scripts send. A failure leaves scripting running without sends, and
+  /// says so in the log.
+  private func makeSentContent() -> ScriptSentContent? {
+    do {
+      return try ScriptSentContent(root: try sentContentDirectory())
+    } catch {
+      logger.error("sent content is off: \(String(describing: error), privacy: .public)")
+      return nil
+    }
+  }
+
   /// Starts the listener that script helpers connect to. A failure leaves the app running without
   /// scripting, and says so.
   private func startScripting(windows: WindowSet) {
@@ -147,6 +171,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         issueProducer: { [weak windows] name in
           windows?.issueProducer(kind: .script, name: name)
         },
+        windows: WindowScripting(windows: windows),
+        sentContent: makeSentContent(),
         onRefusal: { [weak self] refusal in
           self?.logger.error("a script connection was refused: \(refusal.text, privacy: .public)")
           self?.windowSet?.post(level: .warning, text: refusal.text)

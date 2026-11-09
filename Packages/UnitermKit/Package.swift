@@ -72,7 +72,7 @@ let package = Package(
       name: "WindowKit",
       dependencies: [
         "Theme", "Preferences", "AppletKit", "StatusKit", "PaneModel", "LayoutKit", "FileRouting",
-        "GeoData", "PlaceSearch",
+        "GeoData", "PlaceSearch", "ScriptHost", "ScriptWire",
       ]),
     .target(name: "SettingsKit", dependencies: ["Preferences"]),
     .binaryTarget(name: "GhosttyKit", path: ghosttyKitPath),
@@ -276,6 +276,8 @@ let package = Package(
         "DocumentTestSupport", "TableTestSupport", "BrowserTestSupport",
       ]),
     .testTarget(name: "ScriptWireTests", dependencies: ["ScriptWire", "TableTestSupport"]),
+    // Holds the shim's reply reader against crafted bytes, so it reaches the Janet C target.
+    .testTarget(name: "ScriptRuntimeTests", dependencies: ["ScriptRuntime", "CJanet"]),
     .testTarget(
       name: "ScriptHostTests",
       dependencies: ["ScriptHost", "ScriptWire", "ScriptHelper", "StatusKit"],
@@ -287,7 +289,7 @@ let package = Package(
       name: "TerminalAppletTests",
       dependencies: [
         "TerminalApplet", "AppletKit", "StatusKit", "TerminalSurface", "Theme", "WindowKit",
-        "Preferences", "AppletTestSupport",
+        "Preferences", "AppletTestSupport", "ScriptHost", "ScriptWire",
       ]),
     .testTarget(name: "SettingsKitTests", dependencies: ["SettingsKit", "Preferences"]),
     .testTarget(name: "ThemeTests", dependencies: ["Theme"]),
@@ -297,7 +299,7 @@ let package = Package(
       name: "WindowKitTests",
       dependencies: [
         "WindowKit", "Theme", "Preferences", "StatusKit", "AppletKit", "PaneModel", "LayoutKit",
-        "FileRouting", "GeoData", "PlaceSearch",
+        "FileRouting", "GeoData", "PlaceSearch", "ScriptHost", "ScriptWire",
       ]),
   ],
   swiftLanguageModes: [.v6],

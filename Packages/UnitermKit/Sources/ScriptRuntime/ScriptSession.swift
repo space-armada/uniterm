@@ -47,7 +47,7 @@ final class ScriptSession {
     _ = try call(.postStatus(level: level, text: text))
   }
 
-  private func call(_ call: ScriptCall) throws -> Data {
+  func call(_ call: ScriptCall) throws -> Data {
     let id = nextRequest
     nextRequest &+= 1
 

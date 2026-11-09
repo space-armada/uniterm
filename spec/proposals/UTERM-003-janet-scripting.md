@@ -51,18 +51,25 @@ A first set of functions:
 
 Rules for the first set:
 
-- A pane or tab a script opens starts in the directory the call names. When the call names none, a pane opened beside
-  another starts in the directory that pane reports through the applet contract, as a split from the UI does. The CLI's
-  working directory never flows in implicitly.
-- No host function in this proposal writes to a terminal's input. Sending to a terminal applet, or to a REPL applet,
-  which hosts one, is refused with an error to the script.
+- A pane or tab a script opens starts in the directory the call names. The directory is an absolute path to a folder
+  that exists, and a relative one is refused. When the call names none, a pane opened beside another starts in the
+  directory that pane reports through the applet contract, as a split from the UI does. A tab a script opens starts in
+  the directory its own pane reports. When the pane reports none, the applet's own default applies, which for a
+  terminal is the home directory. The CLI's working directory never flows in implicitly.
+- A send names an existing pane, and carries bytes and a file name, never a path. A script that wants a new viewer opens
+  a pane first, then sends to it.
+- No host function in this proposal writes to a terminal's input. An applet whose input belongs to a program, which a
+  terminal does and a REPL applet will, declares that, and a send to it is refused with an error to the script.
+
+Amended 2026-11-09; see Decision Log.
 
 ### Invariants scripts rely on
 
 Scripting is viable only if these hold. Every host function, and every later change to the host API, keeps them:
 
 - A reference to a window, pane, or tab never resolves to a different one. A reference to one that is gone resolves to
-  nothing.
+  nothing. A question about panes answers nil for a window that is gone, and a call that acts on one fails with a
+  not-found error that names no other pane. Amended 2026-11-09; see Decision Log.
 - References are valid for one launch only. Nothing a script holds survives a relaunch.
 - Every ID a script receives is an exact integer in a Janet number.
 - A host function never crashes the app. Bad input returns an error to the script.
@@ -165,7 +172,9 @@ Decision: a window ID that is unique across launches, plus the pane ID. Referenc
   UTERM-002 set for tab IDs. A restored window gets a new ID. Every ID handed to a script fits in a Janet number
   exactly, so below 2^53.
 - A pane reference is a struct, `{:window 3 :pane 7}`. A tab reference adds `:tab`. A reference to a closed pane, or
-  one from an earlier launch, resolves to nothing. It never resolves to a different pane.
+  one from an earlier launch, resolves to nothing. It never resolves to a different pane. A call that acts on one
+  fails with a not-found error. A tab reference is accepted wherever a pane reference is, and must still name an open
+  tab of that pane. Amended 2026-11-09; see Decision Log.
 - Window, pane, and tab references share one lifetime: valid for this launch only.
 - The API is one Janet module, `uniterm`, imported with `(import uniterm)`. Functions are kebab-case verb-noun names,
   such as `uniterm/list-panes`, `uniterm/open-pane`, `uniterm/open-tab`, `uniterm/send`, and `uniterm/post-status`,
@@ -329,7 +338,9 @@ Leaves undone: nothing.
 
 ### M2: Host API v1
 
-**Status:** NOT STARTED
+**Status:** DONE
+
+Amended 2026-11-09; see Decision Log.
 
 - Scripts can list windows and panes, open a pane with an applet, and open a terminal tab
 - Each host function rejects bad arguments with an error to the script
@@ -338,7 +349,65 @@ Leaves undone: nothing.
 - A reference to a pane from an earlier launch resolves to nothing, never to another pane
 - Window IDs stay unique across launches even when the system clock moves backwards between them
 - A pane opened by a script starts in the directory the call names, or else the one its neighbour pane reports
-- Sending to a terminal applet or a REPL applet is refused with an error to the script
+- Sending to a terminal applet is refused with an error to the script, and the refusal is a property an applet
+  declares, so M4's REPL applet adopts it
+- Sending content to a viewer pane reaches the viewer, through a private folder that only the user can enter
+
+**As built:**
+
+- The host API has `list-windows`, `list-panes`, `open-pane`, `open-tab`, and `send`, beside `api-version` and
+  `post-status`. The API version stays 1, since nothing M1 shipped changed. The wire's protocol version is 2, since
+  the app and helper now speak new calls and a failure kind. A call that carries content has a frame type of its own,
+  so only a send may make the reader allocate more than 64 KiB.
+- References are structs or tables. Keys beyond the ones a function needs are ignored, so a pane reference serves as a
+  window reference. `:tab` is checked wherever it appears. IDs go out as Janet numbers and come in through one check in
+  the C shim that refuses a non-number, a fraction, NaN, infinity, a negative, and anything above 2^53 - 1. The app
+  decodes IDs with the same limit and trusts nothing the shim did.
+- Reply values cross as bytes. The Swift callback hands the shim the encoded reply, and the shim builds the Janet
+  values after Swift returns, so no Janet error unwinds a Swift frame. The shim and Swift share one value format. The
+  Swift side has a fuzzer. The shim's reader has its own tests against crafted bytes, in a test target that may reach
+  Janet. A record holds at most 64 fields, and a repeated key is refused on both sides.
+- A window's ID is a random 37-bit epoch drawn once per launch above a 16-bit counter. The ID never reads the clock.
+  When the counter runs out, the source draws an epoch that no earlier epoch of the launch used. `WindowSet` assigns the
+  ID when it registers a window, so a restored window gets a new one. The tests show that two launches that draw
+  different epochs share no ID. They cannot move a clock, since the ID has no clock input.
+- A tab has a small number per window, issued the first time a script sees it and never reused. The map only grows.
+- `open-pane` kinds are `:terminal`, `:data-viewer`, `:map-viewer`, `:image-viewer`, `:text-viewer`, and `:browser`.
+  There is no kind that runs a program. The axis is `:row` or `:column`. Without one, a wide pane splits side by side
+  and a tall one is stacked, as a routed pane does, and a requested axis with no room is refused. A pane that fails to
+  start also posts to the status bar, as a split from the UI does.
+- `open-tab` goes through a small capability in the applet kit that the terminal in shell mode and the browser adopt.
+  A browser tab has no directory, so a script that names one is refused. A terminal that runs one program refuses.
+  Every other applet refuses.
+- `send` works on an applet that takes a source and does not declare that its input is a program's. The terminal
+  declares it now. The check runs before the source check, so an applet that does both is refused. A send is refused
+  while the window has a sheet up, as an open-pane is, since the sheet can be that pane's own Save question. The app
+  writes the bytes into `Application Support/uniterm/sent/<pid>.<start>/`, a folder for the instance, in a folder of
+  its own for each send, at 0700 for folders and 0600 for files. A send is at most 1 MiB. The host ties each file to
+  the pane that took it. A pane keeps its last file. The file goes, and its bytes return to the budget of 256 MiB, when
+  a script sends another to that pane, or when a later call finds the pane closed. A file for a pane that the user
+  changed with no script involved stays until a script next sends to that pane or the app relaunches. A launch removes
+  the folders of instances that ended. The folder's name carries the process's start time, so a process ID that the
+  system reused never keeps a dead instance's folder. The viewer starts in its own directory, or home, never in the
+  private folder. Debug builds read `UNITERM_SENT_DIR`.
+- A pane that a send filled saves its path in the private folder, so the next launch finds the file gone. Each viewer
+  loads a restored path the same way it loads any, and shows its own message that the file is gone and keeps the
+  path. The map, data, and image viewers have tests for it. The text viewer is traced by reading only.
+- The directory a script names must exist, as a stat that follows links. The terminal falls back to home for a folder
+  that is gone, and the script would never learn its path was wrong. The stat runs off the main actor, since a hung
+  network mount would freeze the windows. `open-pane` and `open-tab` look the pane up again when it returns, so a
+  pane that closed meanwhile is not found. A tab starts in the directory the call names, else in the one its pane
+  reports, else in the applet's own default.
+- A reply may hold at most 63 KiB. A listing too large for it fails with an error that says so, and gives no partial
+  answer. Titles and directories from programs go through the status bar's text cleaner, which turns every control
+  character into a space, drops bidirectional controls, and cuts to 256 bytes.
+- Every host call runs on the main actor and never blocks it. `open-pane` and `open-tab` answer later, after the
+  directory check. The only disk write on the main actor is a send's, which has a known size. Nothing opens a pane
+  through the async router, since a send names a pane that exists.
+- A bad argument fails in the shim and never reaches the app. A fixture for each function holds its error cases, and
+  the tests show that none reached the app.
+- No UI test covers the app's wiring of the window layer. M3's UI test of `uniterm run` can drive a script that opens a
+  pane.
 
 ### M3: `uniterm run`
 
@@ -376,6 +445,8 @@ Leaves undone: nothing.
 - Closing a REPL at an idle prompt does not ask for confirmation
 - REPL history survives a close and an undo, never re-runs on restore, and is bounded in size in the layout file
 - Ctrl-C stops a running evaluation and returns to the prompt
+- A script's send to a REPL pane is refused with an error to the script, through the property M2 built. Amended
+  2026-11-09; see Decision Log.
 
 ### M5: Sandbox and limits
 
@@ -467,6 +538,39 @@ Leaves undone: nothing.
   REPL helper launches through a terminal. The terminal launch can pass only a working directory, an environment, and a
   program, and ADR-01 bars reaching past that protocol, so the helper must connect by path. ADR-10's last bullet lets a helper skip the sandbox with a stated reason, so ADR-10 is not edited.
   Janet's sandbox, the memory cap, and process isolation bound the helper instead.
+- 2026-11-09: Amended "Host API", "Invariants scripts rely on", and "API naming and shape" on what a reference to
+  something gone does (work-queue best guess). The text said it "resolves to nothing", which reads as nil. A script
+  that gets nil from an action can proceed as if it had a pane. A question about panes answers nil for a window that
+  is gone, and every call that acts on a reference fails with a not-found error that never names another pane. A tab
+  reference now also works where a pane reference is expected, and must name an open tab of that pane.
+- 2026-11-09: Amended "Host API" on directories (work-queue best guess). The text said a call names a directory, with no
+  rules for it. The directory must be absolute, since the helper's own working directory must never decide it, and it
+  must exist, since the terminal's fallback to home would hide a wrong path from the script. A relative or missing
+  directory is refused. A browser tab has no directory, so one named for it is refused too.
+- 2026-11-09: Amended "Host API" and M2's check on sending to a terminal or a REPL (work-queue best guess). The text
+  said sending to a terminal or a REPL applet is refused. M4 builds the REPL applet, so M2 cannot prove its refusal.
+  M2 builds the refusal as a property an applet declares and proves it with the terminal and a stand-in. M4 adopts the
+  property for the REPL and proves it there. M4 gains a check for it.
+- 2026-11-09: Amended "Host API" on what a send names (work-queue best guess). The text said a send goes to an applet
+  for display, and the plan said a send for a new pane uses the open-pane path. A send names an existing pane. A script
+  that wants a new viewer opens a pane, then sends. This keeps the async router out of the host API, since no call
+  waits on a new pane's file.
+- 2026-11-09: Sent content lives in a private folder per instance, and the host ties each file to its pane
+  (work-queue best guess, amended in review). The first guess said nothing removes a file when its pane lets it go,
+  since a release hook in every viewer looked costly, and relied on a 256 MiB budget that never freed. That let one
+  viewer take 256 sends and then refuse every later one. The host now knows the pane of each send. It removes the
+  pane's previous file when the pane takes another, and removes the file of a pane that has closed, then returns the
+  bytes to the budget. A pane's last file stays until then. No viewer changed. A change the user makes to a pane with
+  no script involved is not seen, so its file stays until the next script send to that pane or a relaunch.
+- 2026-11-09: A tab a script opens starts in the directory its pane reports (work-queue best guess, raised for the user
+  per CLAUDE.md "Applet Attributes"). The first build left it to the applet, so a terminal's own fallback
+  `currentDirectory ?? home` decided it out of sight. The host now passes the pane's reported directory, as open-pane
+  does, and the applet's own default applies only when the pane reports none, which for a terminal is home. If wrong,
+  the host would pass nothing and rely on each applet's rule again.
+- 2026-11-09: The wire gains a `notFound` failure kind and its protocol version is 2 (work-queue best guess). The kind
+  lets a script tell a reference to something gone from its own mistake. The version moves because the app and helper
+  now speak new calls, a new frame type, and the new kind, and an old peer would read them as a protocol violation. The
+  API version stays 1.
 
 ## References
 

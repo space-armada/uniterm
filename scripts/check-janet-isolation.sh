@@ -29,6 +29,7 @@ allowed_dirs=(
   "Packages/UnitermKit/Sources/CJanet"
   "Packages/UnitermKit/Sources/ScriptRuntime"
   "Packages/UnitermKit/Sources/ScriptHelper"
+  "Packages/UnitermKit/Tests/ScriptRuntimeTests"
   "Helpers/UnitermCLI"
 )
 

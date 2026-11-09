@@ -1,0 +1,25 @@
+(import uniterm)
+
+(defn refuses [label needle f]
+  (def [ok message] (protect (f)))
+  (assert (not ok) (string label " was accepted"))
+  (assert (string/find needle (string message)) (string label " failed with: " message)))
+
+(def nan (- math/inf math/inf))
+
+(refuses "no argument" "arity" (fn [] (uniterm/list-panes)))
+(refuses "two arguments" "arity" (fn [] (uniterm/list-panes {:window 1} 2)))
+(refuses "a number" "must be a struct" (fn [] (uniterm/list-panes 7)))
+(refuses "nil" "must be a struct" (fn [] (uniterm/list-panes nil)))
+(refuses "a keyword" "must be a struct" (fn [] (uniterm/list-panes :window)))
+(refuses "no window" "no :window" (fn [] (uniterm/list-panes {})))
+(refuses "a window that is nil" "no :window" (fn [] (uniterm/list-panes {:window nil})))
+(refuses "a string ID" "must be a number" (fn [] (uniterm/list-panes {:window "7"})))
+(refuses "a fraction" "whole number" (fn [] (uniterm/list-panes {:window 1.5})))
+(refuses "not a number" "finite" (fn [] (uniterm/list-panes {:window nan})))
+(refuses "infinity" "finite" (fn [] (uniterm/list-panes {:window math/inf})))
+(refuses "negative infinity" "finite" (fn [] (uniterm/list-panes {:window (- math/inf)})))
+(refuses "a negative ID" "negative" (fn [] (uniterm/list-panes {:window -1})))
+(refuses "one past the range" "too large" (fn [] (uniterm/list-panes {:window 9007199254740992})))
+(refuses "a huge ID" "too large" (fn [] (uniterm/list-panes {:window 1e300})))
+(refuses "list-windows takes nothing" "arity" (fn [] (uniterm/list-windows 1)))

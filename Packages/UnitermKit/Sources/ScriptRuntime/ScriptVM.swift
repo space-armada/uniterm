@@ -37,7 +37,8 @@ enum ScriptVM {
 
     let status = withExtendedLifetime(session) {
       let userdata = Unmanaged.passUnretained(session).toOpaque()
-      var host = uniterm_host(userdata: userdata, post_status: postStatusCallback)
+      var host = uniterm_host(
+        userdata: userdata, post_status: postStatusCallback, call: callCallback)
 
       return source.withUnsafeBytes { raw in
         uniterm_janet_run(
@@ -90,6 +91,59 @@ private let postStatusCallback:
 
     do {
       try session.postStatus(level: level, text: string)
+
+      return 0
+    } catch ScriptSessionError.failed(_, let message) {
+      writeError(message, to: errorBuffer, capacity: capacity)
+    } catch ScriptSessionError.connectionLost(let message) {
+      writeError(message, to: errorBuffer, capacity: capacity)
+    } catch {
+      writeError("the call failed: \(error)", to: errorBuffer, capacity: capacity)
+    }
+
+    return 1
+  }
+
+/// Janet calls this for every function but post-status. The shim already checked the arguments and
+/// wrote the call in the wire's encoding. The reply's bytes go back in memory from malloc, which
+/// the shim frees.
+private let callCallback:
+  @convention(c) (
+    UnsafeMutableRawPointer?, UnsafePointer<UInt8>?, Int,
+    UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?, UnsafeMutablePointer<Int>?,
+    UnsafeMutablePointer<CChar>?, Int
+  ) -> Int32 = { userdata, request, length, reply, replyLength, errorBuffer, capacity in
+    guard let userdata, let request, let reply, let replyLength else {
+      writeError("the call was not complete", to: errorBuffer, capacity: capacity)
+
+      return 1
+    }
+
+    let session = Unmanaged<ScriptSession>.fromOpaque(userdata).takeUnretainedValue()
+    var reader = ByteReader(Data(UnsafeBufferPointer(start: request, count: length)))
+
+    let call: ScriptCall
+
+    do {
+      call = try ScriptCall.decode(from: &reader)
+      try reader.finished()
+    } catch {
+      writeError("the call could not be encoded: \(error)", to: errorBuffer, capacity: capacity)
+
+      return 1
+    }
+
+    do {
+      let payload = try session.call(call)
+
+      reply.pointee = nil
+      replyLength.pointee = 0
+
+      guard !payload.isEmpty, let memory = malloc(payload.count) else { return 0 }
+
+      payload.copyBytes(to: memory.assumingMemoryBound(to: UInt8.self), count: payload.count)
+      reply.pointee = memory.assumingMemoryBound(to: UInt8.self)
+      replyLength.pointee = payload.count
 
       return 0
     } catch ScriptSessionError.failed(_, let message) {

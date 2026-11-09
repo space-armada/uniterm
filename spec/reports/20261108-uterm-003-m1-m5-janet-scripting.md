@@ -18,7 +18,7 @@ work is stashed. No commands need the user's credentials.
 | Milestone | Run status | Commit |
 |---|---|---|
 | UTERM-003 M1: Embedded Janet and the first host function | DONE | "Embed Janet in a script helper and post status from scripts" |
-| UTERM-003 M2: Host API v1 | QUEUED | |
+| UTERM-003 M2: Host API v1 | DONE | "Let scripts list, open, and send to panes" |
 | UTERM-003 M3: `uniterm run` | QUEUED | |
 | UTERM-003 M4: REPL applet | QUEUED | |
 | UTERM-003 M5: Sandbox and limits | QUEUED | |
@@ -143,3 +143,89 @@ The full package suite ran in 152 s.
 - The Debug `uniterm` app that the implementer started for a smoke test, PID 46637, could not be ended inside the
   sandbox. The user was asked to end it.
 - No UI test drives a script against the real app yet. M3's UI test does.
+
+## UTERM-003 M2: Host API v1
+
+### Commits
+
+- "Let scripts list, open, and send to panes"
+
+### What landed
+
+Scripts can call `list-windows`, `list-panes`, `open-pane`, `open-tab`, and `send`. WindowKit implements them behind a
+ScriptHost protocol, against the real window and pane objects. Window IDs are a 37-bit random epoch per launch plus a
+16-bit counter, and never read the clock. Tab references are small numbers that only grow, per window. AppletKit
+gains two declared capabilities. `TabOpening` covers a terminal in shell mode and the browser. `InputOwning` marks an
+applet that refuses sent content: the terminal now, and the REPL in M4. `send` writes bytes into a private spool at
+`sent/<pid>.<start-second>/<uuid>/<name>`. Each pane holds one file, and a pane's earlier file is discarded when it
+receives a new one or closes. The wire protocol moved to version 2, with a `notFound` failure kind. The host API
+version stays 1.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | 5MJ1CT, CX7XQS, 6RN6JC | pass |
+| `make build`, then `check-sandbox-off.sh` on the built app | WQX9NC, Q9694V | pass |
+| `make test-helper-sandbox`, run by the coordinator | YXFHH4 | pass |
+| `caffeinate -dimsu make test-package` | NZ6E56 | 2068 tests, 0 failures, 7 skipped |
+| ASan fuzz of the wire, plus the C reply reader tests, 5000 iterations | 6AVGNZ | pass |
+| `scripts/swiftpm-offline-check.sh` | DXKCH6 | pass |
+| Regression run with the spool discard disabled | VXMQFV | the many-sends test failed, as it should |
+| `proposals.py check`, `proposals.py freeze` | | no UTERM-003 finding; freeze empty |
+
+### Best guesses
+
+1. An action on a stale or unknown reference fails with a not-found error that never names another pane.
+   `list-panes` on a window that is gone returns nil. If wrong, actions would return nil too.
+2. References accept a struct or a table, and extra keys are ignored, so a pane reference works as a window reference.
+3. `:directory` must be absolute and must exist. The terminal's silent fallback to home would otherwise hide a wrong
+   path. A browser refuses any directory.
+4. `send` targets an existing pane only. A script runs `open-pane` first. A later `:open` option could add this.
+5. A viewer that receives sent content starts in its own directory, never the spool.
+6. Each send is capped at 1 MiB, with a budget of 256 MiB per instance. A pane that the user alone changes keeps its
+   last file until the next send to it, or a relaunch.
+7. A sent name is a plain file name: no slash, no NUL, no leading dot, at most 255 bytes.
+8. A reply holds at most 63 KiB. `list-panes` past that fails outright, with no partial answer.
+9. `open-pane` kinds leave out program mode, so no script can start a program.
+10. With no `:axis`, a wide pane splits side by side and a tall one stacks.
+11. An exhausted window-ID counter redraws an epoch unused in this launch. Epoch 0 is never drawn.
+12. With no `:directory`, `open-tab` passes the pane's reported current directory explicitly. With none reported, the
+    applet's default applies, which is home for a terminal. This is implicit inheritance, so CLAUDE.md "Applet
+    Attributes" has it raised for the user.
+
+### Review findings
+
+| Finding | Disposition |
+|---|---|
+| PLAUSIBLE: the spool budget never freed accepted files | Confirmed by trace. Fixed with per-pane ownership. A 300-send test failed with the discard disabled |
+| PLAUSIBLE, reviewer and ADR-impact (ADR-08): `stat` on a script's path ran on the main thread | Fixed. The check runs off the main actor, and the pane is looked up again after it returns |
+| ADR-impact: `open-tab`'s default directory was left to the applet | Fixed. The host passes it explicitly. Raised for the user |
+| PLAUSIBLE: the C reply reader had no proof. It accepted duplicate keys | Fixed. Crafted-byte tests cover it, and C now rejects duplicate keys |
+| Test-only public `ScriptValue.decode` | Fixed. It is now internal |
+| PLAUSIBLE: reported text kept C1 and bidi controls | Fixed through `StatusText.bounded` |
+| PLAUSIBLE: `send` skipped the window's modal gate | Confirmed. Fixed for `send`. `open-tab` still lacks the gate, and M3 adds it |
+| PLAUSIBLE: restored sent panes | Traced. Each viewer shows its existing missing-file message. Recorded as a known limit |
+| PLAUSIBLE: a reused PID kept a dead spool | Confirmed. Fixed by naming folders with the process start second |
+| Comment craft: four items | Fixed |
+| ADR-impact ADVISORY: ADR-09, no grants | Recorded as the planned gap that UTERM-004 M1-M2 close |
+| ADR-impact uncovered: the spool's lifetime | Dismissed as an ADR candidate. It is internal and reversible |
+| ADR-impact uncovered: `InputOwning` | Dismissed as an ADR candidate. ADR-05 and the proposal cover it |
+
+### Test cost
+
+| Class | Test time alone |
+|---|---|
+| `ScriptHostAPITests`, 11 tests, 15 helper launches | about 3.7 s, of which the 300-send test takes 2.2 s |
+| `WindowScriptingTests`, 22 tests | 1.95 s |
+| `ScriptReplyReaderTests` | 0.16 s |
+| `ScriptTerminalTests` | 0.26 s |
+| `WindowIDSourceTests` | 0.09 s |
+| `ScriptSentContentTests` | 0.02 s |
+
+The 300-send test earns its 2.2 s. It is the only proof that the budget frees, and that needs real sends past the
+budget. The package suite grew from 152 s to 155 s.
+
+### Left open
+
+- No UI test drives the host API in the real app yet. M3's `uniterm run` UI test covers it.

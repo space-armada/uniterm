@@ -38,6 +38,24 @@ final class BrowserTabsTests: XCTestCase {
     return ([tabs.first] + tabs.rest).map(\.title)
   }
 
+  /// Catches the tab-opening capability that scripts use. It must return the new tab's own ID, so
+  /// a script's reference names that tab, and a browser must say its tabs have no directory, so a
+  /// directory a script names is refused instead of dropped.
+  func testTheTabOpeningCapabilityReturnsTheNewTabAndSaysTabsHaveNoDirectory() async throws {
+    let harness = try await harness()
+    defer { harness.stop() }
+
+    let opener: any TabOpening = harness.applet
+
+    XCTAssertTrue(opener.canOpenTab)
+    XCTAssertFalse(opener.tabsStartInDirectory)
+
+    let id = try XCTUnwrap(opener.openTab(startingIn: nil))
+
+    XCTAssertEqual(harness.applet.publishedTabs.selected, id)
+    XCTAssertEqual(harness.applet.publishedTabs.all.count, 2)
+  }
+
   /// Catches a tab bar that shows for one tab, or that leaves a gap above the toolbar while hidden.
   /// The bar appears with the second tab, takes its height, and gives it back when the second tab
   /// closes.

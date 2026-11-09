@@ -8,7 +8,7 @@ import Theme
 /// Stands in for any applet. It holds one tab and cannot open another, as a plain applet would,
 /// until a test says otherwise.
 @MainActor
-final class FakeApplet: Applet {
+class FakeApplet: Applet {
   let typeID = "fake"
   let view = NSView()
   var title = "Fake"
@@ -99,6 +99,12 @@ final class FakeApplet: Applet {
   }
 
   var canOpenTab = false
+
+  /// Whether the applet's tabs start in a directory, as a terminal's do and a browser's do not.
+  var tabsStartInDirectory = true
+
+  /// The directory each tab opened through the tab-opening capability was asked to start in.
+  var openedTabDirectories: [String?] = []
   var openedTabs = 0
   var tabsClosed = 0
 
@@ -337,3 +343,19 @@ extension AppletHost {
     self.applet(applet, send: .historyOnly, level: level, text: text, presenting: nil)
   }
 }
+
+extension FakeApplet: TabOpening {
+  func openTab(startingIn directory: String?) -> AppletTabID? {
+    guard canOpenTab else { return nil }
+
+    openedTabDirectories.append(directory)
+    openTab()
+
+    return tabID(tabCount - 1)
+  }
+}
+
+/// An applet that owns its input and could also take a source, as a REPL that shows a transcript
+/// would. It proves the refusal is the declared property and not a missing capability.
+@MainActor
+final class OwnedInputApplet: FakeApplet, InputOwning {}

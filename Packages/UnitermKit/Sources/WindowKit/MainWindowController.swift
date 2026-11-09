@@ -44,6 +44,12 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   private var panesClosed = false
   private(set) var historyVisible = false
 
+  /// The ID scripts name this window by. The set that opened the window assigns it.
+  var scriptWindowID: UInt64 = 0
+
+  /// The numbers scripts name this window's tabs by.
+  var scriptTabNumbers = ScriptTabNumbers()
+
   private struct HostEntry {
     weak var applet: (any Applet)?
     let host: PaneStatusHost
@@ -496,11 +502,20 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// bar says why.
   @discardableResult
   func openPane(_ choice: AppletChoice, axis: Axis, from pane: NodeID) -> NodeID? {
+    openPane(choice, axis: axis, from: pane, directory: directory(of: pane))
+  }
+
+  /// As `openPane(_:axis:from:)`, with the directory the new pane starts in named by the caller.
+  /// A nil directory leaves the start to the applet's factory.
+  @discardableResult
+  func openPane(
+    _ choice: AppletChoice, axis: Axis, from pane: NodeID, directory: String?
+  ) -> NodeID? {
     contentController.view.layoutSubtreeIfNeeded()
 
     let applet: any Applet
     do {
-      applet = try makeApplet(choice, directory(of: pane))
+      applet = try makeApplet(choice, directory)
     } catch {
       statusCenter.post(
         level: .error,
@@ -541,6 +556,21 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     return best?.pane
+  }
+
+  /// The axis a split of `pane` uses, or nil when no axis has room. A requested axis is used only
+  /// when it fits. Without one, a wide pane splits side by side and a tall one is stacked, and the
+  /// other axis is the fallback.
+  func splitAxis(for pane: NodeID, requested: Axis?) -> Axis? {
+    contentController.view.layoutSubtreeIfNeeded()
+
+    if let requested { return paneArea.canSplit(pane, requested) ? requested : nil }
+
+    let frame = paneArea.tree.layout(in: paneArea.bounds.size).frames[pane]
+    let wide = (frame?.width ?? 0) >= (frame?.height ?? 0)
+    let axes: [Axis] = wide ? [.row, .column] : [.column, .row]
+
+    return axes.first { paneArea.canSplit(pane, $0) }
   }
 
   /// Splits `pane` and puts a routed applet in the new pane, which takes focus. The new pane is
