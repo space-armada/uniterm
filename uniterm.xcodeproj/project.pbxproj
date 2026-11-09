@@ -30,6 +30,7 @@
 		7A0000000000000000000070 /* ScriptRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000071 /* ScriptRuntime */; };
 		7A0000000000000000000072 /* uniterm in Embed helpers */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000073 /* uniterm */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		7A000000000000000000007D /* ScriptHost in Frameworks */ = {isa = PBXBuildFile; productRef = 7A000000000000000000007E /* ScriptHost */; };
+		7A000000000000000000007F /* ReplApplet in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000080 /* ReplApplet */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -175,6 +176,7 @@
 				7A000000000000000000004E /* ImageViewerApplet in Frameworks */,
 				7A0000000000000000000064 /* TextViewerApplet in Frameworks */,
 				7A000000000000000000007D /* ScriptHost in Frameworks */,
+				7A000000000000000000007F /* ReplApplet in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,6 +279,7 @@
 				7A000000000000000000004F /* ImageViewerApplet */,
 				7A0000000000000000000065 /* TextViewerApplet */,
 				7A000000000000000000007E /* ScriptHost */,
+				7A0000000000000000000080 /* ReplApplet */,
 			);
 			productName = uniterm;
 			productReference = 7A0000000000000000000006 /* uniterm.app */;
@@ -909,6 +912,10 @@
 		7A000000000000000000007E /* ScriptHost */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ScriptHost;
+		};
+		7A0000000000000000000080 /* ReplApplet */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ReplApplet;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -5,9 +5,11 @@ import ScriptWire
 /// The helper's entry point. The shipped command and the test helper both call it from a thin
 /// `main`.
 ///
-/// The one mode is `run [--allow CAP]... [--socket PATH] file.janet [arguments]`. The script runs
+/// The `run` mode is `run [--allow CAP]... [--socket PATH] file.janet [arguments]`. The script runs
 /// in this process, against the app that listens at the address. Its output, input, arguments,
 /// working directory, and exit status are this process's own.
+///
+/// The `repl` mode is `repl --socket PATH`, which only the app starts. See `ScriptReplMain`.
 public enum ScriptHelperMain {
   /// Exit statuses follow sysexits.h where one fits.
   public enum Exit {
@@ -68,6 +70,10 @@ public enum ScriptHelperMain {
         forResolved: ScriptCommandLocation.currentExecutablePath())
     {
       return fail(refusal, status: Exit.notBundleCommand)
+    }
+
+    if arguments.dropFirst().first == "repl" {
+      return ScriptReplMain.run(arguments: Array(arguments.dropFirst(2)))
     }
 
     let invocation: Invocation

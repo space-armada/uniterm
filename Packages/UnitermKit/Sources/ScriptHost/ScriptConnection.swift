@@ -110,6 +110,12 @@ public final class ScriptConnection: @unchecked Sendable, Identifiable {
     }
   }
 
+  /// Closes the connection once every message queued before this call has been written. A refusal
+  /// uses it, so the peer reads the reason before the socket goes.
+  func closeAfterSending() {
+    writer.async { [self] in close() }
+  }
+
   /// Ends the connection for both sides. Safe to call twice.
   public func close() {
     lock.lock()

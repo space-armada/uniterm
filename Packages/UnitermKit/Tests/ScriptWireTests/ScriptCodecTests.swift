@@ -52,6 +52,11 @@ final class ScriptCodecTests: XCTestCase {
       .hello(version: 7),
       .begin(name: "tidy-up.janet"),
       .begin(name: ""),
+      .attach(token: Data((0..<UInt8(ScriptProtocol.tokenBytes)).map { $0 })),
+      .replLine("(+ 1 2)"),
+      .replLine(""),
+      .replEvaluating(true),
+      .replEvaluating(false),
     ]
 
     for level in ScriptStatusLevel.allCases {
@@ -75,6 +80,9 @@ final class ScriptCodecTests: XCTestCase {
       .reply(id: 44, result: .failure(.refused, "no window")),
       .reply(id: 45, result: .failure(.failed, "")),
       .reply(id: 46, result: .failure(.notFound, "the pane is not open in that window")),
+      .attachRefused("synthetic refusal"),
+      .history(lines: [], final: true),
+      .history(lines: ["(+ 1 2)", "(def x 1)"], final: false),
     ]
 
     for message in messages {
@@ -354,5 +362,45 @@ extension ScriptCodecTests {
     for data in bad {
       XCTAssertThrowsError(try ScriptValue.decode(data), "\(Array(data))")
     }
+  }
+}
+
+extension ScriptCodecTests {
+  /// Catches a token of the wrong size being accepted, which would let a helper bind with less
+  /// than the entropy the app issued.
+  func testATokenOfTheWrongSizeIsRefused() {
+    for size in [0, 1, ScriptProtocol.tokenBytes - 1, ScriptProtocol.tokenBytes + 1] {
+      XCTAssertThrowsError(
+        try ScriptHelperMessage.decode(type: 5, body: Data(repeating: 1, count: size)), "\(size)")
+    }
+  }
+
+  /// Catches a REPL line past the editor's own limit, an evaluating flag that is not 0 or 1, and a
+  /// history that declares more lines per message than the app sends or the helper reads.
+  func testReplMessagesRefuseValuesPastTheirLimits() {
+    var long = ByteWriter()
+    long.put(UInt16(ScriptProtocol.maxReplLineBytes + 1))
+    long.put(raw: Data(repeating: 0x61, count: ScriptProtocol.maxReplLineBytes + 1))
+
+    XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 6, body: long.bytes))
+    XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 7, body: Data([2])))
+
+    var many = ByteWriter()
+    many.put(UInt8(1))
+    many.put(UInt16(ScriptProtocol.maxHistoryLines + 1))
+
+    XCTAssertThrowsError(try ScriptAppMessage.decode(type: 4, body: many.bytes))
+    XCTAssertThrowsError(try ScriptAppMessage.decode(type: 4, body: Data([2, 0, 0])))
+  }
+
+  /// Catches a writer whose history message passes the control frame, which the reader would
+  /// refuse and so end the REPL before it started.
+  func testAFullHistoryMessageFitsTheControlFrame() {
+    let line = String(repeating: "x", count: ScriptProtocol.maxReplLineBytes)
+    let message = ScriptAppMessage.history(
+      lines: Array(repeating: line, count: ScriptProtocol.maxHistoryLines), final: true)
+
+    XCTAssertLessThanOrEqual(
+      message.frame().count - FrameHeader.size, ScriptProtocol.maxControlBody)
   }
 }

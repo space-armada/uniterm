@@ -59,7 +59,7 @@ Rules for the first set:
 - A send names an existing pane, and carries bytes and a file name, never a path. A script that wants a new viewer opens
   a pane first, then sends to it.
 - No host function in this proposal writes to a terminal's input. An applet whose input belongs to a program, which a
-  terminal does and a REPL applet will, declares that, and a send to it is refused with an error to the script.
+  terminal and the REPL applet do, declares that, and a send to it is refused with an error to the script.
 
 Amended 2026-11-09; see Decision Log.
 
@@ -98,8 +98,9 @@ Scripts are denied file, network, process, and FFI access unless their job needs
 - A REPL grants no capability in this proposal. Janet's sandbox cannot be widened once applied, so a REPL's grants are
   fixed when its helper starts. A way to grant a REPL more waits on UTERM-004.
 - There is no CPU limit on a run or a REPL evaluation. The user stops either with Ctrl-C, and a script can no longer
-  freeze the app, since the main thread never waits on a helper. The helper's watchdog thread carries out Ctrl-C and
-  the app's stop request. Amended 2026-11-02, see the Decision Log.
+  freeze the app, since the main thread never waits on a helper. In a REPL, Ctrl-C reaches the helper as SIGINT, and a
+  handler on the VM's own thread stops the evaluation. The helper's watchdog thread carries out the app's stop request,
+  and ends a helper whose connection closes. Amended 2026-11-09, see the Decision Log.
 - Memory is bounded per helper, per "Where scripts run".
 - The helper holds no App Sandbox entitlement, for the reason in "Where scripts run". Janet's `sandbox` is applied
   before the first line of a script runs, with every capability denied unless the command line grants it. Amended
@@ -126,8 +127,9 @@ Decision: one VM per script run and per REPL pane, each in its own process, sepa
   2026-11-09; see Decision Log.
 - Host API calls are messages from the helper to the app. The app runs each one on the main thread and replies.
 - The main thread never waits on a helper. Any later Janet-backed action the app runs sends its message and returns.
-- The helper's watchdog thread interrupts a running evaluation on Ctrl-C or on the app's stop request, and the VM keeps
-  its state. The app kills a helper only when it stops answering or passes its memory bound.
+- A running evaluation stops on Ctrl-C or on the app's stop request, and the VM keeps its state. Ctrl-C is SIGINT,
+  handled on the VM's own thread. The stop request is the watchdog thread's. The app kills a helper only when it stops
+  answering, passes its memory bound, or outlives its closed pane. Amended 2026-11-09; see Decision Log.
 - Memory is capped in two layers:
   - In the helper: `janetconf.h` routes Janet's allocator through a counting wrapper. An allocation that would pass the
     per-helper cap fails, and the helper exits with a memory-limit status and message. It does not try to recover,
@@ -236,7 +238,9 @@ Decision: the REPL applet hosts a terminal session whose child is the REPL helpe
   parser. Output reaches the screen as terminal output, bounded by the terminal's scrollback.
 - Control channel: the app passes the helper its listener address as a program argument, and a single-use token in
   its environment. The helper connects and presents the token, which binds that connection to the REPL's pane and is
-  spent on first use.
+  spent on first use. The token is the first message after the version, in place of a script's name. The app answers
+  with the history to recall, or with a refusal that says why and closes the connection. A refused connection can call
+  nothing. The helper then reports each line the user enters, and whether a form is evaluating.
 - The binding keeps a connection from attaching to the wrong pane. It is not a defense against other processes of the
   same user, which can read a process's original environment and open the user's own terminal devices. No rule in
   this proposal trusts a REPL more than any other peer of the same user, so nothing depends on it. A binding that
@@ -244,9 +248,22 @@ Decision: the REPL applet hosts a terminal session whose child is the REPL helpe
 - The helper starts in the home directory. Before running any user code, it drops every inherited environment
   variable, the token included. The REPL applet reports no current directory. Nothing flows into a REPL from the app's
   environment or from another pane.
-- Ctrl-C reaches the helper as an interrupt and stops the running evaluation, per "Where scripts run".
+- Ctrl-C reaches the helper as an interrupt and stops the running evaluation, per "Where scripts run". At an idle
+  prompt it clears the line.
+- The helper runs the loop itself, with Janet's parser and Janet's line editor. An error in a form is printed and the
+  prompt returns, and the definitions stay. It does not run Janet's event loop, so a function that waits on the event
+  loop, such as `ev/sleep`, does not run its fiber.
 - The REPL applet has its own description type. It saves the REPL's history as inert text and never re-evaluates it.
-  A restored REPL starts a fresh helper with that history to recall, per ADR-03.
+  A restored REPL starts a fresh helper with that history to recall, per ADR-03. The app keeps the newest 500 lines or
+  256 KiB of them, whichever is less, and the line editor recalls the newest 100.
+- A REPL is busy only while the helper reports a form evaluating, so closing at an idle prompt asks nothing.
+- When the helper dies, the pane stays open with its last output, a message, and a Restart button that only the user
+  can press. The history carries over. Closing the pane closes the connection, which ends the helper, and the app kills
+  a helper that is still there after two seconds and is still the process that attached.
+- A script cannot open a REPL pane, since `open-pane` offers no kind that starts a helper. The user opens one from the
+  launcher.
+
+Amended 2026-11-09; see Decision Log.
 
 Rationale: the terminal already bounds and coalesces output, and brings selection, copy, find, font, and theme. Script
 input and output work the same as under `uniterm run`. A native transcript would pull unbounded script output into the
@@ -511,7 +528,7 @@ Amended 2026-11-09; see Decision Log.
 
 ### M4: REPL applet
 
-**Status:** NOT STARTED
+**Status:** IN PROGRESS
 
 - A pane can run the REPL applet
 - Expressions typed in the REPL call the host API and show results
@@ -527,6 +544,72 @@ Amended 2026-11-09; see Decision Log.
   2026-11-09; see Decision Log.
 - With two uniterm instances running, each REPL's helper reaches the instance that started it, not the other one.
   Amended 2026-11-09; see Decision Log.
+
+**As built:**
+
+- The REPL is the helper's `repl --socket PATH` mode. The pane hosts a terminal session whose program is the bundled
+  command, and the token travels in `UNITERM_REPL_TOKEN`. The mode has no fallback to the environment or to the
+  well-known address, since a REPL must reach the instance that started it. The helper reads the token, replaces its
+  whole environment with an empty one, and enters the home folder from the user database. It then connects, presents
+  the token, and waits for the app's answer. Debug builds also have `repl --probe-environment`, which runs those
+  startup steps and prints the folder, the number of variables left, and whether the token was found. A package test
+  runs it with a decoy environment and another working directory.
+- The wire is protocol version 3. A helper's token message takes the place of `begin`, and a connection that has
+  begun, or has called, cannot present one. The app answers with a history message or a refusal. The history is split
+  across messages of 24 KiB at most, and the newest 100 lines are sent. A raw peer showed a spent token and an unknown
+  token each refused, with the connection closed, and a refused connection posting nothing. See the Decision Log.
+- Janet's line editor comes from the vendored `shell.c`, which is unchanged. A C file in the Janet target includes it
+  with its `main` renamed, so the REPL reaches the editor's history without a hash change in `janet.pin`. The isolation
+  check passes with no change. The loop around it is the target's own C. Each form runs in a fiber of its own, an error
+  prints Janet's stack trace, and a result prints with `%q`. The `uniterm` module is imported before the sandbox is
+  applied. The environment's `os/environ` is denied by the sandbox, and `os/cwd` is not.
+- Ctrl-C is SIGINT. A handler on the VM's thread raises Janet's interrupt only while a form runs, and every other
+  thread blocks the signal, so an idle Ctrl-C leaves no interrupt behind. A test shows a loop stopping, the
+  definitions staying, and the next form running to the end. Another shows an idle Ctrl-C changing nothing. A pty test
+  shows the editor recalling restored history on Up Arrow, and clearing the line on Ctrl-C.
+- The editor puts back the terminal settings it found at its read. Before each form runs, the loop also sets ISIG when
+  the terminal lacks it, so a terminal that starts without ISIG, or a restore the editor could not finish, never
+  leaves Ctrl-C a plain byte. A package test starts the helper with `stty -isig` ahead of it and failed before this
+  guard, showing `^C` echoed and the loop running on. The coordinator's UI run still showed Ctrl-C not stopping a
+  loop in the real app. The cause there is not settled. Package tests start the helper through `login`, `bash`, and
+  `/bin/sh -c`, as macOS libghostty starts a program, with SIGINT inherited as ignored, and with ISIG off. Each stops
+  a loop with the byte 3. The helper installs its SIGINT disposition with `sigaction` and unblocks the signal on its
+  own thread, so an inherited ignore or block does not matter.
+  A debug helper takes `--trace-sigint` and writes `[sigint evaluating]` or `[sigint idle]` to stderr on each SIGINT.
+  The app passes the flag in debug builds when its own environment sets `UNITERM_REPL_TRACE_SIGINT=1`, which the
+  Ctrl-C UI test sets, and the failure message shows the screen. `TerminalUITests` also has a test that Ctrl-C ends a
+  foreground `sleep` in a shell pane, so the app's key path is proved for an ordinary program.
+- The app keeps its own history as the helper reports lines, bounded at 500 lines, 256 KiB, and 1,024 bytes a line,
+  and the layout file holds that copy. A restored file's lines are checked again, and a line with a control character
+  is dropped. A test shows a restored line that would post a status, write a file, and exit never running.
+- A REPL is busy only while the helper reports a form evaluating. A window test shows a close at an idle prompt asking
+  nothing, an undo bringing the history back to a fresh helper, and a close during an evaluation asking.
+- A dead helper leaves the pane open with the terminal's last output above a strip with the message and Restart. The
+  restart starts a fresh helper with the history. A close ends the helper by closing its connection. A helper still
+  there two seconds later is killed when its process ID and start second still match what the app recorded at attach.
+  Tests show the kill happening, and not happening for a reused process ID. A test caught a first draft that killed the
+  test runner, since a raw peer in a test is the test process.
+- The refusal of a script's send is the `InputOwning` property, adopted by the REPL. A window test against a real REPL
+  pane shows it.
+- Two package listeners in one process each issue tokens for their own address. A helper started with each one's
+  address binds to its own instance, and a line typed in one never reaches the other. No UI test starts two
+  instances.
+- A launcher entry opens the REPL. It is the eighth, so Cmd-8 picks it, and the launcher's tests changed to match.
+  Scripting now starts before any window, so a REPL that a window restores finds the listener.
+- After a Ctrl-C stops a form, the rest of that line is dropped, so `(while true) (print 1)` never prints. A package
+  test failed on the first build of the loop. Another runs the helper as a session leader on its own pty, as a terminal
+  starts a program, and shows the byte 3 stopping a loop through the line discipline. It cannot show libghostty's own
+  wrapping of the program.
+- `ReplUITests` was built and not run by this milestone. The coordinator's first run showed that Escape does not
+  dismiss the close question, so the test clicks Cancel as the other UI tests do, and that the older of two recalled
+  lines did not appear in a narrow pane. The cause was the test, not the editor. Janet's editor draws one row and
+  scrolls it to keep the cursor at the line's end, so a recalled line wider than the pane shows its tail and never its
+  head. The test now matches the tail, and a package test on a 30-column pty pins the editor's display. Its tests drive the REPL from the launcher, a host call, a
+  close at an idle prompt, a close during a loop, Ctrl-C, a close and undo, and a restart after `(os/exit 0)`.
+- Not covered: the shell wrapper is proved to run the helper as the process the shell started, but only with
+  `/bin/sh`. The terminal engine's own wrapping of the program is not tested. The event loop does not run in a REPL.
+- Left for M5: the app's stop request, a helper stuck in C that Ctrl-C cannot reach, the memory cap and the app-wide
+  budget, and the resting footprint of a REPL helper.
 
 ### M5: Sandbox and limits
 
@@ -701,6 +784,59 @@ Amended 2026-11-09; see Decision Log.
 - 2026-11-09: The UI tests run the command from the instance's terminal (work-queue best guess, from the M3 review).
   The runner is sandboxed, and a process it starts inherits that. The app's shell is unsandboxed, so it can connect,
   and the tests read the files the shell writes.
+
+- 2026-11-09: The wire is protocol version 3, and a REPL's token is its own first message (work-queue best guess). The
+  text said the helper "presents the token" and fixed no message. A token message in place of `begin` keeps hello as
+  it was and lets the listener refuse a second declaration. The app answers with a history message or a refusal. The
+  refusal is a message, since a closed socket would not tell the user why. The helper reports each line and each
+  change in whether a form runs. If wrong, the token could ride in `begin`, which would put a secret in the field the
+  status bar shows.
+- 2026-11-09: The REPL's loop is the helper's own C, not Janet's `repl` function (work-queue best guess). The text said
+  Janet's line editor and parser. `repl` would decide for itself what an interrupt does, and what it prints for one.
+  The loop keeps both in code the project reads. It does not run Janet's event loop, so `ev/` functions do not resume
+  a fiber in a REPL. If wrong, calling `repl` would need an experiment on how it treats an interrupt.
+- 2026-11-09: Ctrl-C in a REPL is SIGINT handled on the VM's thread (work-queue best guess). The text said the
+  watchdog thread carries out Ctrl-C. A signal can reach any thread, so the REPL blocks it everywhere else. The handler
+  raises the interrupt only while a form runs, since a raised count with no form would stop the next form at once. The
+  watchdog keeps the hangup and the app's stop request. If wrong, a kqueue signal event on the watchdog would do the
+  same job, with the same gate.
+- 2026-11-09: The app keeps 500 lines, 256 KiB, and 1,024 bytes a line, and the editor recalls the newest 100
+  (work-queue best guess). The brief left the bound open. Janet's editor holds 100 lines and 1,023 bytes a line, so
+  the copy keeps more than recall can use, for the layout file. A line with a control character, a blank line, and a
+  repeat are not kept, as the editor keeps none of them. If wrong, the bound is two constants.
+- 2026-11-09: A REPL starts with an empty environment, in the home folder from the user database, and takes no address
+  from the environment (work-queue best guess). The text said it drops every inherited variable. The helper replaces
+  its environment block, since Darwin has no `clearenv`. It enters home itself, so the launch's directory is not the
+  only thing keeping it there. It needs `--socket`, since an environment variable or the well-known address could reach
+  another instance. The probe that proves this exists only in Debug builds. If wrong, a REPL given a missing socket
+  would fall back to `UNITERM_SOCKET`.
+- 2026-11-09: A REPL is busy only while its helper reports a form evaluating (work-queue best guess). The pty reports a
+  program with no prompt marks as always running, and the helper emits none. If wrong, the helper could emit OSC 133 and
+  the terminal's own answer would agree with the report.
+- 2026-11-09: A dead helper leaves the pane with the terminal's last output and a strip with Restart, and closing ends
+  the helper by closing its connection, then killing it after two seconds when its identity still matches
+  (work-queue best guess). The text said a message and a way to restart. The last output may hold the reason, such as a
+  refused token or a version mismatch. The identity is the process ID and start second the app recorded when the
+  helper attached. If wrong, the strip could replace the terminal and show only the message.
+- 2026-11-09: A script cannot open a REPL pane (work-queue best guess). The brief offered `:repl` among the kinds if it
+  fit. M2's As built says no kind runs a program, and a REPL starts a helper process. The checks do not need it. If
+  wrong, the kind is one entry in the kinds list, and a limit on how many a script may open waits on M5's budget.
+- 2026-11-09: Scripting starts before any window opens (work-queue best guess). A REPL that a window restores at launch
+  asks for its channel as it starts, and the listener did not exist yet. The applet also asks lazily, and shows a
+  message with a Restart when scripting is off. If wrong, a restored REPL would show that message at every launch.
+- 2026-11-09: The launcher offers the REPL as its eighth entry (work-queue best guess). The REPL needs a way in that is
+  not a script. The entry is last, so the numbers of the others stay. Cmd-8 now picks the REPL, and the launcher's tests
+  for wrapping and for a number past the end changed.
+- 2026-11-09: ADR candidate (cuts across the system): an interactive-session applet such as the REPL may start its
+  interpreter on restore, the way a shell-mode terminal starts a shell, but never re-runs input. ADR-03 names only shell
+  mode. Undecided.
+- 2026-11-09: The REPL sets ISIG on the terminal before each form runs, when the terminal lacks it (work-queue best
+  guess, from the UI run). The editor restores only what it found at its read, so a terminal that starts without ISIG
+  would leave Ctrl-C a plain byte. The guard touches no other setting. If wrong, a user who wants ISIG off for the
+  REPL's evaluations has no way to get it, and that use has no known reason.
+- 2026-11-09: The older-line recall check in the UI test matches the line's tail, not its head (work-queue best guess,
+  from the UI run). Janet's editor scrolls a single row to keep the cursor at the end, so a narrow pane never shows the
+  head of a long recalled line. The product is unchanged.
 
 ## References
 

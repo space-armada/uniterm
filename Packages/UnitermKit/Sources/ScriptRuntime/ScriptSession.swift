@@ -21,6 +21,9 @@ final class ScriptSession {
   private let lost: @Sendable (String) -> Never
   private var nextRequest: UInt32 = 1
 
+  /// What the helper says when the app's end of the connection closes. A REPL words it for a REPL.
+  private(set) var quitText = ScriptSession.appQuitText
+
   /// `lost` runs when the app closes the connection or it fails. It must not return.
   init(
     socket: FramedSocket,
@@ -59,9 +62,64 @@ final class ScriptSession {
   /// What the helper says when the app's end of the connection closes.
   static let appQuitText = "uniterm quit, or closed the connection, while the script was running"
 
+  /// What a REPL's helper says when the app's end of the connection closes.
+  static let replQuitText = "uniterm quit, or closed this REPL's connection"
+
   /// Connects, exchanges the protocol version, and names the script. Throws
   /// `WireError.versionMismatch` when the app is another version.
   static func open(path: String, name: String) throws -> ScriptSession {
+    let session = try connect(path: path)
+
+    try session.socket.send(ScriptHelperMessage.begin(name: name).frame())
+
+    return session
+  }
+
+  /// Connects as a REPL's helper does. After the version, it presents the token and waits for the
+  /// app to accept it. The app answers with the history to recall, oldest first, or with a refusal
+  /// that says why. A refusal throws `ScriptSessionError.failed`.
+  static func openRepl(path: String, token: Data) throws -> (
+    session: ScriptSession, history: [String]
+  ) {
+    let session = try connect(path: path)
+
+    session.quitText = replQuitText
+
+    do {
+      try session.socket.send(ScriptHelperMessage.attach(token: token).frame())
+
+      var lines: [String] = []
+
+      while true {
+        switch try session.readMessage() {
+        case .history(let more, let final):
+          lines += more
+
+          guard lines.count <= maxHistoryLines else {
+            throw WireError.badValue("the app sent more history than a REPL can recall")
+          }
+
+          if final { return (session, lines) }
+
+        case .attachRefused(let text):
+          throw ScriptSessionError.failed(.refused, text)
+
+        default:
+          throw WireError.badValue("the app answered a token with something else")
+        }
+      }
+    } catch {
+      session.close()
+
+      throw error
+    }
+  }
+
+  /// The most history lines a helper accepts. The app sends at most the lines the line editor
+  /// recalls, so a larger history is a fault.
+  private static let maxHistoryLines = 1000
+
+  private static func connect(path: String) throws -> ScriptSession {
     let socket = try UnixSocket.connect(path: path)
 
     // A socket that another user made could read the script's name and what the script asks for.
@@ -78,9 +136,29 @@ final class ScriptSession {
     let hello = try session.readMessage()
 
     try ScriptAppMessage.validateHello(hello)
-    try session.socket.send(ScriptHelperMessage.begin(name: name).frame())
 
     return session
+  }
+
+  /// Tells the app a line the user entered. It needs no answer, and a lost connection ends the
+  /// helper as any other call does.
+  func reportReplLine(_ text: String) {
+    notify(.replLine(text))
+  }
+
+  /// Tells the app whether a form is evaluating.
+  func reportEvaluating(_ running: Bool) {
+    notify(.replEvaluating(running))
+  }
+
+  private func notify(_ message: ScriptHelperMessage) {
+    do {
+      try socket.send(message.frame())
+    } catch WireError.closed {
+      lost(quitText)
+    } catch {
+      lost("the connection to uniterm failed: \(error)")
+    }
   }
 
   func close() {
@@ -114,7 +192,7 @@ final class ScriptSession {
     } catch let error as ScriptSessionError {
       throw error
     } catch WireError.closed {
-      lost(Self.appQuitText)
+      lost(quitText)
     } catch {
       lost("the connection to uniterm failed while the script was running: \(error)")
     }

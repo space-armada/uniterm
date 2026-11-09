@@ -290,8 +290,17 @@ public final class ScriptListener: @unchecked Sendable {
     try ScriptHelperMessage.validateHello(hello)
   }
 
+  /// What a connection has declared itself to be. A connection starts undeclared, and its first
+  /// message other than a call declares it a script or a REPL. It cannot declare itself again.
+  private enum Role {
+    case undeclared
+    case script
+    case repl
+  }
+
   private func readCalls(from connection: ScriptConnection) {
-    var begun = false
+    var role = Role.undeclared
+    var called = false
 
     while !connection.isClosed {
       do {
@@ -302,16 +311,39 @@ public final class ScriptListener: @unchecked Sendable {
           throw WireError.badValue("a second hello")
 
         case .begin(let name):
-          guard !begun else { throw WireError.badValue("a second begin") }
+          guard role == .undeclared else { throw WireError.badValue("a second begin") }
 
-          begun = true
+          role = .script
           continuation.yield(.begun(connection, name: name))
+
+        case .attach(let token):
+          guard role == .undeclared, !called else {
+            throw WireError.badValue("a token after the connection began")
+          }
+
+          role = .repl
+          continuation.yield(.attached(connection, token: token))
+
+        case .replLine(let text):
+          guard role == .repl else {
+            throw WireError.badValue("a line from a connection that is not a REPL")
+          }
+
+          continuation.yield(.replLine(connection, text))
+
+        case .replEvaluating(let running):
+          guard role == .repl else {
+            throw WireError.badValue("an evaluating flag from a connection that is not a REPL")
+          }
+
+          continuation.yield(.replEvaluating(connection, running))
 
         case .request(let id, let call):
           connection.slots.wait()
 
           guard !connection.isClosed else { return }
 
+          called = true
           continuation.yield(.request(connection, id: id, call: call))
         }
       } catch WireError.closed {

@@ -90,6 +90,57 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
                                         uint32_t sandbox_flags, const char *const *arguments,
                                         size_t argument_count, uniterm_script_failure *failure);
 
+/*
+ * What the REPL reports to its host. Both callbacks run on the thread that runs the REPL, and must
+ * not unwind or trap. `line` gets each non-blank line the user enters, without its newline, before
+ * the line is evaluated. `running` gets 1 when a form starts to evaluate and 0 when it ends.
+ */
+typedef struct uniterm_repl_host {
+    void *userdata;
+    void (*line)(void *userdata, const uint8_t *text, size_t length);
+    void (*running)(void *userdata, int32_t running);
+} uniterm_repl_host;
+
+/*
+ * Blocks SIGINT on the calling thread. The REPL's thread calls it before it starts any other
+ * thread, so every other thread inherits the block and the signal can only reach the REPL's own.
+ */
+void uniterm_janet_repl_block_sigint(void);
+
+/*
+ * Makes the REPL's SIGINT handler write `[sigint evaluating]` or `[sigint idle]` to stderr each
+ * time the signal arrives. It tells a signal that never arrives from one that arrives and fails to
+ * stop the form. Debug builds only. Call it before the REPL starts.
+ */
+void uniterm_janet_repl_trace_sigint(void);
+
+/*
+ * Puts a line into the line editor's recall history as the newest entry, on the calling thread. It
+ * is recall only, and is never evaluated. Call it in order from oldest to newest, before the REPL
+ * starts. The editor keeps the newest 100.
+ */
+void uniterm_janet_repl_seed(const uint8_t *text, size_t length);
+
+/*
+ * Runs the REPL on the calling thread until the input ends, then tears the VM down. It reads with
+ * Janet's own line editor, evaluates each form in the user's environment, and prints results as
+ * Janet's REPL does. An error in a form is printed and the prompt returns, with the environment's
+ * definitions intact. SIGINT stops a running form and returns to the prompt, and clears the line at
+ * an idle prompt. The `uniterm` module is already imported.
+ */
+uniterm_script_status uniterm_janet_repl(const uniterm_host *host, const uniterm_repl_host *repl,
+                                         uint32_t sandbox_flags, uniterm_script_failure *failure);
+
+/*
+ * Replaces the process's environment with an empty one. Call it on the helper's main thread, before
+ * any other thread starts. The old block is left unreferenced, since a library may still point
+ * into it.
+ */
+void uniterm_janet_drop_environment(void);
+
+/* How many variables the process's environment holds now. */
+size_t uniterm_janet_environment_count(void);
+
 /* The bytes the VM holds now, as counted by the allocator wrapper. */
 uint64_t uniterm_janet_live_bytes(void);
 

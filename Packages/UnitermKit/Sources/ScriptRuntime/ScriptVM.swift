@@ -74,6 +74,58 @@ enum ScriptVM {
   }
 }
 
+extension ScriptVM {
+  /// Runs the REPL in this process's Janet VM, on the calling thread, until its input ends. Each
+  /// line the user enters and each change in whether a form is running reaches the app through
+  /// `session`. Returns nil when the REPL ends cleanly.
+  static func runRepl(session: ScriptSession, sandbox: UInt32) -> ScriptFailure? {
+    var failure = uniterm_script_failure()
+
+    let status = withExtendedLifetime(session) {
+      let userdata = Unmanaged.passUnretained(session).toOpaque()
+      var host = uniterm_host(
+        userdata: userdata, post_status: postStatusCallback, call: callCallback)
+      var repl = uniterm_repl_host(
+        userdata: userdata, line: replLineCallback, running: replRunningCallback)
+
+      return uniterm_janet_repl(&host, &repl, sandbox, &failure)
+    }
+
+    guard status != UNITERM_SCRIPT_OK else { return nil }
+
+    let text = failure.message
+    let message = withUnsafeBytes(of: text) {
+      String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self)
+    }
+
+    return ScriptFailure(
+      name: "repl", line: Int(failure.line), column: Int(failure.column), kind: .runtime,
+      message: message)
+  }
+}
+
+/// Janet's line editor returns a line, and the loop reports it before it evaluates it. A line that
+/// is not UTF-8 is reported as the characters it decodes to, since the report is only for recall.
+private let replLineCallback:
+  @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<UInt8>?, Int) -> Void = {
+    userdata, text, length in
+    guard let userdata, let text else { return }
+
+    let session = Unmanaged<ScriptSession>.fromOpaque(userdata).takeUnretainedValue()
+    let bytes = UnsafeBufferPointer(start: text, count: length)
+
+    session.reportReplLine(String(decoding: bytes, as: UTF8.self))
+  }
+
+private let replRunningCallback: @convention(c) (UnsafeMutableRawPointer?, Int32) -> Void = {
+  userdata, running in
+  guard let userdata else { return }
+
+  let session = Unmanaged<ScriptSession>.fromOpaque(userdata).takeUnretainedValue()
+
+  session.reportEvaluating(running != 0)
+}
+
 /// Calls `body` with each string as a C string. The pointers last for the call.
 private func withCStrings<Result>(
   _ strings: [String], _ body: ([UnsafePointer<CChar>?]) -> Result

@@ -164,4 +164,24 @@ final class TerminalUITests: UnitermUITestCase {
 
     XCTAssertTrue(waitFor(terminal, timeout: 10) { !$0.contains("C:42:") })
   }
+
+  /// Catches a Ctrl-C that the app never turns into the terminal's interrupt. The shell runs a
+  /// foreground `sleep`, and the key must end it, so the echo after it never runs and the prompt
+  /// takes the next command. The marker is computed, so only the echo's output can show it.
+  func testControlCInterruptsAForegroundProgram() {
+    let app = launchApp()
+    let terminal = waitForTerminal(in: app)
+
+    app.typeText("sleep 30; echo slept-$((40+2))\n")
+    Thread.sleep(forTimeInterval: 1)
+
+    app.typeKey("c", modifierFlags: .control)
+    app.typeText("echo after-$((40+2))\n")
+
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 5) { $0.contains("after-42") },
+      "Ctrl-C did not end the sleep. Screen: \(terminal.value as? String ?? "")")
+    XCTAssertFalse(
+      (terminal.value as? String ?? "").contains("slept-42"), "the sleep ran to its end")
+  }
 }

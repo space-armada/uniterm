@@ -15,17 +15,28 @@ public final class ScriptHost {
   /// The longest producer name shown, in characters.
   static let maxLabelLength = 64
 
-  private struct Session {
+  struct Session {
     var name = "script"
     var producer: StatusProducer?
+
+    /// The connection presented a token the host turned away. Nothing it sends is answered.
+    var refused = false
   }
 
   private let listener: ScriptListener
   private let issueProducer: ProducerIssuer
   private let windows: (any ScriptWindowAPI)?
   private let sentContent: ScriptSentContent?
-  private let onRefusal: @MainActor (ScriptRefusal) -> Void
-  private var sessions: [UInt64: Session] = [:]
+  let onRefusal: @MainActor (ScriptRefusal) -> Void
+  var sessions: [UInt64: Session] = [:]
+
+  /// The REPL channels whose token no helper has spent yet, by token.
+  var pendingRepls: [Data: ScriptReplChannel] = [:]
+
+  /// The REPL channel each connection is bound to, by connection.
+  var boundRepls: [UInt64: ScriptReplChannel] = [:]
+
+  let reaper: ProcessReaper
 
   /// The file each pane holds from a script's send. It is the only one the pane may still read.
   private struct Held {
@@ -45,8 +56,10 @@ public final class ScriptHost {
   public init(
     listener: ScriptListener, issueProducer: @escaping ProducerIssuer,
     windows: (any ScriptWindowAPI)? = nil, sentContent: ScriptSentContent? = nil,
-    onRefusal: @escaping @MainActor (ScriptRefusal) -> Void = { _ in }
+    onRefusal: @escaping @MainActor (ScriptRefusal) -> Void = { _ in },
+    reaper: ProcessReaper = .live
   ) {
+    self.reaper = reaper
     self.listener = listener
     self.issueProducer = issueProducer
     self.windows = windows
@@ -83,6 +96,8 @@ public final class ScriptHost {
     }
 
     sessions = [:]
+    pendingRepls = [:]
+    boundRepls = [:]
   }
 
   func handle(_ event: ScriptEvent) {
@@ -90,7 +105,22 @@ public final class ScriptHost {
     case .begun(let connection, let name):
       sessions[connection.id, default: Session()].name = Self.label(for: name)
 
+    case .attached(let connection, let token):
+      attach(connection, token: token)
+
+    case .replLine(let connection, let text):
+      boundRepls[connection.id]?.onEvent?(.line(text))
+
+      if boundRepls[connection.id] == nil { connection.close() }
+
+    case .replEvaluating(let connection, let running):
+      boundRepls[connection.id]?.onEvent?(.evaluating(running))
+
+      if boundRepls[connection.id] == nil { connection.close() }
+
     case .request(let connection, let id, let call):
+      guard sessions[connection.id]?.refused != true else { return }
+
       releaseFilesOfClosedPanes()
 
       switch call {
@@ -108,6 +138,7 @@ public final class ScriptHost {
     case .closed(let connection):
       sessions[connection.id]?.producer?.retire()
       sessions[connection.id] = nil
+      boundRepls.removeValue(forKey: connection.id)?.connectionClosed()
 
     case .refused(_, let refusal):
       onRefusal(refusal)

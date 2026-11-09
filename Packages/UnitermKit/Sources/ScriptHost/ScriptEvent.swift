@@ -12,6 +12,9 @@ public enum ScriptRefusal: Sendable, Equatable {
   /// The peer sent bytes the protocol does not allow, or none in time.
   case protocolViolation(String)
 
+  /// A REPL presented a token the app did not issue, or one it had already accepted.
+  case replTokenRefused
+
   /// The app already serves as many peers as it allows.
   case tooManyConnections
 
@@ -25,6 +28,8 @@ public enum ScriptRefusal: Sendable, Equatable {
       return "A program run by another user (\(uid)) tried to script uniterm."
     case .versionMismatch: return ScriptProtocol.mismatchText
     case .protocolViolation(let detail): return "A script connection broke the protocol: \(detail)"
+    case .replTokenRefused:
+      return "A REPL presented a token that uniterm did not issue, or had already accepted."
     case .tooManyConnections: return "Too many scripts are connected to uniterm."
     case .peerNotReading: return "A script stopped reading uniterm's replies and was disconnected."
     }
@@ -36,6 +41,15 @@ public enum ScriptRefusal: Sendable, Equatable {
 public enum ScriptEvent: Sendable {
   case begun(ScriptConnection, name: String)
   case request(ScriptConnection, id: UInt32, call: ScriptCall)
+
+  /// A REPL's helper presented its token. It is the first message of the connection.
+  case attached(ScriptConnection, token: Data)
+
+  /// A REPL's helper reports a line the user entered.
+  case replLine(ScriptConnection, String)
+
+  /// A REPL's helper reports whether a form is evaluating.
+  case replEvaluating(ScriptConnection, Bool)
   case closed(ScriptConnection)
   case refused(ScriptPeer?, ScriptRefusal)
 }

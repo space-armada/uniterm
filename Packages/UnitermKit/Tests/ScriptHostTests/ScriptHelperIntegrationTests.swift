@@ -274,6 +274,9 @@ final class ScriptHelperIntegrationTests: XCTestCase {
       case .closed:
         return true
 
+      case .attached, .replLine, .replEvaluating:
+        XCTFail("a script helper acted as a REPL")
+
       case .refused(_, let refusal):
         XCTFail("the helper was refused: \(refusal)")
       }

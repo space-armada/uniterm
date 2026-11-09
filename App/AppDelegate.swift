@@ -9,6 +9,7 @@ import MapViewerApplet
 import OSLog
 import PlaceSearch
 import Preferences
+import ReplApplet
 import ScriptHost
 import SettingsKit
 import StatusKit
@@ -297,6 +298,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       services: browserServices, inMemory: browserStoreIsInMemory())
     browserWebsiteData = websiteData
 
+    // The closures read the script host when they run. A REPL restored at launch asks for its
+    // channel after the listener has started, and a REPL opened later finds it the same way.
+    let replServices = ReplServices(
+      helper: { ScriptCommandInstaller.command(in: Bundle.main.bundleURL) },
+      openChannel: { [weak self] history in self?.scriptHost?.openRepl(history: history) })
+
     let restoreApplet: AppletRestorer = { description in
       switch description.type {
       case TerminalDescription.typeID:
@@ -318,6 +325,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       case BrowserApplet.descriptionTypeID:
         return try BrowserApplet(
           restoring: description, dataStore: websiteData.store, services: browserServices)
+
+      case ReplDescription.typeID:
+        return try ReplApplet(engine: engine, services: replServices, restoring: description)
 
       default:
         throw AppletRestoreError.unsupported("the applet type \"\(description.type)\" is unknown")
@@ -347,6 +357,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       case .textViewer:
         return TextViewerApplet(startDirectory: directory)
+
+      case .repl:
+        return ReplApplet(engine: engine, services: replServices)
       }
     }
 
@@ -373,6 +386,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           places: places, makeApplet: makeApplet)
       })
     windowSet = windows
+
+    // Scripting starts before any window, so a REPL that a window restores finds the listener.
+    startScripting(windows: windows)
 
     let sourceFactories: [String: AppletSourceFactory] = [
       TerminalDescription.typeID: { _, startDirectory in
@@ -452,8 +468,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     launchOpens?.launchFinished()
-
-    startScripting(windows: windows)
 
     let sync = TerminalPaletteSync(engine: engine) { [weak self] error in
       self?.paletteDidNotApply(error)

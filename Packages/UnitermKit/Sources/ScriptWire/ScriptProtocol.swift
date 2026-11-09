@@ -7,7 +7,7 @@ import Foundation
 /// The hello is one message with one field, in every version. A peer built against another
 /// version can therefore always read the other's hello, and the refusal names the version.
 public enum ScriptProtocol {
-  public static let version: UInt16 = 2
+  public static let version: UInt16 = 3
 
   /// What the user is told when the two sides disagree. The app and its command are two binaries
   /// in one bundle, so replacing the bundle under a running app pairs an old app with a new one.
@@ -47,6 +47,25 @@ public enum ScriptProtocol {
 
   /// The largest payload a reply may carry. It leaves room in the frame for the reply's header.
   public static let maxReplyPayload = maxControlBody - 1024
+
+  /// The environment variable the app passes a REPL's token in. The helper reads it first and then
+  /// drops the whole environment.
+  public static let replTokenVariable = "UNITERM_REPL_TOKEN"
+
+  /// The size of a REPL's token, in bytes. Every byte is random.
+  public static let tokenBytes = 32
+
+  /// The longest line a REPL reports or recalls, in UTF-8 bytes. Janet's line editor holds 1023
+  /// bytes of a line, so a line it returns always fits.
+  public static let maxReplLineBytes = 1024
+
+  /// The most lines one history message may carry. The app splits a longer history across
+  /// messages, so no message passes the control frame's size.
+  public static let maxHistoryLines = 32
+
+  /// The most lines of a restored history the helper keeps to recall. It is the line editor's own
+  /// limit, and the app sends no more than this.
+  public static let recallLines = 100
 }
 
 /// Which way a new pane splits the pane beside it.
@@ -288,6 +307,17 @@ public enum ScriptHelperMessage: Equatable, Sendable {
   /// A host function call. The reply carries the same request ID.
   case request(id: UInt32, call: ScriptCall)
 
+  /// A REPL helper presents its single-use token. It is the first message after the hello, in
+  /// place of `begin`, and names the REPL pane the connection serves.
+  case attach(token: Data)
+
+  /// A line the user entered in the REPL, reported before it is evaluated. The app keeps its own
+  /// copy of the history from these.
+  case replLine(String)
+
+  /// Whether the REPL is evaluating a form now. The app asks it before it closes the pane.
+  case replEvaluating(Bool)
+
   /// The frame type of the one call that carries content.
   static let sendType: UInt8 = 4
 
@@ -299,6 +329,9 @@ public enum ScriptHelperMessage: Equatable, Sendable {
       if case .send = call { return Self.sendType }
 
       return 3
+    case .attach: return 5
+    case .replLine: return 6
+    case .replEvaluating: return 7
     }
   }
 
@@ -309,6 +342,12 @@ public enum ScriptHelperMessage: Equatable, Sendable {
     case .hello(let version): body.put(version)
 
     case .begin(let name): body.put(string: name, limit: ScriptProtocol.maxNameBytes)
+
+    case .attach(let token): body.put(raw: token)
+
+    case .replLine(let text): body.put(string: text, limit: ScriptProtocol.maxReplLineBytes)
+
+    case .replEvaluating(let running): body.put(running ? UInt8(1) : UInt8(0))
 
     case .request(let id, let call):
       body.put(id)
@@ -347,6 +386,24 @@ public enum ScriptHelperMessage: Equatable, Sendable {
 
       message = .request(id: id, call: call)
 
+    case 5:
+      let token = reader.rest()
+
+      guard token.count == ScriptProtocol.tokenBytes else {
+        throw WireError.badValue("a token is not \(ScriptProtocol.tokenBytes) bytes")
+      }
+
+      message = .attach(token: token)
+
+    case 6: message = .replLine(try reader.string(limit: ScriptProtocol.maxReplLineBytes))
+
+    case 7:
+      switch try reader.u8() {
+      case 0: message = .replEvaluating(false)
+      case 1: message = .replEvaluating(true)
+      default: throw WireError.badValue("an evaluating flag is not 0 or 1")
+      }
+
     default: throw WireError.unknownType(type)
     }
 
@@ -373,10 +430,20 @@ public enum ScriptAppMessage: Equatable, Sendable {
 
   case reply(id: UInt32, result: ScriptResult)
 
+  /// The app turned a REPL's token away. The text says why, and the helper shows it and ends.
+  case attachRefused(String)
+
+  /// Lines of history for the REPL's line editor to recall, oldest first. The helper never
+  /// evaluates them. The last message of a history has `final` set, and an empty history is one
+  /// empty message with it set, so the helper always knows the app accepted its token.
+  case history(lines: [String], final: Bool)
+
   var wireType: UInt8 {
     switch self {
     case .hello: return 1
     case .reply: return 2
+    case .attachRefused: return 3
+    case .history: return 4
     }
   }
 
@@ -397,6 +464,17 @@ public enum ScriptAppMessage: Equatable, Sendable {
       case .failure(let kind, let text):
         body.put(kind.rawValue)
         body.put(string: text, limit: ScriptProtocol.maxFailureBytes)
+      }
+
+    case .attachRefused(let text):
+      body.put(string: text, limit: ScriptProtocol.maxFailureBytes)
+
+    case .history(let lines, let final):
+      body.put(final ? UInt8(1) : UInt8(0))
+      body.put(UInt16(min(lines.count, ScriptProtocol.maxHistoryLines)))
+
+      for line in lines.prefix(ScriptProtocol.maxHistoryLines) {
+        body.put(string: line, limit: ScriptProtocol.maxReplLineBytes)
       }
     }
 
@@ -433,6 +511,37 @@ public enum ScriptAppMessage: Equatable, Sendable {
       try reader.finished()
 
       return .reply(id: id, result: .failure(kind, text))
+
+    case 3:
+      let text = try reader.string(limit: ScriptProtocol.maxFailureBytes)
+      try reader.finished()
+
+      return .attachRefused(text)
+
+    case 4:
+      let final: Bool
+
+      switch try reader.u8() {
+      case 0: final = false
+      case 1: final = true
+      default: throw WireError.badValue("a history flag is not 0 or 1")
+      }
+
+      let count = Int(try reader.u16())
+
+      guard count <= ScriptProtocol.maxHistoryLines else {
+        throw WireError.tooLong(declared: count, limit: ScriptProtocol.maxHistoryLines)
+      }
+
+      var lines: [String] = []
+
+      for _ in 0..<count {
+        lines.append(try reader.string(limit: ScriptProtocol.maxReplLineBytes))
+      }
+
+      try reader.finished()
+
+      return .history(lines: lines, final: final)
 
     default:
       throw WireError.unknownType(type)

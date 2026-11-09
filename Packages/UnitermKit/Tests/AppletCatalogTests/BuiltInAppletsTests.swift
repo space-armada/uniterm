@@ -9,7 +9,8 @@ import XCTest
 final class BuiltInAppletsTests: XCTestCase {
   /// Catches a declaration that changes without a deliberate edit here. The terminal opens folders
   /// as the owner, the data viewer opens CSV, JSON, and `.xlsx` as the owner, the map viewer
-  /// opens GeoJSON as the owner, and the text viewer opens PDF, RTF, and Word as the owner.
+  /// opens GeoJSON as the owner, the text viewer opens PDF, RTF, and Word as the owner, and the
+  /// REPL opens nothing.
   func testTheCatalogIsTheTerminalOpeningFoldersAndTheDataViewerOpeningTables() {
     XCTAssertEqual(
       BuiltInApplets.declarations,
@@ -44,6 +45,8 @@ final class BuiltInAppletsTests: XCTestCase {
             OpenedType("org.openxmlformats.wordprocessingml.document", rank: .owner),
             OpenedType("net.daringfireball.markdown", rank: .owner),
           ]),
+        AppletTypeDeclaration(
+          typeID: "repl", displayName: "REPL", symbolName: "curlybraces", opens: []),
       ])
   }
 

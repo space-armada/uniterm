@@ -26,6 +26,10 @@ final class ScriptWireFuzzTests: XCTestCase {
     [
       ScriptHelperMessage.hello(version: 1).frame(),
       ScriptHelperMessage.begin(name: "synthetic.janet").frame(),
+      ScriptHelperMessage.attach(token: Data(repeating: 0x5A, count: ScriptProtocol.tokenBytes))
+        .frame(),
+      ScriptHelperMessage.replLine("(+ 1 2)").frame(),
+      ScriptHelperMessage.replEvaluating(true).frame(),
       ScriptHelperMessage.request(id: 3, call: .postStatus(level: .warning, text: "synthetic"))
         .frame(),
     ]
@@ -35,6 +39,9 @@ final class ScriptWireFuzzTests: XCTestCase {
         ScriptAppMessage.reply(id: 3, result: .ok(Data([1, 2]))).frame(),
         ScriptAppMessage.reply(id: 5, result: .failure(.notFound, "synthetic miss")).frame(),
         ScriptAppMessage.reply(id: 4, result: .failure(.refused, "synthetic refusal")).frame(),
+        ScriptAppMessage.attachRefused("synthetic token refusal").frame(),
+        ScriptAppMessage.history(lines: ["(+ 1 2)", "(def x 1)"], final: false).frame(),
+        ScriptAppMessage.history(lines: [], final: true).frame(),
       ]
   }
 

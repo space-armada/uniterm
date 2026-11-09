@@ -20,7 +20,7 @@ work is stashed. No commands need the user's credentials.
 | UTERM-003 M1: Embedded Janet and the first host function | DONE | "Embed Janet in a script helper and post status from scripts" |
 | UTERM-003 M2: Host API v1 | DONE | "Let scripts list, open, and send to panes" |
 | UTERM-003 M3: `uniterm run` | DONE | "Run scripts against uniterm from the command line" |
-| UTERM-003 M4: REPL applet | QUEUED | |
+| UTERM-003 M4: REPL applet | IN PROGRESS | "Add a Janet REPL applet that runs in a pane" (Ctrl-C in the real app still open) |
 | UTERM-003 M5: Sandbox and limits | QUEUED | |
 
 ## Local checks
@@ -317,3 +317,97 @@ The package suite ran in 156 s.
 ### Left open
 
 - The REPL half of the second-instance check moves to M4, by amendment.
+
+## UTERM-003 M4: REPL applet
+
+### Commits
+
+- "Add a Janet REPL applet that runs in a pane". M4 stays `IN PROGRESS`, because Ctrl-C has not been proven in the real
+  app. A later commit finishes it.
+
+### What landed
+
+`ReplApplet` hosts a terminal session through `TerminalLaunch.program`, running `uniterm repl --socket <instance
+address>`. The working directory is home, and a single-use, 32-byte token sits in `UNITERM_REPL_TOKEN`. Before any
+user code runs, the helper reads the token, replaces its whole environment with an empty one, and moves to the home
+folder from the user database. It then presents the token in a new `attach` message, which takes the place of `begin`.
+Wire protocol version 3 adds `attach`, `attachRefused`, `replLine`, `replEvaluating`, and `history`. The listener
+spends the token once, binds the connection to the pane, and refuses a second use or an unknown token.
+
+Line editing is Janet's own editor, included from the vendored `shell.c` with its `main` renamed. The REPL loop is the
+helper's own C loop. The app keeps a bounded history of 500 lines, 256 KiB, and 1024 bytes per line, and saves it in
+a `repl` description at payload version 1. A restored or undone REPL sends that history to a fresh helper for recall,
+and never runs it. `isRunningSomething` follows the helper's own report of an evaluation. A dead helper leaves the
+pane open with a message and a Restart button that only the user can press. The REPL owns its input, so a script's
+send to it is refused. Cmd-8 in the launcher now opens the REPL.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | M8MA40, TGZSKF, VRAYM7 | pass |
+| `caffeinate -dimsu make test-package` | 9TSC28 | pass |
+| `make build`, then `check-sandbox-off.sh` | F3ACYR, 3VHF9M | pass |
+| `make test-helper-sandbox` | YSHFP9 | pass |
+| ASan fuzz of the wire, 5000 iterations | F5QGSH | pass |
+| `scripts/swiftpm-offline-check.sh` | 38KGRB | pass |
+| `ReplUITests`, first run | SRCV5R | 3 pass, 2 fail |
+| `ReplUITests`, second run | 4NPPD5 | Ctrl-C and history recall fail |
+| `ReplUITests`, third run | XA6EA8 | 4 pass. Ctrl-C fails: the loop never stops in the real app |
+| Ctrl-C diagnostic run for a shell and the REPL | 7W038P, 220DXM, VXECNN | not run. "Timed out while enabling automation mode": the screen was not available |
+
+### Best guesses
+
+1. The token travels in its own `attach` message, so the secret never sits in a field the status bar shows.
+2. The helper runs its own C loop, not Janet's `repl`. The REPL has no event loop, so `ev/*` fibers never resume.
+3. Ctrl-C is a SIGINT handler on the VM thread, and every other thread blocks the signal. The proposal had said the
+   watchdog carries out Ctrl-C, and it is amended. The watchdog keeps hangup and the app's stop request.
+4. History is bounded at 500 lines, 256 KiB, and 1024 bytes per line. The editor recalls the newest 100.
+5. A Debug-only `--probe-environment` proves the empty environment and the home directory.
+6. `open-pane` gets no `:repl` kind, since no script-opened pane may start a program.
+7. Scripting starts before any window is restored, so a restored REPL finds the listener.
+8. The REPL is the launcher's eighth entry, on Cmd-8.
+9. A dead helper keeps its last terminal output above the message strip, since that output may hold the reason.
+10. The reaper kills only a peer whose PID and start second still match.
+11. Before each form, the helper turns ISIG back on if it is off. A package test failed without this guard. Nothing shows
+    that the real app's terminal ever starts with ISIG off.
+
+### Review findings
+
+| Finding | Disposition |
+|---|---|
+| PLAUSIBLE: Ctrl-C was not proven in the real app | Confirmed by the coordinator's UI runs: Ctrl-C does not stop a loop in the app. Still open. See below |
+| PLAUSIBLE: after an interrupt, the rest of the line still ran | Confirmed by a test that failed first. Fixed |
+| The probe test waited with no bound | Fixed with a 20 s kill |
+| Test-only `lastLaunch` export | Removed |
+| A 116-column comment, and a fixed sleep in the reaper test | Fixed |
+| UI failure: Escape did not dismiss the close question | A test fault. The test now clicks Cancel |
+| UI failure: the older recalled line was not found | A test fault. The editor draws one row and shows only the tail of a long line. A pty package test pins this |
+| ADR-impact ADVISORY: ADR-09, the token is not authentication | Recorded as the planned gap that UTERM-004 closes |
+| ADR-impact uncovered: an interactive-session applet may start its interpreter on restore | Passes the ADR bar as a rule that cuts across applets and refines ADR-03. Recorded in the Decision Log as `Undecided` |
+| ADR-impact uncovered: the token binding is not authentication | Dismissed as an ADR candidate. UTERM-004's caller identity covers it |
+
+### Restarts
+
+The first implementer stopped at a `cg_run` of a `script`/`login` diagnostic. It waited 35 minutes on an approval
+prompt that nobody answered. The coordinator stopped that agent. A fresh implementer continued from the working tree,
+with orders to run no command that needs approval.
+
+### Test cost
+
+| Class | Time alone |
+|---|---|
+| `ScriptReplTests`, 22 or more tests | about 2 s |
+| `ReplAppletTests`, 13 tests | 0.83 s |
+| `ReplHistoryTests`, 4 tests | 0.08 s |
+| `ReplUITests`, 5 UI tests | about 100 s |
+
+The package suite grew to 163 to 203 s.
+
+### Left open
+
+- Ctrl-C in the real app. Package tests stop a loop with the byte 3 under `script`, `login`, `bash`, and `sh -c`,
+  with SIGINT inherited as ignored, and with ISIG off. In the app, the loop runs on. Two diagnostic tests are written
+  and built, but not run. One is `TerminalUITests.testControlCInterruptsAForegroundProgram`, which checks whether
+  Ctrl-C reaches any foreground program. The other is the REPL test with `UNITERM_REPL_TRACE_SIGINT=1`, which shows
+  whether SIGINT reaches the helper.

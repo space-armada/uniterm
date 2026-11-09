@@ -1,12 +1,18 @@
 #include "uniterm_janet.h"
 
+#include <crt_externs.h>
 #include <malloc/malloc.h>
 #include <math.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
+#include <unistd.h>
 
 #include "janet.h"
+#include "uniterm_line.h"
 
 /*
  * The allocator wrapper. janetconf.h routes every Janet allocation here. The count is the heap's
@@ -952,4 +958,351 @@ uniterm_script_status uniterm_janet_run(const uniterm_host *host, const char *na
     janet_deinit();
 
     return result;
+}
+
+/*
+ * The REPL.
+ *
+ * The loop is this file's own and not Janet's `repl` function, so an interrupt returns to the
+ * prompt through code that can be read here. Each form runs in a fiber of its own, as `evaluate`
+ * runs a script's, and a signal other than OK ends that form and nothing else.
+ */
+
+static int repl_evaluating;
+static int repl_fired;
+static JanetVM *repl_vm;
+static int repl_trace;
+
+/*
+ * Runs in a signal handler on the REPL's thread, so it only touches atomics. Janet's interrupt
+ * counter must stay balanced. A signal that arrives while no form runs would leave the counter
+ * raised and stop the next form at its first instruction, so it does nothing.
+ */
+static void repl_on_sigint(int signal_number) {
+    (void)signal_number;
+
+    if (repl_trace) {
+        static const char evaluating[] = "[sigint evaluating]\n";
+        static const char idle[] = "[sigint idle]\n";
+        int running = __atomic_load_n(&repl_evaluating, __ATOMIC_SEQ_CST);
+        ssize_t ignored =
+            running ? write(STDERR_FILENO, evaluating, sizeof(evaluating) - 1)
+                    : write(STDERR_FILENO, idle, sizeof(idle) - 1);
+
+        (void)ignored;
+    }
+
+    if (repl_vm != NULL && __atomic_load_n(&repl_evaluating, __ATOMIC_SEQ_CST)) {
+        __atomic_add_fetch(&repl_fired, 1, __ATOMIC_SEQ_CST);
+        janet_interpreter_interrupt(repl_vm);
+    }
+}
+
+/* Ends the window in which a signal interrupts, and balances every interrupt it raised. */
+static int repl_settle(void) {
+    __atomic_store_n(&repl_evaluating, 0, __ATOMIC_SEQ_CST);
+
+    int fired = __atomic_exchange_n(&repl_fired, 0, __ATOMIC_SEQ_CST);
+
+    for (int index = 0; index < fired; index++) janet_interpreter_interrupt_handled(repl_vm);
+
+    return fired;
+}
+
+/*
+ * Puts the terminal's signal characters back before a form runs. The line editor restores the
+ * settings it found at its read. A terminal that started without ISIG would keep Ctrl-C a plain
+ * byte for the whole session. A restore the editor could not finish would do the same.
+ */
+static void repl_ensure_terminal_signals(void) {
+    struct termios settings;
+
+    if (!isatty(STDIN_FILENO) || tcgetattr(STDIN_FILENO, &settings) != 0) return;
+
+    if (settings.c_lflag & ISIG) return;
+
+    settings.c_lflag |= ISIG;
+    tcsetattr(STDIN_FILENO, TCSANOW, &settings);
+}
+
+void uniterm_janet_repl_trace_sigint(void) {
+    repl_trace = 1;
+}
+
+void uniterm_janet_repl_block_sigint(void) {
+    sigset_t set;
+
+    sigemptyset(&set);
+    sigaddset(&set, SIGINT);
+    pthread_sigmask(SIG_BLOCK, &set, NULL);
+}
+
+void uniterm_janet_repl_seed(const uint8_t *text, size_t length) {
+    char *copy = malloc(length + 1);
+
+    if (copy == NULL) return;
+
+    memcpy(copy, text, length);
+    copy[length] = '\0';
+
+    uniterm_line_seed(copy);
+    free(copy);
+}
+
+static void repl_report_running(const uniterm_repl_host *repl, int32_t running) {
+    if (repl->running != NULL) repl->running(repl->userdata, running);
+}
+
+/*
+ * Compiles and runs one form, then prints what Janet's own REPL prints for it. Returns 1 when the
+ * form was interrupted, so the caller abandons the rest of the line.
+ */
+static int repl_run_form(JanetTable *env, Janet form, JanetString where, size_t line,
+                          size_t column, const uniterm_repl_host *repl) {
+    JanetCompileResult compiled = janet_compile(form, env, where);
+
+    if (compiled.status != JANET_COMPILE_OK) {
+        int32_t error_line = (int32_t)line;
+        int32_t error_column = (int32_t)column;
+
+        if (compiled.error_mapping.line > 0 && compiled.error_mapping.column > 0) {
+            error_line = compiled.error_mapping.line;
+            error_column = compiled.error_mapping.column;
+        }
+
+        janet_eprintf("%s:%d:%d: compile error: %S\n", (const char *)where, error_line,
+                      error_column, compiled.error);
+
+        return 0;
+    }
+
+    JanetFunction *thunk = janet_thunk(compiled.funcdef);
+    JanetFiber *fiber = janet_fiber(thunk, 64, 0, NULL);
+    Janet value = janet_wrap_nil();
+
+    fiber->env = env;
+    janet_gcroot(janet_wrap_fiber(fiber));
+
+    repl_report_running(repl, 1);
+    __atomic_store_n(&repl_evaluating, 1, __ATOMIC_SEQ_CST);
+
+    JanetSignal signal = janet_continue(fiber, janet_wrap_nil(), &value);
+
+    repl_settle();
+    repl_report_running(repl, 0);
+
+    int interrupted = signal == JANET_SIGNAL_INTERRUPT;
+
+    if (interrupted) {
+        janet_eprintf("interrupted\n");
+    } else if (signal == JANET_SIGNAL_OK || signal == JANET_SIGNAL_YIELD ||
+               signal == JANET_SIGNAL_EVENT) {
+        JanetTable *holder = janet_table(1);
+
+        janet_table_put(holder, janet_ckeywordv("value"), value);
+        janet_table_put(env, janet_csymbolv("_"), janet_wrap_table(holder));
+        janet_printf("%q\n", value);
+    } else {
+        janet_stacktrace(fiber, value);
+    }
+
+    janet_gcunroot(janet_wrap_fiber(fiber));
+
+    return interrupted;
+}
+
+/* The prompt Janet's REPL shows: the line, and the delimiters still open. */
+static void repl_prompt(JanetParser *parser, char *prompt, size_t capacity) {
+    char delimiters[64];
+
+    delimiters[0] = '\0';
+
+    JanetCFunction state_of = janet_unwrap_cfunction(janet_resolve_core("parser/state"));
+    Janet arguments[2] = {janet_wrap_abstract(parser), janet_ckeywordv("delimiters")};
+    Janet state = state_of(2, arguments);
+
+    if (janet_checktype(state, JANET_STRING)) {
+        JanetString text = janet_unwrap_string(state);
+        int32_t length = janet_string_length(text);
+
+        if ((size_t)length >= sizeof(delimiters)) length = (int32_t)sizeof(delimiters) - 1;
+
+        memcpy(delimiters, text, (size_t)length);
+        delimiters[length] = '\0';
+    }
+
+    snprintf(prompt, capacity, "repl:%d:%s> ", (int)parser->line, delimiters);
+}
+
+/* Feeds one entered line to the parser, and runs each form it completes. */
+static void repl_handle_line(JanetTable *env, JanetParser *parser, JanetBuffer *line,
+                             JanetString where, const uniterm_repl_host *repl) {
+    int32_t length = line->count;
+
+    if (length > 0 && line->data[length - 1] == '\n') length--;
+
+    if (length > 0 && repl->line != NULL) repl->line(repl->userdata, line->data, (size_t)length);
+
+    for (int32_t index = 0; index < line->count; index++) {
+        janet_parser_consume(parser, line->data[index]);
+
+        if (janet_parser_status(parser) == JANET_PARSE_ERROR) {
+            janet_eprintf("%s:%d:%d: parse error: %s\n", (const char *)where, (int)parser->line,
+                          (int)parser->column, janet_parser_error(parser));
+            janet_parser_flush(parser);
+
+            return;
+        }
+
+        while (janet_parser_has_more(parser)) {
+            size_t form_line = parser->line;
+            size_t form_column = parser->column;
+
+            if (repl_run_form(env, janet_parser_produce(parser), where, form_line, form_column,
+                              repl)) {
+                janet_parser_flush(parser);
+
+                return;
+            }
+        }
+    }
+}
+
+static void repl_loop(JanetTable *env, const uniterm_repl_host *repl) {
+    JanetBuffer *line = janet_buffer(256);
+    JanetParser *parser = janet_abstract(&janet_parser_type, sizeof(JanetParser));
+    JanetString where = janet_cstring("repl");
+
+    janet_parser_init(parser);
+    janet_gcroot(janet_wrap_buffer(line));
+    janet_gcroot(janet_wrap_abstract(parser));
+    janet_gcroot(janet_wrap_string(where));
+
+    for (;;) {
+        char prompt[96];
+        uniterm_line_result result;
+        JanetTryState state;
+
+        repl_settle();
+        fflush(stdout);
+        fflush(stderr);
+
+        repl_prompt(parser, prompt, sizeof(prompt));
+        result = uniterm_line_read(prompt, line, env);
+
+        if (result == UNITERM_LINE_EOF) break;
+
+        if (result == UNITERM_LINE_CANCEL) {
+            janet_parser_flush(parser);
+
+            continue;
+        }
+
+        repl_ensure_terminal_signals();
+
+        if (janet_try(&state) == JANET_SIGNAL_OK) {
+            repl_handle_line(env, parser, line, where, repl);
+            janet_restore(&state);
+        } else {
+            Janet payload = state.payload;
+            uniterm_script_failure described;
+
+            janet_restore(&state);
+            repl_settle();
+            describe_value(payload, 0, 0, &described);
+            janet_eprintf("error: %s\n", described.message);
+        }
+    }
+
+    janet_gcunroot(janet_wrap_string(where));
+    janet_gcunroot(janet_wrap_abstract(parser));
+    janet_gcunroot(janet_wrap_buffer(line));
+}
+
+uniterm_script_status uniterm_janet_repl(const uniterm_host *host, const uniterm_repl_host *repl,
+                                         uint32_t sandbox_flags, uniterm_script_failure *failure) {
+    memset(failure, 0, sizeof(*failure));
+
+    if (janet_init() != 0) {
+        fill_failure(failure, 0, 0, "Janet did not start");
+
+        return UNITERM_SCRIPT_START_FAILED;
+    }
+
+    volatile uniterm_script_status result = UNITERM_SCRIPT_OK;
+    volatile int installed = 0;
+    JanetTryState state;
+    struct sigaction previous;
+
+    if (janet_try(&state) == JANET_SIGNAL_OK) {
+        JanetTable *core = janet_core_env(NULL);
+
+        active_host = host;
+        register_module(core);
+
+        JanetTable *env = janet_table(0);
+
+        env->proto = core;
+        janet_gcroot(janet_wrap_table(env));
+
+        Janet ignored;
+
+        if (janet_dostring(env, "(import uniterm)", "repl", &ignored) != 0) {
+            janet_panic("the uniterm module did not load");
+        }
+
+        janet_sandbox(sandbox_flags);
+
+        repl_vm = janet_local_vm();
+
+        struct sigaction action;
+        sigset_t set;
+
+        memset(&action, 0, sizeof(action));
+        action.sa_handler = repl_on_sigint;
+        sigemptyset(&action.sa_mask);
+        installed = sigaction(SIGINT, &action, &previous) == 0;
+
+        sigemptyset(&set);
+        sigaddset(&set, SIGINT);
+        pthread_sigmask(SIG_UNBLOCK, &set, NULL);
+
+        repl_loop(env, repl);
+        janet_restore(&state);
+    } else {
+        Janet payload = state.payload;
+
+        janet_restore(&state);
+        describe_value(payload, 0, 0, failure);
+
+        result = UNITERM_SCRIPT_RUNTIME_ERROR;
+    }
+
+    if (installed) sigaction(SIGINT, &previous, NULL);
+
+    repl_settle();
+    repl_vm = NULL;
+    active_host = NULL;
+    uniterm_line_close();
+    janet_deinit();
+
+    return result;
+}
+
+void uniterm_janet_drop_environment(void) {
+    char **empty = calloc(1, sizeof(char *));
+
+    if (empty != NULL) *_NSGetEnviron() = empty;
+}
+
+size_t uniterm_janet_environment_count(void) {
+    char **entry = *_NSGetEnviron();
+    size_t count = 0;
+
+    while (entry != NULL && *entry != NULL) {
+        count++;
+        entry++;
+    }
+
+    return count;
 }

@@ -50,6 +50,7 @@ let package = Package(
     .library(name: "ScriptWire", targets: ["ScriptWire"]),
     .library(name: "ScriptRuntime", targets: ["ScriptRuntime"]),
     .library(name: "ScriptHost", targets: ["ScriptHost"]),
+    .library(name: "ReplApplet", targets: ["ReplApplet"]),
   ],
   dependencies: [
     // The first third-party Swift package. Only TableData uses it. The version is exact, and
@@ -173,11 +174,12 @@ let package = Package(
     // links into the app. scripts/check-janet-isolation.sh enforces that.
     //
     // The vendored source is not edited, so its own deprecation warning is silenced here instead.
-    // Unbuilt holds Janet's line editor, vendored from the same release and left out of the build
-    // until the REPL needs it.
+    // Unbuilt holds Janet's line editor, vendored from the same release. Its own file is not
+    // compiled. uniterm_janet_line.c includes it with `main` renamed away, so the REPL reaches the
+    // editor's history without any edit to the vendored source.
     .target(
       name: "CJanet", exclude: ["Unbuilt"],
-      cSettings: [.unsafeFlags(["-Wno-deprecated-declarations"])]),
+      cSettings: [.headerSearchPath("."), .unsafeFlags(["-Wno-deprecated-declarations"])]),
     // The wire between the app and a script helper: the protocol version, the host calls a script
     // makes, and their replies. It has no AppKit and no Janet, so the app and the helper share one
     // codec and the fuzzers can reach it alone.
@@ -190,11 +192,18 @@ let package = Package(
     // The app side of scripting: the listener, the peers, and the dispatch of their calls. It
     // never imports Janet.
     .target(name: "ScriptHost", dependencies: ["FileRouting", "ScriptWire", "StatusKit"]),
+    // The REPL applet. It hosts a terminal session whose child is the REPL helper, and binds the
+    // helper's control channel to its pane through the script host. It never imports Janet.
+    .target(
+      name: "ReplApplet",
+      dependencies: [
+        "AppletKit", "ScriptHost", "ScriptWire", "StatusKit", "TerminalSurface", "Theme",
+      ]),
     .target(
       name: "AppletCatalog",
       dependencies: [
         "AppletKit", "BrowserApplet", "DataViewerApplet", "ImageViewerApplet", "MapViewerApplet",
-        "TerminalApplet", "TextViewerApplet",
+        "ReplApplet", "TerminalApplet", "TextViewerApplet",
       ]),
     .testTarget(name: "StatusKitTests", dependencies: ["StatusKit"]),
     .testTarget(name: "FileRoutingTests", dependencies: ["FileRouting", "AppletKit"]),
@@ -282,6 +291,12 @@ let package = Package(
       name: "ScriptHostTests",
       dependencies: ["ScriptHost", "ScriptWire", "ScriptHelper", "StatusKit"],
       resources: [.copy("Fixtures")]),
+    .testTarget(
+      name: "ReplAppletTests",
+      dependencies: [
+        "ReplApplet", "AppletKit", "ScriptHost", "ScriptWire", "StatusKit", "TerminalSurface",
+        "WindowKit", "Preferences", "AppletTestSupport",
+      ]),
     .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
     .testTarget(name: "AppletKitTests", dependencies: ["AppletKit", "AppletTestSupport"]),
     .testTarget(name: "LayoutKitTests", dependencies: ["LayoutKit", "AppletKit", "PaneModel"]),
