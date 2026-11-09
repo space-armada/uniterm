@@ -94,8 +94,8 @@ until the simple one proves wrong.
 ### Document links use the shared browser session
 
 A link from a document opens in the browser's one persistent website data store, the same as any other browser tab.
-Logins carry over. A document's author can therefore trigger a GET that carries the user's cookies, as a link in Mail
-already can when it opens the default browser. Risks records this.
+Logins carry over. A clicked link therefore carries the user's cookies, the same as a link clicked in any regular browser.
+Risks records where uniterm could go beyond that.
 
 ## Design Decisions (Open)
 
@@ -166,10 +166,12 @@ placement, so the first keeps one owner.
 
 ## Risks
 
-- **A document's author can trigger authenticated requests** — likelihood: medium, impact: medium. A link in a
-  document opens in the shared browser session, so a one-click confirm link runs as the user when clicked.
-  Accepted: the user chose the shared session. The link still needs a real click, and the browser already treats a
-  page's links the same way. The "How a link-opened tab restores" question decides whether a relaunch repeats it.
+- **A document's author can trigger authenticated requests** — likelihood: low, impact: medium. A clicked link in a
+  document opens in the shared browser session, so a one-click confirm link runs as the user.
+  Accepted: this is the same exposure as a regular browser. A link in a PDF opened in Preview, or on any web page,
+  reaches the default browser with the user's cookies too. Two paths go beyond a browser, and open questions decide
+  them. "How a link-opened tab restores" decides whether a relaunch fetches the link again. "Scripts and controllers"
+  and "Terminal links from remote output" decide opens that no user click started.
 - **Replacing a viewer's document surprises the user** — likelihood: medium, impact: low. A file opened from Finder
   may replace what a nearby viewer showed. Mitigation: the replaced document stays reopenable, and the walk only
   replaces in a pane that would open the same kind of content.
