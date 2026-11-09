@@ -499,10 +499,11 @@ None.
   unit counts as one block for scroll anchors, so a long `<details>` restores by fraction within it. Headings inside it
   carry the unit's first line.
 - The `.md` extension types as another app's `com.unknown.md` on the machine this was built on. That type does not
-  conform to Markdown, and the router has no extension fallback, so such a file would be refused. `Info.plist` now
-  imports `net.daringfireball.markdown` with the Markdown extensions, and a router test shows why the type matters.
-  Whether Launch Services prefers that import over another app's claim on a given machine is not provable in a test.
-  The built app was not registered to check it.
+  conform to Markdown. `Info.plist` imports `net.daringfireball.markdown` with the Markdown extensions, but Launch
+  Services prefers the other app's claim, so a file typed that way was refused. The router now falls back to every type
+  the system registers for the extension, which includes Markdown, and routes by those. A router test pins the
+  fallback with fixture types. The built app was not registered to check which type a Finder open resolves to. Amended
+  2026-11-08; see Decision Log.
 - The page renders in slices and yields between them. WebKit lays out everything inserted so far while the page is idle,
   and fixed 30 ms slices made that cost quadratic. Each slice is now three times the last yield's duration. A 20 MB file
   went from 87 s to 4 s, and the host's longest main-thread gap stayed under 30 ms. See Decision Log.
@@ -886,6 +887,10 @@ None.
   for headings in a hand-built `.docx` with heading styles or in an RTF with outline levels, and the system writers
   drop it. The sidebar for real RTF and Word files is therefore empty here, which "Search and navigation" already
   lists as left undone. Revisit if a supported macOS sets the level.
+- 2026-11-08: Amended the M2 As built note on the `.md` extension. It said the router had no extension fallback and
+  that the import alone was meant to make Markdown route. A Finder open of a `.md` file opened no pane, since Launch
+  Services prefers another app's `com.unknown.md`. The router now falls back to the extension's types. See UTERM-015
+  "How a file type maps to an applet".
 
 ## References
 

@@ -34,6 +34,10 @@ private final class WatchedTypes: ContentTypeSystem, @unchecked Sendable {
     return real.identifier(of: url)
   }
 
+  func identifiers(forExtension ext: String) -> [String] {
+    real.identifiers(forExtension: ext)
+  }
+
   func conforms(_ identifier: String, to other: String) -> Bool {
     real.conforms(identifier, to: other)
   }

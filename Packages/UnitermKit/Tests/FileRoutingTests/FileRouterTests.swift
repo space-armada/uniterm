@@ -35,28 +35,106 @@ final class FileRouterTests: XCTestCase {
 
   // MARK: Markdown
 
-  /// Catches a router that finds no viewer for a `.md` file. The router reads a file's type from the
-  /// system, with no extension fallback. A `.md` file typed as the Markdown type routes to the
-  /// viewer. The same file typed as another app's plain-text type, which does not conform to
-  /// Markdown, is refused. That second case is why the app imports the Markdown type.
-  func testAMarkdownFileRoutesOnlyWhenItsTypeIsMarkdown() throws {
+  private static let markdownParents = [
+    "net.daringfireball.markdown": ["public.text"], "com.unknown.md": ["public.text"],
+  ]
+
+  /// Catches a router that refuses a `.md` file because another app's type won the extension. The
+  /// file's own type is `com.unknown.md`, which does not conform to Markdown. The system also
+  /// registers the Markdown type for `md`, so the file routes to the viewer through it. The
+  /// decision keeps the file's own type. It cannot prove which type Launch Services picks on a
+  /// given machine.
+  func testAMarkdownFileTypedByAnotherAppRoutesThroughTheExtensionsTypes() throws {
     let viewer = applet("viewer", [("net.daringfireball.markdown", .owner)])
-    let parents = [
-      "net.daringfireball.markdown": ["public.text"], "com.unknown.md": ["public.text"],
-    ]
-    let markdownTyped = FixtureTypes(
-      parents: parents, byExtension: ["md": "net.daringfireball.markdown"])
-    let otherTyped = FixtureTypes(parents: parents, byExtension: ["md": "com.unknown.md"])
+    let types = FixtureTypes(
+      parents: Self.markdownParents, byExtension: ["md": "com.unknown.md"],
+      registered: ["md": ["com.unknown.md", "net.daringfireball.markdown"]])
+    let url = try file("README.md")
 
     XCTAssertEqual(
-      openedApplet(
-        FileRouter(declarations: [viewer], types: markdownTyped).decide(try file("README.md"))),
-      "viewer")
+      FileRouter(declarations: [viewer], types: types).decide(url),
+      .open(
+        file: url, appletTypeID: "viewer", startDirectory: directory.path, type: "com.unknown.md"))
+  }
 
-    guard
-      case .refused = FileRouter(declarations: [viewer], types: otherTyped)
-        .decide(try file("README.md"))
-    else { return XCTFail("a .md file of an unrelated type routed to the Markdown viewer") }
+  /// Catches a router that lets extension types outrank the file's own type. The preferred type
+  /// matches the text applet, so the Markdown viewer that the extension also names does not win.
+  func testAMatchingPreferredTypeWinsOverTheExtensionsTypes() throws {
+    let viewer = applet("viewer", [("net.daringfireball.markdown", .owner)])
+    let text = applet("text", [("public.text", .alternate)])
+    let types = FixtureTypes(
+      parents: Self.markdownParents, byExtension: ["md": "com.unknown.md"],
+      registered: ["md": ["com.unknown.md", "net.daringfireball.markdown"]])
+
+    let router = FileRouter(declarations: [viewer, text], types: types)
+
+    XCTAssertEqual(openedApplet(router.decide(try file("a.md"))), "text")
+  }
+
+  /// Catches a router that routes by extension types with its own rules. Two extension types match
+  /// different applets, and the more specific one wins, as for any file.
+  func testExtensionTypesUseTheSameSpecificityRule() throws {
+    let types = FixtureTypes(
+      parents: ["com.example.geojson": ["com.example.json"], "com.example.json": ["public.text"]],
+      byExtension: ["geo": "com.unknown.geo"],
+      registered: ["geo": ["com.unknown.geo", "com.example.json", "com.example.geojson"]])
+    let router = FileRouter(declarations: [data, table, map], types: types)
+
+    XCTAssertEqual(openedApplet(router.decide(try file("a.geo"))), "map")
+  }
+
+  /// Catches a router that opens a file whose extension types match no applet, or that loses the
+  /// file's preferred type from the refusal.
+  func testExtensionTypesThatMatchNothingStillRefuseNamingThePreferredType() throws {
+    let viewer = applet("viewer", [("net.daringfireball.markdown", .owner)])
+    let types = FixtureTypes(
+      parents: Self.markdownParents, byExtension: ["md": "com.unknown.md"],
+      registered: ["md": ["com.unknown.md", "com.other.md"]])
+    let url = try file("a.md")
+
+    XCTAssertEqual(
+      FileRouter(declarations: [viewer], types: types).decide(url),
+      .refused(file: url, .unsupported(type: "com.unknown.md")))
+  }
+
+  /// Catches a fallback that runs for a file with no extension. Such a file has no extension types
+  /// to consider, so it is refused as before.
+  func testAFileWithNoExtensionIsRefusedAsBefore() throws {
+    let viewer = applet("viewer", [("net.daringfireball.markdown", .owner)])
+    let types = FixtureTypes(
+      parents: Self.markdownParents, byExtension: ["": "com.unknown.md"],
+      registered: ["": ["net.daringfireball.markdown"]])
+    let url = try file("README")
+
+    XCTAssertEqual(
+      FileRouter(declarations: [viewer], types: types).decide(url),
+      .refused(file: url, .unsupported(type: "com.unknown.md")))
+  }
+
+  /// Catches a fallback that disturbs a saved choice. The choice is keyed on the preferred type,
+  /// which matches a claim, so it still decides and the extension types are never consulted.
+  func testASavedChoiceForTheExactPreferredTypeStillWins() throws {
+    let viewer = applet("viewer", [("public.text", .owner)])
+    let other = applet("other", [("public.text", .alternate)])
+    let types = FixtureTypes(
+      parents: Self.markdownParents, byExtension: ["md": "com.unknown.md"],
+      registered: ["md": ["net.daringfireball.markdown"]])
+    let router = FileRouter(
+      declarations: [viewer, other], types: types, savedChoices: ["com.unknown.md": "other"])
+
+    XCTAssertEqual(openedApplet(router.decide(try file("a.md"))), "other")
+  }
+
+  /// Catches a router that sends unsupported-looking files through the viewer's own import. The
+  /// Markdown-typed file still routes with no extension types registered at all.
+  func testAMarkdownTypedFileRoutesWithoutExtensionTypes() throws {
+    let viewer = applet("viewer", [("net.daringfireball.markdown", .owner)])
+    let types = FixtureTypes(
+      parents: Self.markdownParents, byExtension: ["md": "net.daringfireball.markdown"])
+
+    XCTAssertEqual(
+      openedApplet(FileRouter(declarations: [viewer], types: types).decide(try file("a.md"))),
+      "viewer")
   }
 
   // MARK: Matching

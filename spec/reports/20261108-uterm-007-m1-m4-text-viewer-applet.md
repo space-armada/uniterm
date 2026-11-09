@@ -576,3 +576,19 @@ year or holder line could differ.
 | `make fmt-check`, `make lint`, `make check` | 1AC9PR, 0B9PCS, GCWKKQ | pass |
 | `caffeinate -dimsu make test-package` | 1EG62R | pass |
 | `proposals.py check` and `freeze` | K2YT8T, 2EGMNY | `[]` |
+
+## The user's hand check
+
+After the run, the user checked the viewer by hand in the running app.
+
+| Check | Result |
+|---|---|
+| A web link in a PDF | Opens in the system browser, as the proposal decides |
+| Saving from the user's own editor | The pane reloads and keeps its scroll. Deleting the file shows the status bar warning |
+| Dropping a file onto rendered Markdown and onto a PDF | Opens the dropped file |
+| Opening a `.md` file from Finder | Failed: uniterm launched and restored its panes but opened no pane for the file. `.md` resolves to another app's `com.unknown.md` here, and the router matches by type conformance only. Fixed after the run, with the user's choice of an extension-based fallback |
+| Word and RTF files with pictures and headings | Not tested: the user had no such file |
+| Find, Find Next, Find Previous, and Use Selection | Work in PDF and Markdown. RTF was not tried |
+| Another app's find field | Never picked up the viewer's query, checked against Chrome and Mattermost |
+| VoiceOver in the contents sidebar | Works |
+| Theme switching with Markdown open | Works |
