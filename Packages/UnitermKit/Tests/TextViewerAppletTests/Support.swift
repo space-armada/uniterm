@@ -4,6 +4,7 @@ import AppletTestSupport
 import BrowserApplet
 import Darwin
 import DocumentTestSupport
+import FileWatching
 import HelperHost
 import XCTest
 
@@ -52,19 +53,38 @@ enum Harness {
       limits: limits, probeInterval: .milliseconds(40), pongGrace: .milliseconds(500))
   }
 
+  /// A watch that never fires inside a test and never looks for a missing path, so a pane that a
+  /// test leaves open cannot reload or poll after its folder is deleted. A test that needs the
+  /// watch asks for `fastWatch`.
+  static let silentWatch = WatchPolicy(
+    settle: 600, ceiling: 600, watchesFolder: true, retryLimit: nil, retryInterval: 600)
+
+  /// A watch whose windows are a fraction of a second.
+  static let fastWatch = WatchPolicy(
+    settle: 0.05, ceiling: 0.4, watchesFolder: true, retryLimit: nil, retryInterval: 0.05)
+
   static func applet(
     startDirectory: String? = nil, settings: DocumentHelperSettings = settings(),
-    opener: RecordingOpener = RecordingOpener()
+    opener: RecordingOpener = RecordingOpener(), watching: WatchPolicy = silentWatch
   ) -> TextViewerApplet {
-    TextViewerApplet(startDirectory: startDirectory, settings: settings, opener: opener)
+    let applet = TextViewerApplet(
+      startDirectory: startDirectory, settings: settings, opener: opener)
+
+    applet.watchPolicy = watching
+
+    return applet
   }
 
   static func restored(
     _ description: TextViewerDescription, settings: DocumentHelperSettings = settings(),
-    opener: RecordingOpener = RecordingOpener()
+    opener: RecordingOpener = RecordingOpener(), watching: WatchPolicy = silentWatch
   ) throws -> TextViewerApplet {
-    try TextViewerApplet(
+    let applet = try TextViewerApplet(
       restoring: description.appletDescription(), settings: settings, opener: opener)
+
+    applet.watchPolicy = watching
+
+    return applet
   }
 
   /// Polls until `condition` holds or `seconds` pass. The helper is a real process, so a wait for

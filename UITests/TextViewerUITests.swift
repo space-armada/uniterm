@@ -319,6 +319,83 @@ final class TextViewerUITests: UnitermUITestCase {
     XCTAssertLessThan(written.utf8.count, 4096)
   }
 
+  /// Catches a pane that goes stale while its file is edited. The test opens a PDF through the open
+  /// panel, rewrites it in place, then replaces it by renaming a new file over it, as an editor's
+  /// save does. The page count in the status bar follows each change.
+  ///
+  /// The package tests drive the same reload against a pane in a test process. This one owns what
+  /// only the real app shows: the status bar's segment text over the real watch, with the file
+  /// opened through the real open panel.
+  func testAnEditedFileReloadsInPlaceAndByRename() throws {
+    let folder = try makeFolder()
+    let file = try writePDF("paper.pdf", pages: ["one"], in: folder)
+    let app = launchApp()
+    let window = mainWindow(in: app)
+    _ = waitForTerminal(in: app)
+
+    app.typeKey("d", modifierFlags: .command)
+    XCTAssertTrue(launcher(in: window).waitForExistence(timeout: 5))
+    app.typeKey("7", modifierFlags: .command)
+    app.typeKey(.return, modifierFlags: [])
+    XCTAssertTrue(waitUntilGone(launcher(in: window)))
+
+    let open = window.buttons["text-viewer-open"]
+    XCTAssertTrue(open.waitForExistence(timeout: 10))
+    open.click()
+    choose(file, in: app, window: window)
+    XCTAssertTrue(waitFor(segment(0, in: window), timeout: 20) { $0 == "Page 1 of 1" })
+
+    try writePDF("paper.pdf", pages: ["one", "two", "three"], in: folder)
+    XCTAssertTrue(
+      waitFor(segment(0, in: window), timeout: 20) { $0 == "Page 1 of 3" },
+      "a write in place did not reload the pane")
+
+    let replacement = try writePDF(".paper.pdf.tmp", pages: ["a", "b", "c", "d", "e"], in: folder)
+    _ = try FileManager.default.replaceItemAt(file, withItemAt: replacement)
+    XCTAssertTrue(
+      waitFor(segment(0, in: window), timeout: 20) { $0 == "Page 1 of 5" },
+      "a write-new-then-rename save did not reload the pane")
+  }
+
+  /// Catches a deleted file that blanks the pane or leaves no sign. The render stays, a warning
+  /// segment says the file was moved or deleted, and it clears when the file returns and reloads.
+  ///
+  /// The package tests prove the gone state, the single warning, and the reload on a pane object.
+  /// This one owns the real status bar segment and its warning style, and the real watch in the
+  /// launched app deleting and recreating the file under a restored pane.
+  func testADeletedFileShowsTheMovedOrDeletedSegmentUntilItReturns() throws {
+    let folder = try makeFolder()
+    let file = try writePDF("paper.pdf", pages: ["one", "two"], in: folder)
+
+    try plantViewer(path: file.path)
+
+    let app = launchApp()
+    let window = mainWindow(in: app)
+
+    XCTAssertTrue(viewer(in: window).waitForExistence(timeout: 20), "no text viewer pane")
+    XCTAssertTrue(waitFor(segment(0, in: window), timeout: 20) { $0 == "Page 1 of 2" })
+
+    try FileManager.default.removeItem(at: file)
+
+    XCTAssertTrue(
+      waitFor(segment(1, in: window), timeout: 20) { $0 == "Moved or deleted" },
+      "the Moved or deleted segment never showed")
+    XCTAssertTrue(
+      waitFor(segment(0, in: window), timeout: 5) { $0 == "Page 1 of 2" },
+      "the render did not stay")
+    attachScreenshot("text viewer, file deleted, Moved or deleted segment", of: window)
+
+    try writePDF("paper.pdf", pages: ["one", "two", "three", "four"], in: folder)
+
+    XCTAssertTrue(
+      waitFor(segment(0, in: window), timeout: 20) { $0 == "Page 1 of 4" },
+      "the file did not reload when it came back")
+    XCTAssertFalse(
+      segment(1, in: window).exists
+        && (segment(1, in: window).value as? String) == "Moved or deleted",
+      "the segment stayed after the file returned")
+  }
+
   /// Catches a closed viewer pane that asks, since a read-only viewer never counts as running
   /// something.
   func testClosingAViewerNeverAsks() throws {

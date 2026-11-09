@@ -83,21 +83,27 @@ final class TextViewerAppletTests: XCTestCase {
     XCTAssertTrue(applet.content.registeredDraggedTypes.contains(.fileURL))
   }
 
-  /// Catches a PDF rewritten in place that changes what shows. The pane keeps the document it
-  /// loaded, since a PDF loads from bytes read in full.
-  func testAPDFRewrittenInPlaceKeepsRenderingTheLoadedDocument() async throws {
+  /// Catches a PDF view that stays backed by its file. A load is one full read, so truncating the
+  /// file afterward must not change what the view reads or draws. The watch is silent here, so no
+  /// reload runs. This proves the snapshot, and the reload tests prove what replaces it.
+  func testALoadedPDFIsNotBackedByTheFileAfterTheLoad() async throws {
     let scratch = try Scratch(self)
-    let file = try scratch.write("a.pdf", DocumentFixtures.pdf(pages: ["first"]))
+    let file = try scratch.write("a.pdf", DocumentFixtures.pdf(pages: ["first", "second"]))
     let applet = Harness.applet(startDirectory: scratch.url.path)
 
     try applet.replaceSource(with: file, startDirectory: scratch.url.path)
     _ = await Harness.settled(applet)
 
-    try Data("not a pdf now".utf8).write(to: file)
+    try Data().write(to: file)
 
-    XCTAssertEqual(applet.content.pdfView.document?.pageCount, 1)
-    XCTAssertTrue(applet.content.pdfView.document?.string?.contains("first") ?? false)
-    XCTAssertEqual(applet.content.pdfView.document?.page(at: 0)?.string?.contains("first"), true)
+    let document = try XCTUnwrap(applet.content.pdfView.document)
+    let page = try XCTUnwrap(document.page(at: 1))
+
+    XCTAssertEqual(document.pageCount, 2)
+    XCTAssertEqual(page.string?.contains("second"), true)
+    XCTAssertGreaterThan(document.dataRepresentation()?.count ?? 0, 100)
+    XCTAssertGreaterThan(
+      page.thumbnail(of: CGSize(width: 80, height: 100), for: .cropBox).size.width, 0)
   }
 
   /// Catches a link that is not a PDF, an unreadable one, and a file with no reader.
@@ -541,14 +547,16 @@ final class TextViewerAppletTests: XCTestCase {
 
   // MARK: Commands
 
-  /// Catches an Open that asks for a key, which would shadow the window's Cmd-O, and a declaration
-  /// that drifts from the owner rank for the formats the viewer reads.
+  /// Catches an Open that asks for a key, which would shadow the window's Cmd-O, a Reload without
+  /// Cmd-R, and a declaration that drifts from the owner rank for the formats the viewer reads.
   func testTheCommandSetAndDeclaration() {
     let commands = TextViewerApplet.commandSet.commands
 
-    XCTAssertEqual(commands.map(\.name), ["open"])
+    XCTAssertEqual(commands.map(\.name), ["open", "reload"])
     XCTAssertNil(commands.first?.key)
     XCTAssertEqual(commands.first?.home, .file)
+    XCTAssertEqual(commands.last?.key, KeyChord("r"))
+    XCTAssertEqual(commands.last?.home, .view)
     XCTAssertEqual(
       TextViewerApplet.typeDeclaration.opens,
       [

@@ -16,7 +16,16 @@ extension TextViewerApplet {
 
   /// The text viewer's own commands. Open has no key, since Cmd-O belongs to the window's File >
   /// Open, which routes by type.
+  ///
+  /// Reload reads the file again and keeps the reader's place. It takes Cmd-R, the key the browser
+  /// uses for its reload, since each applet's keys apply only while its pane has focus.
   public static let commandSet = AppletCommandSet(
     typeID: TextViewerDescription.typeID, menuTitle: "Text Viewer",
-    commands: [.openSource(section: 1)])
+    commands: [
+      .openSource(section: 1),
+      AppletCommand(
+        name: "reload", title: "Reload", key: KeyChord("r"), home: .view,
+        isAvailable: { ($0 as? TextViewerApplet)?.canReload ?? false },
+        run: { ($0 as? TextViewerApplet)?.reload() }),
+    ])
 }

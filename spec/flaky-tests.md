@@ -37,6 +37,14 @@ fixed ones.
 - Suspected cause: the pane-opening key went nowhere, as in the entry above.
 - Status: unresolved.
 
+### `MapViewerUITests.testCommandORoutesAGeoJSONFileToTheMapAndShowsItsPins`
+
+- Seen: 2026-11-08, once, in a run of `TextViewerUITests` and `MapViewerUITests` together.
+- Evidence: the shared open-panel helper at `UnitermUITestCase.swift:227` failed with "no go-to-folder sheet" after
+  Cmd-Shift-G. The cg server restarted while that run was going. `MapViewerUITests` then passed 8 of 8 alone.
+- Suspected cause: Cmd-Shift-G sent before the open panel took key focus, as in the pane-tree entries above.
+- Status: unresolved.
+
 ## Fixed
 
 ### `BrowserRecoveryTests.testKillingTheSelectedTabShowsTheMessageAndReloadBringsBackItsHistory`

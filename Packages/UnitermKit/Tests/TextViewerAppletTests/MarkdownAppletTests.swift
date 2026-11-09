@@ -3,6 +3,7 @@ import AppletKit
 import AppletTestSupport
 import Darwin
 import DocumentTestSupport
+import FileWatching
 import XCTest
 
 @testable import TextViewerApplet
@@ -33,11 +34,13 @@ final class MarkdownAppletTests: XCTestCase {
 
   private func open(
     _ text: String, named name: String = "README.md", opener: RecordingOpener = RecordingOpener(),
-    limits: TextViewerLimits = .standard, in scratch: Scratch
+    limits: TextViewerLimits = .standard, watching: WatchPolicy = Harness.silentWatch,
+    in scratch: Scratch
   ) async throws -> TextViewerApplet {
     let file = try scratch.write(name, Data(text.utf8))
     let applet = Harness.applet(
-      startDirectory: scratch.url.path, settings: Harness.settings(limits: limits), opener: opener)
+      startDirectory: scratch.url.path, settings: Harness.settings(limits: limits), opener: opener,
+      watching: watching)
 
     host(applet)
     try applet.replaceSource(with: file, startDirectory: scratch.url.path)
@@ -204,6 +207,42 @@ final class MarkdownAppletTests: XCTestCase {
     let back = await rendered(applet)
     XCTAssertTrue(back)
     XCTAssertEqual(applet.content.markdownView?.anchor?.line, line)
+  }
+
+  /// Catches a Markdown reload that sends the reader to the top, or one that tears the page down.
+  /// A save appends a line, the page shows it, and the same block is at the top.
+  func testASaveReloadsMarkdownAtTheSameLine() async throws {
+    let scratch = try Scratch(self)
+    let applet = try await open(tall(), watching: Harness.fastWatch, in: scratch)
+    let done = await rendered(applet)
+
+    XCTAssertTrue(done)
+
+    let view = try XCTUnwrap(applet.content.markdownView)
+
+    _ = await view.run("window.scrollTo(0, 6000); return 1")
+
+    let moved = await Harness.eventually { (view.anchor?.line ?? 0) > 100 }
+    XCTAssertTrue(moved)
+
+    let line = try XCTUnwrap(view.anchor?.line)
+    let before = view.lineCount
+    let file = scratch.url.appendingPathComponent("README.md")
+
+    try Data((tall() + "\nappended\n").utf8).write(to: file)
+
+    let reloaded = await Harness.eventually {
+      applet.content.markdownView?.lineCount ?? 0 > before
+        && applet.content.markdownView?.isRendered == true
+    }
+    XCTAssertTrue(reloaded)
+    XCTAssertTrue(applet.content.markdownView === view, "the page is kept, not rebuilt")
+
+    let landed = await Harness.eventually {
+      abs((applet.content.markdownView?.anchor?.line ?? 0) - line) <= 4
+    }
+    XCTAssertTrue(landed)
+    applet.close()
   }
 
   /// Catches a drop that the web view swallows. Dropping a PDF on rendered Markdown replaces it, and

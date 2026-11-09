@@ -21,7 +21,7 @@ work is stashed. No commands need the user's credentials.
 |---|---|---|
 | UTERM-007 M1: PDF and RTF | DONE | "Add a text viewer for PDF, RTF, and Word documents" |
 | UTERM-007 M2: Markdown | DONE | "Render Markdown in the text viewer inside an isolated web view" |
-| UTERM-007 M3: Live reload | QUEUED | |
+| UTERM-007 M3: Live reload | DONE | "Reload the text viewer when its file changes on disk" |
 | UTERM-007 M4: Find and contents | QUEUED | |
 
 ## Local checks
@@ -282,3 +282,118 @@ cases, `testACancelWithNoByteYetWaitsForOne` and `testADeferredDownloadThatFails
 Both passed. The same code took 0.08 s and 0.09 s for them in the implementer's T8BTYF. Run alone in 1FBDJX, the class
 took 1.5 s. The 30 s looks like a wait running out its time bound, not slow work. SAKK8J ran right after a 36-test UI
 run, while two other sessions ran CI. The cause is unresolved. M2 changed no browser code.
+
+## UTERM-007 M3: Live reload
+
+### Commits
+
+- "Allow caffeinated test runs in the cg allowlist". The user chose narrow rules at a prompt during M3.
+- "Reload the text viewer when its file changes on disk". The review fixes, the PDF placement fix, the flaky-test entry,
+  and this report's M3 section are in the same commit.
+
+### What landed
+
+- A new `FileWatching` target replaces the map viewer's private watcher. It watches the file and its parent folder. A
+  folder event counts only when the path's device, inode, size, or modification time changed. A gone path is looked at
+  every 0.5 s, then every 5 s. All `stat` and `open` calls run on a worker queue, so the main thread never waits on a
+  user path. The map viewer keeps its old behavior through a file-only policy.
+- The text viewer reloads on change. A burst settles for 0.15 s, and a continuously rewritten file reloads at most once
+  a second. A reload swaps in only on success and keeps the source anchor. A failed reload keeps the render and posts
+  one warning. A gone file keeps the render and shows a "Moved or deleted" segment until it returns. Changes made
+  while detached reload once at reattach. `close()` stops the watch.
+- Reload is a registry command on Cmd-R, in the View menu.
+- A PDF with no anchor now starts at the page top in every case. Before, PDFKit landed about 93 points down page 1
+  when the view already had a size.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | E02KH9, 9RVR1A, 336NBK | pass |
+| `make build` | K1FTY7 | pass |
+| `make swiftpm-offline-check` | DX3N4Z | pass |
+| `xcodebuild build-for-testing` | QYP4G6 | pass |
+| `caffeinate -dimsu make test-package`, implementer | 7S5KAB | 1,939 tests, 7 skipped, 0 failures |
+| `proposals.py check` and `freeze` | implementer's last runs | `[]` |
+| Text and map viewer UI tests under caffeinate | 7R1JEH | 16 tests, 1 failure in `MapViewerUITests`. See "Unowned failures" |
+| Map viewer UI tests alone | ZQ5SK2 | 8 tests, 0 failures |
+| Text viewer UI tests after the placement fix | H16R24 | 8 tests, 0 failures |
+| `caffeinate -dimsu make test-package`, coordinator, before commit | ZV2CPR | 1,939 tests, 7 skipped, 0 failures, 223 s |
+
+The coordinator looked at the deleted-file screenshot twice. In 7R1JEH the render stayed and the segment showed, but
+the restored PDF's first line was clipped at the top. After the placement fix, H16R24 shows the page top with its
+margin.
+
+### Environment: an idle display
+
+Full package runs between 17:00 and 20:00 local failed 115 tests in `MarkdownAppletTests`, `MarkdownViewTests`, and
+`ImageViewerScrollTests`. That covers the implementer's runs and the coordinator's KKWE67 at 1,936 tests. Every one of
+these classes had passed in SAKK8J at 16:25 on the M2 commit. A pristine copy of the M2 commit failed the same way.
+Both displays reported full power. The user was away, and the user suggested `caffeinate`. Under
+`caffeinate -dimsu`, the full suite passed in EFASF3 and 7S5KAB. Test runs now use `caffeinate -dimsu`, and
+`.cg.yaml` allows that for `make test-package`, `make test-app`, `swift test`, and `run-ui-tests.sh`.
+
+The implementer's first `caffeinate` call waited about 26 minutes on an approval prompt, because `caffeinate` was not
+allowlisted. A pending cg call missing from `cg_list` gave it away.
+
+After the coordinator's commit, `.cg.yaml` line 12 changed to `prefixx: [caffeinate, -dimsu, swift, test]`. The run
+did not make that edit and left it for the user.
+
+### Best guesses
+
+Each is a Decision Log entry tagged as a work-queue best guess.
+
+- The shared watcher is a new `FileWatching` target, since `SourceAccess` stays Foundation-only.
+- The settle is 0.15 s and the ceiling 1 s.
+- The text viewer looks for a gone path for as long as the pane lives. The map viewer keeps its ten looks.
+- A watcher event during a load queues one reload after it, so a continuously rewritten RTF or Word file cannot starve.
+  Cmd-R and opening another file still end the running helper first.
+- A file that is found but fails its first load keeps the watch, so fixing the file reloads it. A path that cannot be
+  found starts no watch, and Cmd-R covers it.
+- A PDF rewritten in place now reloads. The guarantee is that one load is one full read, and no mapped or lazy file
+  backs the view. A failed parse keeps the old render. A truncated PDF may still parse, and the next write reloads
+  again. "The applet contract" and M1's PDF check were amended to say so.
+
+### Review findings
+
+| Finding | Disposition |
+|---|---|
+| A file deleted and then back with bad content kept the "Moved or deleted" segment and hid the failure (CONFIRMED) | Fixed. A regression test failed on the old code |
+| As built said a failed first load starts no watch | Fixed: the text now matches the code, and a test pins it |
+| The amendment promised a half-written PDF never reaches PDFKit | Reworded to the real guarantee |
+| M1's rewritten-PDF test proved nothing about reload | Rewritten to prove the view is not backed by the file |
+| Watchers leaked from tests that never close their pane (PLAUSIBLE) | Fixed: `FileWatcher` stops in `deinit`, and the harness defaults to a silent watch |
+| Real-time sleeps in absence checks, and overlapping tests | Replaced with an injected scheduler and counters. One overlapping applet test was dropped |
+| `stat` and `open` ran on the main thread, with a forever poll (ADR-08, adr-impact) | Fixed: a worker queue does the file-system calls |
+| A comment wrapped with an orphan line | Fixed |
+| A restored PDF with no anchor was clipped at the top (coordinator, from the screenshot) | Fixed. A test failed on the old code. The anchored-restore and reload paths were already right, and a test pins them |
+
+The ADR-impact pass found no conflicts beyond the advisory ADR-08 item. The shared watcher policy and the keep-the-last-
+render behavior stay in the proposal.
+
+### Unowned failures
+
+In ZV2CPR, `BrowserDownloadCancelTests.testADeferredCancelEndsAfterTheGraceWhenNoByteComes` passed in 30.2 s. In
+M2's SAKK8J, two other tests in the same class took 30.1 s each. Alone, the class takes about 1.5 s. A 30 s wait is
+running out in full-suite runs, in a different test each time. The cause is unresolved, and no M1 to M3 change touched
+browser code.
+
+`MapViewerUITests.testCommandORoutesAGeoJSONFileToTheMapAndShowsItsPins` failed once in 7R1JEH with "no go-to-folder
+sheet". The cg server restarted during that run. The class passed 8 of 8 alone in ZQ5SK2. It is listed under
+"Potential" in `spec/flaky-tests.md`.
+
+### Left for the user
+
+- File events on a network volume, or a volume where events never arrive. Only Cmd-R covers that, and it is tested
+  with the watch silenced.
+- A rename of a folder above the watched folder is not detected. Cmd-R covers it.
+
+### Test cost
+
+| Class | Wall time alone |
+|---|---|
+| `FileWatcherTests` | about 1 s |
+| `ChangeCoalescerTests` | about 2 ms |
+| `LiveReloadTests`, 14 tests | about 3 s |
+| `PDFPlacementTests` | not timed alone |
+| `TextViewerUITests`, 8 tests | 81 s for the class |

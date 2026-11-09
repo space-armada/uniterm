@@ -31,6 +31,7 @@ let package = Package(
     .library(name: "FileRouting", targets: ["FileRouting"]),
     .library(name: "AppletCatalog", targets: ["AppletCatalog"]),
     .library(name: "SourceAccess", targets: ["SourceAccess"]),
+    .library(name: "FileWatching", targets: ["FileWatching"]),
     .library(name: "TableData", targets: ["TableData"]),
     .library(name: "DataViewerApplet", targets: ["DataViewerApplet"]),
     .library(name: "GeoData", targets: ["GeoData"]),
@@ -95,6 +96,9 @@ let package = Package(
     // Reaching a file for a viewer: the stored path and bookmark, and the errors for a missing,
     // protected, or irregular file. It has no AppKit, so the table and map targets share it.
     .target(name: "SourceAccess"),
+    // Watching one file for change: the file and its folder, bursts merged on an injected clock,
+    // and a look at a path that is gone. The map and text viewers share it.
+    .target(name: "FileWatching"),
     .target(
       name: "TableData",
       dependencies: ["SourceAccess", .product(name: "ZIPFoundation", package: "ZIPFoundation")]),
@@ -109,7 +113,9 @@ let package = Package(
     .target(name: "PlaceSearch", dependencies: ["GeoData", "Theme"]),
     .target(
       name: "MapViewerApplet",
-      dependencies: ["AppletKit", "GeoData", "PlaceSearch", "SourceAccess", "StatusKit", "Theme"]),
+      dependencies: [
+        "AppletKit", "FileWatching", "GeoData", "PlaceSearch", "SourceAccess", "StatusKit", "Theme",
+      ]),
     // The browser's pure rules: which URL schemes load from which source, where a scheme-less
     // address goes, and the description payload. It has no AppKit and no WebKit, so the policy
     // tests without a web view.
@@ -155,8 +161,8 @@ let package = Package(
     .target(
       name: "TextViewerApplet",
       dependencies: [
-        "AppletKit", "BrowserApplet", "DocumentWire", "HelperHost", "SourceAccess", "StatusKit",
-        "TextViewerModel", "Theme",
+        "AppletKit", "BrowserApplet", "DocumentWire", "FileWatching", "HelperHost", "SourceAccess",
+        "StatusKit", "TextViewerModel", "Theme",
       ],
       resources: [.copy("Resources/web")]),
     .target(
@@ -191,12 +197,14 @@ let package = Package(
         "AppletTestSupport",
       ]),
     .testTarget(name: "SourceAccessTests", dependencies: ["SourceAccess"]),
+    .testTarget(name: "FileWatchingTests", dependencies: ["FileWatching"]),
     .testTarget(name: "GeoDataTests", dependencies: ["GeoData", "ThemeCore"]),
     .testTarget(name: "PlaceSearchTests", dependencies: ["PlaceSearch", "GeoData", "Theme"]),
     .testTarget(
       name: "MapViewerAppletTests",
       dependencies: [
-        "MapViewerApplet", "GeoData", "AppletKit", "PlaceSearch", "SourceAccess", "StatusKit",
+        "MapViewerApplet", "FileWatching", "GeoData", "AppletKit", "PlaceSearch", "SourceAccess",
+        "StatusKit",
         "Theme", "TableTestSupport", "AppletTestSupport",
       ]),
     .testTarget(name: "BrowserModelTests", dependencies: ["BrowserModel"]),
@@ -238,7 +246,7 @@ let package = Package(
       name: "TextViewerAppletTests",
       dependencies: [
         "TextViewerApplet", "TextViewerModel", "DocumentWire", "DocumentDecoderHelper",
-        "HelperHost", "SourceAccess",
+        "HelperHost", "SourceAccess", "FileWatching",
         "BrowserApplet", "AppletKit", "StatusKit", "Theme", "AppletTestSupport",
         "DocumentTestSupport", "TableTestSupport", "BrowserTestSupport",
       ]),

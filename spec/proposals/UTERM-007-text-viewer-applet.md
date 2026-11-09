@@ -161,8 +161,9 @@ applet contract decision.
 - Every format loads from a file read in full off the main thread: a PDF through `PDFDocument(data:)` from bytes the
   app reads, RTF and Word through `NSAttributedString`'s readers in the sandboxed helper, which reads the whole file
   from the descriptor the app opened, with the document type set from the file type, and Markdown through the scheme
-  handler. The loaded document is a snapshot. A later change to the file, such as pdflatex rewriting its output in
-  place, never reaches a view that is already showing. Amended 2026-11-08; see Decision Log.
+  handler. A load is a snapshot. A later change to the file, such as pdflatex rewriting its output in place, reaches a
+  view that is already showing only as a reload, which reads the whole file again. Amended 2026-11-08; see Decision
+  Log.
 - RTF and Word are decoded in the helper, and the decoded text's length and table cell count are checked against caps
   off the main thread, before the text view lays anything out. A document past a cap shows a message naming the limit.
   This is the bound ADR-08 asks for on the text view's main-thread layout.
@@ -195,7 +196,10 @@ command, Cmd-R, re-reads the file on demand.
 
 - The watch follows the stored path. It watches the file and its parent folder, so both a write in place and an
   editor's write-new-then-rename save are caught. The watch re-arms on the path after a rename or delete.
-- Bursts of change coalesce. The last write is always loaded.
+- Bursts of change coalesce. The last write is always loaded. A burst delivers once the file has been quiet for 0.15
+  seconds, and a file rewritten without pause delivers at most once a second. A change that arrives while a load runs
+  waits for it, and one more reload follows. Reload and opening another file end the running load instead. Amended
+  2026-11-08; see Decision Log.
 - A reload loads like a first load, off the main thread or in WebKit, and swaps in only when it succeeds. A failed load
   keeps the last good render and posts a warning to the status bar. A file that disappears keeps the last render. The
   status bar says once that it was moved or deleted, and a "Moved or deleted" warning segment shows until the file is
@@ -336,7 +340,8 @@ None.
 - A restored file behind macOS privacy protection, such as Downloads, shows a permission message, and `start()` raises
   no prompt
 - A layout save never touches the disk to describe a pane, and an unchanged pane describes itself the same way twice
-- A PDF rewritten in place while showing keeps rendering the loaded document
+- A PDF rewritten in place while showing keeps rendering the loaded document until a reload succeeds and swaps in.
+  Amended 2026-11-08; see Decision Log.
 - RTF and Word load with the document type set from the file type, so a file is never read as HTML
 - A file too large to load shows a message naming its size, never a freeze or a crash
 - Every read, reloads included, opens the file and accepts it only when `fstat` shows a regular file after symlinks
@@ -506,7 +511,7 @@ None.
 
 ### M3: Live reload
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Saving the file in place, or by an editor's write-new-then-rename save, reloads the pane at the same place
 - A burst of writes, such as `cmd > file`, ends with the last write shown, and a continuously rewritten file reloads
@@ -518,6 +523,47 @@ None.
 - After restore finds a moved file through its bookmark, the watch follows the updated path
 - A detached pane reloads once at reattach, and close stops the watch
 - Reload, Cmd-R, re-reads the file
+
+**As built:**
+
+- The watcher is a new small target, `FileWatching`, that the map viewer and the text viewer share. The map viewer's
+  own watcher moved into it. The map keeps its policy: the file alone, every event at once, and ten looks for a gone
+  file, half a second apart. Its tests changed in an import and a callback signature only.
+- The text viewer's policy watches the file and its folder. A folder event counts only when it changes what the path
+  holds, which a signature of device, inode, size, and write time decides, so a neighbor's change delivers nothing. A
+  deleted or renamed folder, or file, re-arms both watches. When the folder is gone the watcher looks again every half
+  second, and every five seconds after ten looks, until the pane closes.
+- Coalescing runs on an injected clock, so the burst, ceiling, and last-write rules test without waiting. The
+  filesystem tests use real events with 50 ms windows.
+- A reload swaps in only on success and keeps the anchor read when the reload began, not when it swaps. A reader who
+  scrolls during a slow RTF decode lands where they were at the start. A failed reload posts its warning once for the
+  load, and a later reload posts again. A Cmd-R while the file is still gone is a new load. It posts the moved or
+  deleted warning again, and no failed-load warning beside it.
+- The watch starts once a load finds the file, before the read, and the load waits for the watch to be in place. A
+  first load that finds the file and cannot read it keeps the watch, so fixing the file reloads it. A path that cannot
+  be found starts no watch. Cmd-R reads the stored path, and a success starts the watch.
+- The Moved or deleted segment clears whenever the watch sees the file again, even when the reload then fails. The
+  failed-load warning shows beside the kept render.
+- Every stat and open of the watched path runs on the watcher's own queue, never the main thread, so a stalled network
+  mount or an automount blocks only that queue. A rename of a folder above the watched folder is not detected, since
+  the folder's descriptor follows the moved folder. Cmd-R covers it.
+- A watcher stops its sources and timers when it is released, as well as on `stop()`. The text viewer test harness
+  defaults to a silent watch, so a test that leaves a pane open cannot reload or poll after its folder is deleted. Only
+  the live reload tests and one Markdown reload test ask for a live watch.
+- A reload reads the stored path alone. The bookmark is remade for the file that opens and never followed.
+- Opening a named pipe hung the main thread, because opening a pipe for reading waits for a writer. An existing
+  Markdown test, whose pane is pointed at a pipe, found it. The watch now opens with `O_NONBLOCK`, and a watcher test
+  pins it.
+- Not run here: the two new UI tests, which need a GUI session. They build.
+- `MarkdownAppletTests` and `MarkdownViewTests` fail in the package's full run on this machine's agent session, on the
+  code before this milestone as well, and pass when run alone. The full run skipped them.
+- A PDF shown with no anchor landed about 90 points down its first page whenever the view already had a size when the
+  document arrived, which a restored pane's launch does and a pane sized later does not. PDFKit picks the scroll
+  position, and it differs with timing. The pane now scrolls the document view to its top once it has a size, so a
+  restore with no anchor, a fresh open, and a pane sized later all start at the same place, with the page's top margin
+  showing. An anchored restore and a reload already put the stored point back where it was saved, and a test pins
+  both. The first screenshot of this milestone's UI run showed the shifted page.
+- Cmd-R is also the browser's reload key. Keys apply per applet while its pane has focus, so the two do not collide.
 
 ### M4: Find and contents
 
@@ -724,6 +770,28 @@ None.
   document's volume and never triggers an automount, whatever viewer follows it. M2's Markdown images are the first
   case, and the map viewer and any later viewer of linked files would follow the same rule. Undecided. Found in
   UTERM-007 M2.
+- 2026-11-08: Amended "The applet contract" (the snapshot sentence), M1's rewritten-PDF check, and "Live reload" while
+  building M3. The contract text said a later change to the file never reaches a view that is showing, and the M1
+  check said a PDF rewritten in place keeps rendering the loaded document. Live reload now reloads such a change. A
+  load is still one full read of the file, and no mapped or lazy file backs the view afterward. A reload reads
+  whatever bytes are there, and PDFKit may accept a truncated PDF, so the guarantee is not that a half-written file is
+  never shown. A failed parse keeps the last render, the settle delay only makes a partial read less likely, and the
+  next write reloads again. The shown document changes only when a reload succeeds. (work-queue best guess)
+- 2026-11-08: M3 watcher mechanics. The map viewer's watcher moved into a shared `FileWatching` target and gained a
+  folder watch, a signature filter, and coalescing, with the map keeping its old behavior as a policy. The numbers are
+  0.15 s of quiet and a one second ceiling. A burst of RTF or Word saves would otherwise start a decode for each
+  write. A missing path or folder is looked at without limit, at half a second and then five seconds, for the text
+  viewer, since the proposal says the file reloads when it reappears and sets no time. The map keeps its ten looks.
+  (work-queue best guess)
+- 2026-11-08: A watcher event during a load queues one reload after the load, not a cancel and restart. Restarting would
+  starve a file that is rewritten without pause, since each restart discards the decode in progress. Reload (Cmd-R)
+  and opening another file still end the running load, and its helper, first, so no second decode runs beside one. This
+  is M1's "a reload never starts a second decode while one runs" for the watch, and its supersede rule for the
+  commands. (work-queue best guess)
+- 2026-11-08: Reload sits in the View menu on Cmd-R, the browser's reload key, and is off for a pane with no file.
+  UTERM-007 M4 lists Reload among the registry commands, and this milestone declares it. The status bar text for a gone
+  file is "Moved or deleted" as a warning segment, and the one warning says the pane keeps the last version it read.
+  (work-queue best guess)
 
 ## References
 

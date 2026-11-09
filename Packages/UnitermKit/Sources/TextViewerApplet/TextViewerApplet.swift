@@ -2,6 +2,7 @@ import AppKit
 import AppletKit
 import BrowserApplet
 import DocumentWire
+import FileWatching
 import HelperHost
 import PDFKit
 import SourceAccess
@@ -19,6 +20,12 @@ import UniformTypeIdentifiers
 ///
 /// The description holds the file's path, bookmark, and view anchor, never the file's contents.
 /// `describe()` reads memory only.
+///
+/// The pane watches the file it shows and reloads when it changes. A reload runs the same load as
+/// an open and swaps in only when that load succeeds, so a file that fails to parse leaves the
+/// last good render on screen. A file caught half written can still parse, and the next write
+/// reloads again. A reload reads the stored path alone and never follows the bookmark, since
+/// an editor's save can move the path away for a moment.
 @MainActor
 public final class TextViewerApplet: Applet, SourceReplacing {
   public let typeID = TextViewerDescription.typeID
@@ -43,10 +50,41 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   private var restoreWaitsForStart: Bool
   private var describesFromRecord: Bool
 
+  /// The watch on the shown file, and the path it follows. The watch is made once a load finds the
+  /// file, so it follows the path a restore found through the bookmark.
+  private var watcher: FileWatcher?
+  private var watchedPath: String?
+
+  /// What the watch last saw of the path. A load that finishes after the file went away must not
+  /// clear the Moved or deleted segment.
+  private var watchedExists = true
+  private var fileGone = false
+
+  /// True while a load that began as a reload has a render to keep. A failure then leaves the render
+  /// in place and posts a warning.
+  private var keepsRender = false
+  private var reloadNotice: String?
+
+  /// A change that arrived while a load ran. The load's end starts one more reload, so a file that
+  /// is rewritten without pause is never starved by loads that each get cancelled. The last write
+  /// is always the one shown.
+  private var reloadQueued = false
+
+  /// The latest change that arrived while the pane was detached, held for reattach.
+  private var heldChange: FileSignature?
+
+  /// How the watch merges events. Tests shorten the windows.
+  var watchPolicy = WatchPolicy.document
+
   /// False from the moment a document shows until its anchor is back in place, so a layout save
   /// in between describes the anchor it restores, not the top of the page.
   private var anchorApplied = true
   private var pendingAnchor: TextViewerAnchor?
+
+  /// A PDF shown with no anchor starts at the top of the document. PDFKit does not put a document
+  /// there on its own. Which scroll position it picks depends on whether the view already had a size
+  /// when the document arrived, so a restore and a fresh open could differ.
+  private var scrollsToTop = false
   private var closed = false
   private var palette = ThemePalette.latte
   private var pageObserver: (any NSObjectProtocol)?
@@ -192,20 +230,39 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     open(path: file.path, bookmark: nil, anchor: nil, origin: .user)
   }
 
-  private func open(path: String, bookmark: Data?, anchor: TextViewerAnchor?, origin: LoadOrigin) {
+  /// Starts a load. A reload keeps the render on screen until the new one is ready, and reads the
+  /// stored path alone.
+  private func open(
+    path: String, bookmark: Data?, anchor: TextViewerAnchor?, origin: LoadOrigin,
+    reloading: Bool = false
+  ) {
     cancelLoad()
     openGeneration += 1
     loadOrigin = origin
     resolvedNotice = nil
+    reloadNotice = nil
+    reloadQueued = false
     posted.reset()
     alerts.replaceLoad()
 
-    let generation = openGeneration
+    if !reloading {
+      unwatch()
+      fileGone = false
+    }
 
-    showMessage("Opening\u{2026}", offersOpen: false)
+    if case .message = content.body {
+      keepsRender = false
+    } else {
+      keepsRender = reloading
+    }
+
+    let generation = openGeneration
+    let followed = reloading ? nil : bookmark
+
+    if !keepsRender { showMessage("Opening\u{2026}", offersOpen: false) }
 
     opening = Task { [weak self] in
-      let result = await SourceResolver.resolve(path: path, bookmark: bookmark)
+      let result = await SourceResolver.resolve(path: path, bookmark: followed)
 
       guard let self, generation == self.openGeneration, !self.closed else { return }
 
@@ -218,6 +275,11 @@ public final class TextViewerApplet: Applet, SourceReplacing {
           self.resolvedNotice = "Moved. Found at \(movedFrom)."
         }
 
+        self.watch(self.record.path ?? path)
+        await self.watcher?.whenArmed()
+
+        guard generation == self.openGeneration, !self.closed else { return }
+
         await self.load(file: resolved.file, anchor: anchor, generation: generation)
 
       case .failure(let error):
@@ -225,6 +287,76 @@ public final class TextViewerApplet: Applet, SourceReplacing {
         self.fail(error.errorDescription ?? "The file could not be opened.")
       }
     }
+  }
+
+  // MARK: Watching
+
+  private func watch(_ path: String) {
+    if watcher != nil, watchedPath == path { return }
+
+    watcher?.stop()
+    watchedPath = path
+    watchedExists = true
+    watcher = FileWatcher(url: URL(fileURLWithPath: path), policy: watchPolicy) {
+      [weak self] signature in
+      self?.fileChanged(signature)
+    }
+  }
+
+  private func unwatch() {
+    watcher?.stop()
+    watcher = nil
+    watchedPath = nil
+    watchedExists = true
+    heldChange = nil
+  }
+
+  /// The watch saw the path change. A detached pane holds the latest change for reattach.
+  func fileChanged(_ signature: FileSignature) {
+    guard !closed, record.path != nil else { return }
+
+    watchedExists = signature.exists
+
+    if alerts.isDetached {
+      heldChange = signature
+      return
+    }
+
+    applyChange(signature)
+  }
+
+  private func applyChange(_ signature: FileSignature) {
+    guard signature.exists else {
+      guard !fileGone else { return }
+
+      fileGone = true
+      refresh()
+
+      return
+    }
+
+    if opening != nil {
+      reloadQueued = true
+      return
+    }
+
+    reload(origin: .reload)
+  }
+
+  /// The current load is over. A change that came during it starts one more.
+  private func settleLoad() {
+    guard reloadQueued, !closed else { return }
+
+    reloadQueued = false
+    reload(origin: .reload)
+  }
+
+  /// A load succeeded, so the pane shows what the file holds. The segment stays when the file went
+  /// away while the load ran.
+  private func loadSucceeded() {
+    keepsRender = false
+    reloadNotice = nil
+    fileGone = !watchedExists
   }
 
   private func cancelLoad() {
@@ -433,6 +565,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     opening = nil
     messageText = nil
     textLength = nil
+    loadSucceeded()
     content.pdfView.document = nil
     content.textView.textStorage?.setAttributedString(NSAttributedString())
 
@@ -449,6 +582,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     content.show(.markdown)
 
     pendingAnchor = nil
+    scrollsToTop = false
     anchorApplied = anchor == nil
 
     if anchor == nil { describesFromRecord = false }
@@ -459,6 +593,7 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
     view.show(document: document, anchor: start)
     refresh()
+    settleLoad()
   }
 
   private func markdownRendered() {
@@ -496,15 +631,18 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     opening = nil
     messageText = nil
     textLength = nil
+    loadSucceeded()
     content.pdfView.document = document
     content.show(.pdf)
     pendingAnchor = anchor
+    scrollsToTop = anchor == nil
     anchorApplied = anchor == nil
 
     if anchor == nil { describesFromRecord = false }
 
     refresh()
     applyPendingAnchor()
+    settleLoad()
   }
 
   private func show(text: NSAttributedString, anchor: TextViewerAnchor?) {
@@ -512,56 +650,84 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     opening = nil
     messageText = nil
     textLength = text.length
+    loadSucceeded()
     content.pdfView.document = nil
     content.textView.textStorage?.setAttributedString(text)
     content.show(.text)
     pendingAnchor = anchor
+    scrollsToTop = false
     anchorApplied = anchor == nil
 
     if anchor == nil { describesFromRecord = false }
 
     refresh()
     applyPendingAnchor()
+    settleLoad()
   }
 
   /// Puts a restored anchor in place once the view has a size to lay out in. A pane restored while
   /// off screen waits for its first layout. Until then `describe()` returns the anchor it holds.
   private func applyPendingAnchor() {
-    guard let anchor = pendingAnchor, content.bounds.width > 0, content.bounds.height > 0 else {
-      return
-    }
+    guard pendingAnchor != nil || scrollsToTop, content.bounds.width > 0, content.bounds.height > 0
+    else { return }
+
+    // A layout pass inside this method calls it again. Reading the anchor once keeps the outer call
+    // on the anchor it started with, however far the inner call got.
+    let anchor = pendingAnchor
 
     switch content.body {
     case .pdf:
       guard let document = content.pdfView.document else { return }
 
-      if let index = anchor.page, index < document.pageCount, let page = document.page(at: index) {
-        let point = CGPoint(x: anchor.x ?? 0, y: anchor.y ?? page.bounds(for: .cropBox).maxY)
+      content.pdfView.layoutDocumentView()
 
-        content.pdfView.layoutDocumentView()
-        content.pdfView.go(to: PDFDestination(page: page, at: point))
+      if let anchor {
+        if let index = anchor.page, index < document.pageCount, let page = document.page(at: index)
+        {
+          let point = CGPoint(x: anchor.x ?? 0, y: anchor.y ?? page.bounds(for: .cropBox).maxY)
+
+          content.pdfView.go(to: PDFDestination(page: page, at: point))
+        }
+      } else if let documentView = content.pdfView.documentView {
+        // The document view is not flipped, so its top is its largest y.
+        documentView.scroll(NSPoint(x: 0, y: documentView.bounds.maxY))
       }
 
     case .text:
       content.layoutSubtreeIfNeeded()
-      scrollText(toCharacter: anchor.characterIndex ?? 0)
+      scrollText(toCharacter: anchor?.characterIndex ?? 0)
 
     case .markdown, .message:
       return
     }
 
     pendingAnchor = nil
+    scrollsToTop = false
     anchorApplied = true
     describesFromRecord = false
     refresh()
   }
 
   private func fail(_ text: String) {
+    defer { settleLoad() }
+
+    if keepsRender {
+      keepsRender = false
+      opening = nil
+      fileGone = !watchedExists
+
+      if !fileGone { reloadNotice = text }
+
+      refresh()
+      return
+    }
+
     content.removeMarkdown()
     opening = nil
     describesFromRecord = false
     anchorApplied = true
     pendingAnchor = nil
+    scrollsToTop = false
     content.pdfView.document = nil
     content.textView.textStorage?.setAttributedString(NSAttributedString())
     textLength = nil
@@ -686,6 +852,19 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   /// Reads the file again and shows it at the position the pane holds. A pane whose web content
   /// process ended comes back this way, with its images fetched afresh.
   public func reload() {
+    reload(origin: .user)
+  }
+
+  /// Whether the pane watches its file, for tests.
+  var isWatching: Bool { watcher != nil }
+
+  /// Whether a load is running, for tests.
+  var isLoading: Bool { opening != nil }
+
+  /// True when the pane has a file to read again.
+  var canReload: Bool { !closed && record.path != nil }
+
+  private func reload(origin: LoadOrigin) {
     guard let path = record.path else { return }
 
     let anchor = content.markdownView?.anchor.map {
@@ -694,11 +873,12 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
     open(
       path: path, bookmark: record.bookmark, anchor: anchor ?? currentAnchor() ?? record.anchor,
-      origin: .user)
+      origin: origin, reloading: true)
   }
 
   public func close() {
     closed = true
+    unwatch()
     alerts.discard()
     cancelLoad()
     content.removeMarkdown()
@@ -716,6 +896,11 @@ public final class TextViewerApplet: Applet, SourceReplacing {
 
   public func reattach() {
     alerts.reattach(from: self, to: host)
+
+    if let held = heldChange {
+      heldChange = nil
+      applyChange(held)
+    }
   }
 
   public func focus() {
@@ -778,12 +963,38 @@ public final class TextViewerApplet: Applet, SourceReplacing {
       notices.append(AppletNotice(.info, resolvedNotice))
     }
 
+    if let reloadNotice {
+      notices.append(AppletNotice(.warning, reloadNotice))
+    }
+
+    if fileGone {
+      let name = record.path.map { ($0 as NSString).lastPathComponent } ?? Self.untitled
+
+      notices.append(
+        AppletNotice(
+          .warning,
+          "\u{201C}\(name)\u{201D} was moved or deleted. The pane keeps the last version it read."
+        ))
+    }
+
     for notice in posted.unposted(notices) {
       alerts.deliver(notice, origin: loadOrigin, from: self, to: host)
     }
   }
 
   private func segmentsForState() -> [AppletSegment] {
+    var segments = bodySegments()
+
+    if fileGone {
+      segments.append(
+        AppletSegment(
+          symbolName: "exclamationmark.triangle", text: "Moved or deleted", style: .warning))
+    }
+
+    return segments
+  }
+
+  private func bodySegments() -> [AppletSegment] {
     switch content.body {
     case .pdf:
       guard let document = content.pdfView.document else { return [] }
