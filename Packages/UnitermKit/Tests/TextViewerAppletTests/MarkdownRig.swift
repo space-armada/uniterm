@@ -126,6 +126,24 @@ final class MarkdownRig {
     return false
   }
 
+  /// Waits until the first image matching `selector` has finished loading, or failed to, or
+  /// `seconds` pass. A refused image completes with no pixels.
+  func imageSettled(_ selector: String, seconds: Double = 10) async -> Bool {
+    let deadline = ContinuousClock.now + .seconds(seconds)
+
+    while ContinuousClock.now < deadline {
+      let done = await number(
+        "const i = document.querySelector(selector); return i && i.complete ? 1 : 0",
+        ["selector": selector])
+
+      if done == 1 { return true }
+
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+
+    return false
+  }
+
   /// Gives the page time to start a request it should not make. Nothing signals the absence of a
   /// request, so the wait is a fixed bound, and a request that arrives later is missed.
   func settle() async {

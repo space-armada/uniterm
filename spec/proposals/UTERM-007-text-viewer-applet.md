@@ -403,8 +403,8 @@ None.
   superseding open, and a PDF pane starts none. An undo-reopen therefore starts a fresh one.
 - The text view uses TextKit 1, since only that layout draws `NSTextTable`. The document page stays white with the
   document's own colors, and the theme colors the surround and the messages.
-- Markdown shows the unsupported-type message, and the viewer declares no Markdown type yet. The format rule already
-  maps `README` and the Markdown extensions to Markdown.
+- Markdown showed the unsupported-type message until M2 declared the type. The format rule already mapped `README` and
+  the Markdown extensions to Markdown.
 - A PDF URL link opens through `PDFViewDelegate`'s link hook. The SDK header says a delegate that implements it handles
   the click, and the default `NSWorkspace` open does not run. The PDF view also refuses every action that is not page
   navigation or a link to a safe scheme: a remote go-to, a form reset, a print command, and a URL with another
@@ -556,8 +556,8 @@ None.
   Markdown test, whose pane is pointed at a pipe, found it. The watch now opens with `O_NONBLOCK`, and a watcher test
   pins it.
 - Not run here: the two new UI tests, which need a GUI session. They build.
-- `MarkdownAppletTests` and `MarkdownViewTests` fail in the package's full run on this machine's agent session, on the
-  code before this milestone as well, and pass when run alone. The full run skipped them.
+- The Markdown suites failed in a full package run while the display was idle. Under `caffeinate -dimsu` the full suite
+  passes with no skips.
 - A PDF shown with no anchor landed about 90 points down its first page whenever the view already had a size when the
   document arrived, which a restored pane's launch does and a pane sized later does not. PDFKit picks the scroll
   position, and it differs with timing. The pane now scrolls the document view to its top once it has a size, so a
@@ -599,7 +599,7 @@ None.
   selected and given the find indicator. A PDF searches through PDFKit's `beginFindString` and shows its matches as
   highlighted selections. Markdown searches in the parser's world and wraps each match in a `mark` element. All three
   pass `.caseInsensitive` and `.diacriticInsensitive` to PDFKit and Foundation, and the page reimplements Foundation's
-  fold. A test judges 18 pairs both ways, among them the sharp s, a ligature, a dotted capital I, and final sigma, and
+  fold. A test judges 28 pairs both ways, among them the sharp s, a ligature, a dotted capital I, and final sigma, and
   pins agreement. See Decision Log.
 - The query reaches the page as a `callAsyncJavaScript` argument. A test finds `"hi" and </script> and \ '` literally.
   A match spans inline elements, since the page searches one string built from a block's text nodes, and it never spans
@@ -850,8 +850,8 @@ None.
   marks, lowercasing, and applying the folds Foundation applies and `toLowerCase` lacks. Those are the sharp s, final
   sigma, long s, and the Latin ligatures. Compatibility forms such as fullwidth letters and `ǆ` do not fold, as in
   Foundation. A hit counts only when it starts and ends between source characters, since Foundation does not match an
-  s inside a sharp s or an f inside a ligature, and a test pins eight such pairs. A search reports at most 10,000
-  matches and says when it stopped. A query is cut at 500 characters. (work-queue best guess)
+  s inside a sharp s or an f inside a ligature. Eight of the test's 28 pairs pin that case. A search reports at most
+  10,000 matches and says when it stopped. A query is cut at 500 characters. (work-queue best guess)
 - 2026-11-08: M4 `<details>` rule. A match inside a closed `<details>` counts. It opens that element only when it
   becomes the current match, and the other closed elements stay closed. Skipping would make the count lie about the
   document, and opening every element would rewrite the reader's page. (work-queue best guess)
@@ -861,7 +861,7 @@ None.
   holds one line and the engines do not match across line breaks alike. It then makes the first match inside the
   selection current, so Next steps on from it. Closing the bar drops the query. A selection of one line is the query
   whole. (work-queue best guess)
-- 2026-11-08: Amended "Search and navigation" and M4, in the decision's single marker. The text said the page's find
+- 2026-11-08: Amended "Search and navigation" and M4, in one marker on the decision and one on the M4 outline check. The text said the page's find
   returns highlight ranges, and that a document with no outline gets a disabled Show Contents. The page marks its
   matches with `mark` elements and returns a count. Show Contents stays on while the sidebar is showing, so a sidebar
   left shown by one document can be hidden when the next has no outline, and it is off only when the sidebar is hidden

@@ -422,7 +422,8 @@ final class MarkdownViewTests: XCTestCase {
 
     _ = await rig.eval("document.querySelector('a[href=\"other.md\"]').click(); return 1")
 
-    try await Task.sleep(for: .milliseconds(300))
+    // The pane cancels a viewer-URL navigation silently, so nothing signals the denial.
+    await rig.settle()
 
     XCTAssertEqual(rig.links.count, 2, "a relative link opens nothing")
     XCTAssertEqual(
@@ -495,7 +496,11 @@ final class MarkdownViewTests: XCTestCase {
       XCTAssertEqual(hasSource, 0, "\(alt) keeps no source, so its alt text shows")
     }
 
-    try await Task.sleep(for: .milliseconds(800))
+    for alt in ["txt", "pipe", "zero", "net", "vol", "big", "up2"] {
+      let done = await rig.imageSettled("img[alt=\(alt)]")
+
+      XCTAssertTrue(done, "\(alt) finishes its load attempt")
+    }
 
     for alt in ["txt", "pipe", "zero", "net", "vol", "big", "up2"] {
       let width = await rig.number(

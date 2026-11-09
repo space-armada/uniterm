@@ -506,3 +506,37 @@ The ADR-impact pass found no conflicts. Its pasteboard candidate was already dec
 | `FindTests` | 1.5 to 2.5 s |
 | `ContentsTests` | about 2.3 s |
 | `TextViewerUITests`, 13 tests | 127 s for the class |
+
+## Row review: UTERM-007 M1-M4
+
+### Commits
+
+- "Fix stale text viewer proposal notes and two bare test sleeps". It also carries this section.
+
+### Findings
+
+A holistic review of the range found no correctness or security defect. It traced every load path through one
+`open()`, with a generation check after each `await`. It confirmed that `describe()` stays disk-free at version 1,
+that the main thread is bounded, and that the shared infrastructure has no leftover duplicates.
+
+| Finding | Disposition |
+|---|---|
+| M3 As built blamed the Markdown test failures on code before M3 | Fixed: the cause was an idle display, and the suite passes under `caffeinate` |
+| M1 As built still said Markdown was undeclared | Fixed: past tense, until M2 declared it |
+| M4 pair counts disagreed: 18, eight, and 28 in the test | Fixed: 28 in total, eight of them for matches inside a sharp s or a ligature |
+| Two bare sleeps in `MarkdownViewTests` | The refused-image wait now polls until each image completes. The relative-link check now uses `settle()`, since the pane cancels that navigation silently and nothing signals it. The coordinator rejected a first version that relied on WebKit deciding navigations in click order |
+| One Decision Log entry miscounted its amendment markers | Fixed |
+
+The ADR-impact pass over the range found no conflicts. Its only open candidate, that document-named paths never leave
+the document's volume, is already in the Decision Log as Undecided.
+
+### Checks
+
+| Check | Run | Result |
+|---|---|---|
+| `make fmt-check`, `make lint`, `make check` | 3Q4DRF, CJGGS3, GKGX9J | pass |
+| `MarkdownViewTests` under caffeinate | EX6TKN | pass |
+| `caffeinate -dimsu make test-package`, before the last test edit | Y63CGD | pass |
+| `proposals.py freeze` with the row's commits | 0S1R2Y | `[]` |
+
+`settle()` is now called three times, about 4.5 s in total.
