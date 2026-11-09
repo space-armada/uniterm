@@ -19,7 +19,7 @@
 | [UTERM-015](UTERM-015-cross-applet-file-opening.md) | Finder, File > Open, and other ways a file reaches an applet, and the path-reading power | accepted |
 | [UTERM-016](UTERM-016-map-pin-editing.md) | Add, edit, and remove map pins by hand, and save them to GeoJSON | accepted |
 | [UTERM-017](UTERM-017-status-bar-placement.md) | Where notices go, their levels, window status slots, and the shared queue | implemented |
-| [UTERM-018](UTERM-018-open-in-nearest-capable-pane.md) | Every open walks to the nearest pane that can handle it | draft |
+| [UTERM-018](UTERM-018-open-in-nearest-capable-pane.md) | Every open walks to the nearest pane that can handle it | accepted |
 
 ## Dependency Graph
 
@@ -41,7 +41,7 @@ UTERM-014 ← UTERM-002, UTERM-013
 UTERM-015 ← UTERM-001, UTERM-002, UTERM-003, UTERM-004, UTERM-013
 UTERM-016 ← UTERM-004, UTERM-008, UTERM-013, UTERM-015
 UTERM-017 ← UTERM-001
-UTERM-018 ← UTERM-003, UTERM-004, UTERM-005, UTERM-007, UTERM-015
+UTERM-018 ← UTERM-003, UTERM-004, UTERM-005, UTERM-007, UTERM-013, UTERM-015
 ```
 
 ## Not Yet Filed
