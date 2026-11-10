@@ -184,4 +184,29 @@ final class TerminalUITests: UnitermUITestCase {
     XCTAssertFalse(
       (terminal.value as? String ?? "").contains("slept-42"), "the sleep ran to its end")
   }
+
+  /// Catches a Ctrl-F that a window menu item takes before the terminal sees it. macOS adds
+  /// Window > Fill with the key fn-Ctrl-F, and a menu match that ignores the fn flag fires it for a
+  /// plain Ctrl-F. `cat -v` runs in the foreground, so the pty echoes the byte as `^F` and cat
+  /// prints it the same way. Neither shows unless the byte reaches the pty.
+  ///
+  /// The marker is computed, so only the echo's output shows that the shell has handed the
+  /// terminal to cat. It cannot prove that other fn-Control items leave their plain keys alone.
+  func testControlFReachesTheTerminal() {
+    let app = launchApp()
+    let terminal = waitForTerminal(in: app)
+
+    app.typeText("echo ready-$((40+2)); cat -v\n")
+
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 10) { $0.contains("ready-42") },
+      "the shell never ran the command. Screen: \(terminal.value as? String ?? "")")
+
+    app.typeKey("f", modifierFlags: .control)
+    app.typeText("x\n")
+
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 5) { $0.contains("^Fx") },
+      "Ctrl-F never reached the terminal. Screen: \(terminal.value as? String ?? "")")
+  }
 }
