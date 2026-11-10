@@ -1,15 +1,16 @@
 version: 1
 allow:
+  - exact: [./scripts/check-sandbox-off.sh]
   - exact: [./scripts/check-sandbox-off.sh, .build/DerivedData/Build/Products/Debug/uniterm.app]
   - prefix: [./scripts/run-ui-tests.sh]
   - prefix: [./scripts/swiftpm-offline-check.sh]
   - prefix: [/usr/bin/lldb, --batch]
   - prefix: [/usr/bin/sed]
   - prefix: [actionlint]
+  - wrapper: [caffeinate, -dimsu]
+  - prefix: [caffeinate, -dimsu, ./scripts/run-ui-tests.sh]
   - exact: [caffeinate, -dimsu, make, test-app]
   - exact: [caffeinate, -dimsu, make, test-package]
-  - prefix: [caffeinate, -dimsu, ./scripts/run-ui-tests.sh]
-  - wrapper: [caffeinate, -dimsu]
   - prefix: [codesign, -d]
   - prefix: [cp]
   - prefix: [date]
