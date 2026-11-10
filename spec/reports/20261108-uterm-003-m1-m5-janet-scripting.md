@@ -7,11 +7,10 @@ specs live in the code repo, so every commit below is in this repo, on the `agen
 
 ## Run state
 
-The run is paused. M1, M2, M3, and M5 are `DONE`. M4 stays `IN PROGRESS`. Its check "Ctrl-C stops a running
-evaluation and returns to the prompt" failed in the real app on the last UI run that could reach the screen. The
-later fixes have not been run in the app, since every UI run from 05:09 on timed out while enabling automation
-mode. The row review ran, and its fixes are committed. The row has not moved to `history.md`, the proposal stays
-`accepted`, and the final review waits on M4. Nothing is stashed.
+The run paused on 2026-11-09 at the open REPL Ctrl-C check, and a second session resumed it the same evening, once
+the screen was available. M1 through M5 are now `DONE`. The resumed session found why Ctrl-C never reached a
+terminal in the real app, fixed it, and proved it there. See "Resumed run" under M4. The row review ran before the
+pause, and its fixes are committed. Nothing is stashed.
 
 Step 0 fetched `upstream/main`. The branch already held it, so no rebase ran. The run's base and the row's base are
 both "Rate UTERM-018's link session risk the same as a regular browser".
@@ -24,7 +23,7 @@ work is stashed. No commands need the user's credentials.
 | UTERM-003 M1: Embedded Janet and the first host function | DONE | "Embed Janet in a script helper and post status from scripts" |
 | UTERM-003 M2: Host API v1 | DONE | "Let scripts list, open, and send to panes" |
 | UTERM-003 M3: `uniterm run` | DONE | "Run scripts against uniterm from the command line" |
-| UTERM-003 M4: REPL applet | IN PROGRESS | "Add a Janet REPL applet that runs in a pane". Ctrl-C in the real app is open |
+| UTERM-003 M4: REPL applet | DONE | "Add a Janet REPL applet that runs in a pane", then "Keep macOS's fn-Control window keys from swallowing Ctrl-C" |
 | UTERM-003 M5: Sandbox and limits | DONE | "Bound script helpers in time and memory" |
 
 ## Local checks
@@ -326,8 +325,9 @@ The package suite ran in 156 s.
 
 ### Commits
 
-- "Add a Janet REPL applet that runs in a pane". M4 stays `IN PROGRESS`, because Ctrl-C has not been proven in the real
-  app. A later commit finishes it.
+- "Add a Janet REPL applet that runs in a pane". M4 stayed `IN PROGRESS` here, because Ctrl-C had not been proven in
+  the real app.
+- "Keep macOS's fn-Control window keys from swallowing Ctrl-C", from the resumed run. It finishes M4.
 
 ### What landed
 
@@ -408,13 +408,91 @@ with orders to run no command that needs approval.
 
 The package suite grew to 163 to 203 s.
 
-### Left open
+### Left open before the pause
 
 - Ctrl-C in the real app. Package tests stop a loop with the byte 3 under `script`, `login`, `bash`, and `sh -c`,
   with SIGINT inherited as ignored, and with ISIG off. In the app, the loop runs on. Two diagnostic tests are written
   and built, but not run. One is `TerminalUITests.testControlCInterruptsAForegroundProgram`, which checks whether
   Ctrl-C reaches any foreground program. The other is the REPL test with `UNITERM_REPL_TRACE_SIGINT=1`, which shows
-  whether SIGINT reaches the helper.
+  whether SIGINT reaches the helper. The resumed run below closed this.
+
+### Resumed run
+
+The screen was available on the evening of 2026-11-09. The plain-shell Ctrl-C test failed too, so the fault was in
+the app, not the helper.
+
+Ctrl-C never reached a terminal. The window's key routing matched a plain Ctrl-C to Window > Center, an item macOS adds
+with the key fn-Ctrl-C, and fired it. The menu matcher compared keys in `KeyChord`'s canonical form, which drops the
+fn flag. So a plain Ctrl-C equaled fn-Ctrl-C. Fill, fn-Ctrl-F, swallowed Ctrl-F the same way. The bug came from the
+shortcut-ownership work, before this row. M4's check could not pass without the fix.
+
+The matcher now requires the fn flag in the event when an item's key asks for it. It still ignores the fn flag that
+arrow and function keys always carry. A package test of the rule fails on the old matcher with "plain Ctrl-C matched
+an fn-Ctrl-C item". It tests a pure function, since AppKit drops the fn flag from a hand-built menu item. The real-app
+UI tests now pass.
+
+The diagnosis took 4 wrong turns, recorded so a later reader does not repeat them:
+
+1. The first fix had the terminal view claim every Control-only key in `performKeyEquivalent`. It rested on a wrong
+   claim that AppKit drops an unclaimed Control key. The real app showed no change, so the fix was reverted.
+2. A package test read `^C` followed by an exit as a failure. It was the line discipline doing its job, so the test's
+   oracle was wrong. Package tests through a bare window, a `MainWindow`, and `NSApp.sendEvent` all passed, because
+   their hand-built menu had no tiling items.
+3. An `stty -a` and `cat -v` diagnostic in the app ruled out the pty. ISIG and ECHOCTL were on, and Ctrl-D reached
+   the pty while Ctrl-C did not.
+4. The coordinator's first key-trace design pressed Ctrl-D at an empty prompt. That ended the shell and closed the
+   window, so two trace runs said nothing about Ctrl-C. The third trace, with Ctrl-C during a `sleep`, showed the
+   router firing Center.
+
+The temporary key trace, the diagnostic UI tests, and the exploratory package tests were all removed before the commit.
+
+| Check | Run | Result |
+|---|---|---|
+| `TerminalUITests.testControlCInterruptsAForegroundProgram`, before the fix | W01YC6 | fail: the sleep ran on, no `^C` |
+| `ReplUITests`, before the fix | RF8Q8H | 4 pass, both Ctrl-C tests fail |
+| The first, wrong fix in the app | MBZ6YB | all 3 Ctrl-C tests still fail |
+| `stty` and `cat -v` diagnostic | 71RVNH | pty flags fine; Ctrl-D arrives, Ctrl-C does not |
+| Key trace, Ctrl-C during `sleep 30` | 2KF0Y1 | `routeToMenu` fires Center for a plain Ctrl-C |
+| Matcher test on the old rule | 9VBWXZ | fail: "plain Ctrl-C matched an fn-Ctrl-C item" |
+| Matcher test on the new rule | KFNF10 | pass |
+| `make fmt-check`, `make lint`, `make check` | JGZ05M, WMJHVN, YR7M3P | pass |
+| `make build`, then `check-sandbox-off.sh` | SVZCDF, 38H956 | pass |
+| `make test-helper-sandbox` | W0TF5H | pass |
+| `caffeinate -dimsu make test-package` | 3P97WC | pass, exit 0, 184 s |
+| `xcodebuild build-for-testing` | GKHF7X | pass |
+| All `TerminalUITests` and `ReplUITests`, plus the terminal and browser Ctrl-Tab tests | VDPDZ1 | 16 of 17 pass. The failure was a test fault, below |
+| All `ReplUITests`, after the test fix | G8RSJX | 6 pass |
+| The second-Ctrl-C test, after it moved to the shared `waitFor` | 5QR53P | pass |
+| `make fmt-check`, `make lint`, `build-for-testing`, after the review fixes | 3TTB9C, XF2ZVA, TE61YV | pass |
+| `proposals.py check`, `proposals.py freeze` | | only the row-finish findings; freeze empty |
+
+The crash folder held only an `ImageDecoderHelper` report and system diagnostics, in the same pattern as before.
+
+#### Best guesses
+
+1. When an item's key asks for the fn flag, the event must carry it. When the item's key does not, the event's fn
+   flag is ignored, since arrow and function keys always carry it. No uniterm command key uses the fn flag, so only
+   the items macOS adds change behavior. If this is wrong, a remap to an fn key, or a future fn-keyed command, may
+   need its own rule.
+
+#### Review findings
+
+| Finding | Disposition |
+|---|---|
+| Coordinator: the first fix claimed Ctrl-Tab and Ctrl-Shift-Tab before their menu items, and removed a design comment | Moot. The fix was reverted when the app showed no change |
+| Coordinator: `make test-package` exited 2 mid-run in FC4VM6, but was reported as a pass | Confirmed. The XCTest process ended during `TerminalSessionIntegrationTests`. The implementer traced it to the exploratory `ControlCKeyRoutingTests`, which changed process-wide state in the same module, and deleted them. 3P97WC then passed. No separate reproduction isolated the cause |
+| Coordinator: the first matcher test asserted only cases the old rule already passed. Its failing-first run failed on a fixture, since AppKit drops the fn flag from a hand-built item | Fixed. The rule moved into a pure function, and the test fails on the old rule for the right reason |
+| Coordinator: the exploratory routing tests passed on the buggy code and used fixed 1.5 s sleeps | Fixed. They were deleted |
+| UI run VDPDZ1: the second-Ctrl-C test read the ended message's `label`, which XCUITest leaves empty for an `NSTextField` | A test fault. The test now reads `value` through the shared `waitFor` helper |
+| Reviewer: the matcher test did not say what it cannot prove | Fixed. It now says the real-app UI tests prove that system items carry the fn flag |
+| Reviewer: `@MainActor` on the pure function is unneeded | Not a finding. It matches the enum's other functions |
+| ADR-impact: ADR-04 | Consistent. The fix restores "Window keys reach uniterm in every applet" without widening the reserved keys |
+| ADR-impact uncovered: the fn rule for menu matching | Dismissed as an ADR candidate. It implements ADR-04 and adds no new rule across the system |
+
+#### Test cost
+
+The matcher class, `MenuKeyMatchTests`, runs 5 tests in 0.002 s. No test class was added. The package suite ran in
+184 s.
 
 ## UTERM-003 M5: Sandbox and limits
 
@@ -510,7 +588,8 @@ prove.
 
 ### Left open
 
-- These UI tests are written but unrun, because the screen was unavailable:
+- These UI tests were written but unrun, because the screen was unavailable. The resumed run ran them, and all 3 now
+  pass. See "Resumed run" under M4.
   - `TerminalUITests.testControlCInterruptsAForegroundProgram`
   - `ReplUITests.testCtrlCStopsARunningEvaluationAndTheCloseAsksOnlyWhileItRuns`
   - `ReplUITests.testASecondCtrlCEndsAFormStuckInACallThatIgnoresTheFirst`
@@ -561,9 +640,10 @@ It saw 2 events where it expected 1. It passed in the full run PG4GS7 and alone 
 `FileWatching`. It was not reproduced on the base commit. The likely cause is filesystem-event timing, which is
 unconfirmed.
 
-## Where the run stopped
+## Where the run paused
 
-To resume, run these UI tests on an unlocked screen:
+The resumed run picked up from here. This section is kept as the record of the pause. To resume, run these UI tests on
+an unlocked screen:
 
 ```
 ./scripts/run-ui-tests.sh xcodebuild -project uniterm.xcodeproj -scheme uniterm -configuration Debug \

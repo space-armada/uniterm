@@ -208,4 +208,38 @@ final class MenuKeyMatchTests: XCTestCase {
       MenuKeyMatch.triggers(item("}", [.command, .shift]), try event("}", [.command, .shift])))
     XCTAssertFalse(MenuKeyMatch.triggers(item("t", .command), try event("t", .control)))
   }
+
+  /// Catches window tiling items that claim plain Control keys. macOS adds "Center" as fn-Ctrl-C.
+  /// A plain Ctrl-C event must not match that item, because the item requires `.function` and the
+  /// event lacks it. Arrow keys and function keys always carry `.function` in their events, so an
+  /// arrow-key item without `.function` must still match an arrow event with it. The rule: when
+  /// the item requires `.function`, the event must have it. When the item does not, the event's
+  /// `.function` is ignored.
+  ///
+  /// The test proves the matcher's rule. It cannot prove that AppKit's real system items, such as
+  /// Window > Center, carry `.function` in their masks. The real-app UI tests cover that.
+  func testFunctionFlagInItemRequiresFunctionFlagInEvent() throws {
+    XCTAssertFalse(
+      MenuKeyMatch.match(
+        itemKey: "c", itemMask: [.control, .function], eventChars: "c", eventMods: .control),
+      "plain Ctrl-C matched an fn-Ctrl-C item")
+
+    XCTAssertTrue(
+      MenuKeyMatch.match(
+        itemKey: "c", itemMask: [.control, .function], eventChars: "c",
+        eventMods: [.control, .function]),
+      "fn-Ctrl-C did not match the fn-Ctrl-C item")
+
+    let arrowLeft = "\u{F702}"
+    XCTAssertTrue(
+      MenuKeyMatch.match(
+        itemKey: arrowLeft, itemMask: .command, eventChars: arrowLeft,
+        eventMods: [.command, .function]),
+      "Cmd-Left with .function did not match an item without .function")
+
+    XCTAssertTrue(
+      MenuKeyMatch.match(
+        itemKey: "\t", itemMask: .control, eventChars: "\t", eventMods: [.control, .function]),
+      "Ctrl-Tab with .function did not match an item without .function")
+  }
 }

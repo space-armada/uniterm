@@ -542,7 +542,7 @@ Amended 2026-11-09; see Decision Log.
 
 ### M4: REPL applet
 
-**Status:** IN PROGRESS
+**Status:** DONE
 
 - A pane can run the REPL applet
 - Expressions typed in the REPL call the host API and show results
@@ -625,6 +625,12 @@ Amended 2026-11-09; see Decision Log.
   close at an idle prompt, a close during a loop, Ctrl-C, a close and undo, and a restart after `(os/exit 0)`.
 - Not covered: the shell wrapper is proved to run the helper as the process the shell started, but only with
   `/bin/sh`. The terminal engine's own wrapping of the program is not tested. The event loop does not run in a REPL.
+- Ctrl-C in the real app never reached the terminal. The window's key routing matched it to the Window > Center menu item,
+  whose key is fn-Ctrl-C, because the menu matcher compared keys without the fn flag. A temporary key trace in the real
+  app found it. The matcher now requires fn when an item's key asks for it, and still ignores the fn flag that arrow and
+  function keys carry. A package test of the matcher fails on the old rule. The real-app UI tests now pass for Ctrl-C in a
+  shell and in the REPL, a second Ctrl-C ending a form stuck in C, and Ctrl-Tab. Fill, fn-Ctrl-F, had the same effect on
+  Ctrl-F.
 - Left for M5: the app's stop request, a helper stuck in C that Ctrl-C cannot reach, the memory cap and the app-wide
   budget, and the resting footprint of a REPL helper.
 
@@ -694,8 +700,8 @@ Amended 2026-11-09; see Decision Log.
   blocked in a C call. The block starts after the helper connects, so a Ctrl-C during the connect still takes the
   default action.
 - Proof boundary. The Ctrl-C and stuck-in-C checks are proved through the stop channel and through a real SIGINT to a
-  real helper, in package tests. The app's key path, which sends the stop request when the pane sees Ctrl-C, waits
-  on the real-app UI tests that M4 also waits on. `ReplUITests` gained the stuck-form test, and the UI tests were built
+  real helper, in package tests. The app's key path, which sends the stop request when the pane sees Ctrl-C, is now
+  proved by the real-app UI tests that M4 ran. `ReplUITests` gained the stuck-form test, and the UI tests were built
   and not run by this milestone. The key hook is proved only by reading and by the key classifier's unit test. No test
   sends the first Ctrl-C's SIGINT and the app's stop request together, so that the one handler balances both is
   unproved in the real app.

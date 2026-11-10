@@ -178,7 +178,8 @@ final class ReplUITests: UnitermUITestCase {
 
     XCTAssertTrue(message.waitForExistence(timeout: 20), "the second Ctrl-C did not end the REPL")
     XCTAssertTrue(
-      message.label.contains("Ctrl-C twice"), "the pane gave another reason: \(message.label)")
+      waitFor(message, timeout: 5) { $0.contains("Ctrl-C twice") },
+      "the pane gave another reason: \(message.value as? String ?? "")")
     XCTAssertTrue(window.groups["pane-2"].exists, "the pane closed")
     XCTAssertTrue(window.buttons["repl-restart-button"].exists, "the pane offered no restart")
   }
