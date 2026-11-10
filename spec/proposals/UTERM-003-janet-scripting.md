@@ -1,6 +1,6 @@
 # UTERM-003: Janet Scripting and REPL
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-10-31
 **Updated:** 2026-11-09
 

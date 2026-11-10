@@ -640,6 +640,18 @@ It saw 2 events where it expected 1. It passed in the full run PG4GS7 and alone 
 `FileWatching`. It was not reproduced on the base commit. The likely cause is filesystem-event timing, which is
 unconfirmed.
 
+## Row finish
+
+### Commits
+
+- "Allow the bare sandbox check in the cg allowlist". cg's approve prompt saved an `exact` rule for the sandbox check
+  with no app path, during the resumed run. The rule is narrow and names no absolute path.
+- "Finish UTERM-003 and move its row to history"
+
+No second row review ran. The row review before the pause covered M1 through M5, and the M4 finish had its own
+milestone review. UTERM-003 is `implemented`, the index says so, and its row moved from `queue.md` to the end of
+`history.md`. `proposals.py check` reports nothing.
+
 ## Where the run paused
 
 The resumed run picked up from here. This section is kept as the record of the pause. To resume, run these UI tests on
