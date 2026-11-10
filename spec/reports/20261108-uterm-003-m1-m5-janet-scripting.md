@@ -652,6 +652,31 @@ No second row review ran. The row review before the pause covered M1 through M5,
 milestone review. UTERM-003 is `implemented`, the index says so, and its row moved from `queue.md` to the end of
 `history.md`. `proposals.py check` reports nothing.
 
+## Final review
+
+The final review covered the run's whole range, from "Rate UTERM-018's link session risk the same as a regular
+browser" to "Finish UTERM-003 and move its row to history". It was also the run's ADR review. The two UTERM-018 commits
+from another session, "Settle and accept UTERM-018's design for opening in the nearest pane" and "Point UTERM-018's
+tie-break decision at the settled tie rule", were out of scope. It found nothing to fix, so no commit followed.
+
+| Finding | Disposition |
+|---|---|
+| CONFIRMED: ADR-10's Consequences still say the Janet helper "is not built yet", and that the ADR stays proposed until the helper shows whether the rule needs nuance | Left for the user. The fix settles ADR-10's nuance and its promotion, which the approved plan left with the user. No commit in the range edits `spec/adr/` |
+| ADR-07 and ADR-08 hold as written | Left for the user. Both stay `proposed` |
+| Proposal text after the M4 finish | No finding. No As built block is stale |
+| ADR-impact: ADR-04, ADR-07, ADR-08 | Consistent |
+| ADR-impact ADVISORY: ADR-09, no authenticated caller and no grants on the host API | The planned gap that UTERM-004 M1-M2 close |
+| ADR-impact: ADR-10 needs nuance on scope, Janet's language-level sandbox as a replacement bound, the check script's role for unsandboxed helpers, and the stale text | Left for the user, as the row review recorded |
+| ADR-impact uncovered decisions | None new. The REPL-on-restore candidate is already `Undecided` in the Decision Log |
+
+| Check | Run | Result |
+|---|---|---|
+| `caffeinate -dimsu make test-app`, the full UI suite | WTRHE7 | 144 tests, 0 failures, 21 minutes |
+
+No crash report appeared during the full suite.
+
+The run is done. The state file is deleted.
+
 ## Where the run paused
 
 The resumed run picked up from here. This section is kept as the record of the pause. To resume, run these UI tests on
