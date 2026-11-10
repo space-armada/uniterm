@@ -999,11 +999,17 @@ Amended 2026-11-09; see Decision Log.
   so it said only that the REPL ended. It now keeps the channel until the connection closes, and a reason that arrives
   meanwhile replaces the generic message. If wrong, the pane would say only that the REPL ended whenever the exit
   came first.
+- 2026-11-09: Correction of fact: the user accepted ADR-07, ADR-08, and ADR-10 after this proposal shipped, so the
+  References no longer list the first two as proposed. Replaces "- ADR-07 (proposed): Failure Isolation. A failure
+  ends only what failed" and "- ADR-08 (proposed): UI Responsiveness. The UI never waits on unbounded work". ADR-10
+  is a new line in References.
 
 ## References
 
 - Original write-up: `~/projects/private_specs/uniterm/spec/research/original-writeup.md`, APPLET-9
 - Coding standards: `languages/janet.md` and `languages/lisp-embedding.md`
 - ADR-02: pane tree nodes have stable IDs
-- ADR-07 (proposed): Failure Isolation. A failure ends only what failed
-- ADR-08 (proposed): UI Responsiveness. The UI never waits on unbounded work
+- ADR-07 (accepted): Failure Isolation. A failure ends only what failed
+- ADR-08 (accepted): UI Responsiveness. The UI never waits on unbounded work
+- ADR-10 (accepted): the app runs unsandboxed, and helpers that need no file or network run sandboxed. The `uniterm`
+  command is the first helper under its last bullet

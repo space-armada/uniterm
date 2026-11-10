@@ -1,6 +1,6 @@
 # ADR-07: Failure Isolation
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-02
 
 ## Context
@@ -22,7 +22,7 @@ A failure in one part of uniterm ends at most that part. It never ends the app o
   separate process.
 - A design that lets one part's failure end the app states why isolation is not possible there, and what bounds the
   exposure.
-- libghostty is such an exception. Its terminal surface draws into a view inside the app, and moving it to another
+- libghostty is one such exception. Its terminal surface draws into a view inside the app, and moving it to another
   process would mean remoting its rendering and input, which libghostty does not support. The exposure is bounded by
   ADR-01, which confines libghostty to one module behind uniterm's own protocol, and by pinning it to one exact,
   tested version.
@@ -40,10 +40,15 @@ part safe, and lets the OS reclaim what it held.
 
 ## Consequences
 
-- Janet runs in helper processes, never in the app. See UTERM-003 "Where scripts run".
+- Janet runs in helper processes, never in the app. `scripts/check-janet-isolation.sh` enforces this in `make check`.
+  See UTERM-003 "Where scripts run".
+- The image decoder and the RTF and Word reader run in helper processes for the same reason. See UTERM-006
+  "Rendering" and UTERM-007 "RTF and Word use the system readers".
 - Each new applet or integration that hosts code uniterm does not control has to show how its failures are contained.
 - Process isolation costs a second executable, a message protocol with a version handshake, and a round trip per call.
 - A crash inside libghostty ends the app. A later decision that revisits terminal hosting has to weigh this rule.
+- PDF is a second stated exception. PDFKit's view needs the document in the app's process, so PDF parses there.
+  UTERM-007's risk "A hostile PDF corrupts or takes over the app" states what bounds it.
 - Telling the user what failed is each design's own concern. UTERM-003 settles it for helpers: a REPL pane shows the
   message, and a run reports it on stderr.
 
@@ -57,5 +62,8 @@ part safe, and lets the OS reclaim what it held.
 ## References
 
 - UTERM-003: "Where scripts run"
+- UTERM-006: "Rendering", the image decoder helper
+- UTERM-007: "RTF and Word use the system readers", and the risk "A hostile PDF corrupts or takes over the app"
 - ADR-01
 - ADR-05
+- ADR-10

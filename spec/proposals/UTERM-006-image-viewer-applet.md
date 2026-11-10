@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-07
+**Updated:** 2026-11-09
 
 ## Dependencies
 
@@ -741,7 +741,8 @@ None.
   nearest-neighbor sampling, as it does tiles.
 - 2026-11-07: ADR candidate (cuts across the system): the app runs outside the App Sandbox, and a helper that needs no
   file or network access runs inside it. Written as ADR-10, proposed. It stays proposed until UTERM-003's Janet helper
-  shows whether the rule needs more nuance. The user's choice.
+  shows whether the rule needs more nuance. The user's choice. Accepted on 2026-11-09, with the nuance that helper
+  showed.
 - 2026-11-07: The double tap that toggles fit and actual size, and the zoom-percent status segment, are kept. The
   user's choice after a hands-on review. Both were logged above as additions.
 - 2026-11-07: (best guess) The double tap did nothing in the user's hands-on check. It now zooms to actual size around
