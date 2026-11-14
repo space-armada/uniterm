@@ -186,6 +186,17 @@ final class MenuKeyMatchTests: XCTestCase {
         item("\u{8}", [.command, .option]), try event("\u{7F}", [.command, .option])))
   }
 
+  /// Catches Select Previous Tab never firing from Ctrl-Shift-Tab. Shift-Tab types the back-tab
+  /// character 0x19, and the item says Tab with Shift.
+  func testShiftTabMatchesATabKeyEquivalentWithShift() throws {
+    XCTAssertTrue(
+      MenuKeyMatch.triggers(
+        item("\t", [.control, .shift]), try event("\u{19}", [.control, .shift])))
+    XCTAssertTrue(MenuKeyMatch.triggers(item("\t", .control), try event("\t", .control)))
+    XCTAssertFalse(
+      MenuKeyMatch.triggers(item("\t", .control), try event("\u{19}", [.control, .shift])))
+  }
+
   /// Catches a loosened match that fires on the wrong chord: Shift still counts for letters and
   /// digits, and a different character never matches.
   func testLettersKeepTheirModifiersAndOtherCharactersDoNotMatch() throws {

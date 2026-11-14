@@ -120,7 +120,7 @@ final class BrowserUITests: UnitermUITestCase {
   }
 
   /// Catches a tab bar that shows for one tab, and tab keys that do not reach the browser through
-  /// the menu. A new pane has no bar. Cmd-T adds a tab and selects it. Cmd-Shift-[ and Cmd-Shift-]
+  /// the menu. A new pane has no bar. Cmd-T adds a tab and selects it. Ctrl-Shift-Tab and Ctrl-Tab
   /// step through the tabs, Cmd-1 and Cmd-2 pick one, and Cmd-9 picks the last.
   func testTheTabKeysOpenAndSwitchBrowserTabs() {
     let app = launchApp()
@@ -133,11 +133,11 @@ final class BrowserUITests: UnitermUITestCase {
     XCTAssertTrue(tab(1, in: window).waitForExistence(timeout: 10), "Cmd-T opened no tab")
     XCTAssertTrue(isSelected(tab(1, in: window)))
 
-    app.typeKey("[", modifierFlags: [.command, .shift])
-    XCTAssertTrue(isSelected(tab(0, in: window)), "Cmd-Shift-[ did not go back")
+    app.typeKey(.tab, modifierFlags: [.control, .shift])
+    XCTAssertTrue(isSelected(tab(0, in: window)), "Ctrl-Shift-Tab did not go back")
 
-    app.typeKey("]", modifierFlags: [.command, .shift])
-    XCTAssertTrue(isSelected(tab(1, in: window)), "Cmd-Shift-] did not go forward")
+    app.typeKey(.tab, modifierFlags: .control)
+    XCTAssertTrue(isSelected(tab(1, in: window)), "Ctrl-Tab did not go forward")
 
     app.typeKey("1", modifierFlags: .command)
     XCTAssertTrue(isSelected(tab(0, in: window)), "Cmd-1 did not pick the first tab")

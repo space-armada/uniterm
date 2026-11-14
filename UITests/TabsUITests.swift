@@ -74,18 +74,19 @@ final class TabsUITests: UnitermUITestCase {
     XCTAssertTrue(waitForValue("selected", of: tab(1, in: app)))
   }
 
-  /// Catches Cmd-Shift-] and Cmd-Shift-[ that do not reach uniterm's menu from a focused terminal.
+  /// Catches Ctrl-Tab and Ctrl-Shift-Tab that do not reach uniterm's menu from a focused terminal.
+  /// AppKit can take Ctrl-Tab for its focus loop, and Shift-Tab types back-tab, not Tab.
   func testNextAndPreviousTabKeysSwitchTabs() {
     let app = launchApp()
     _ = waitForTerminal(in: app)
     _ = openTab(in: app)
     XCTAssertTrue(waitForValue("selected", of: tab(1, in: app)))
 
-    app.typeKey("[", modifierFlags: [.command, .shift])
-    XCTAssertTrue(waitForValue("selected", of: tab(0, in: app)), "Cmd-Shift-[ did not go back")
+    app.typeKey(.tab, modifierFlags: [.control, .shift])
+    XCTAssertTrue(waitForValue("selected", of: tab(0, in: app)), "Ctrl-Shift-Tab did not go back")
 
-    app.typeKey("]", modifierFlags: [.command, .shift])
-    XCTAssertTrue(waitForValue("selected", of: tab(1, in: app)), "Cmd-Shift-] did not go forward")
+    app.typeKey(.tab, modifierFlags: .control)
+    XCTAssertTrue(waitForValue("selected", of: tab(1, in: app)), "Ctrl-Tab did not go forward")
   }
 
   /// Catches Cmd-W that closes the pane while the applet has several tabs. With two tabs at idle

@@ -47,11 +47,16 @@ public struct KeyChord: Hashable, Sendable {
   ]
 
   /// The Delete key sends 0x7F, and menus spell it 0x08.
+  ///
+  /// Shift-Tab types the back-tab character 0x19, and a menu names it Tab with Shift.
   private static func canonicalize(_ key: String, _ bits: UInt) -> (String, UInt) {
     var flags = NSEvent.ModifierFlags(rawValue: bits)
     var folded = key == "\u{7F}" ? "\u{8}" : key
 
-    if let base = shiftedSymbols[folded] {
+    if folded == "\u{19}" {
+      folded = "\t"
+      flags.insert(.shift)
+    } else if let base = shiftedSymbols[folded] {
       folded = base
       flags.insert(.shift)
     } else {
