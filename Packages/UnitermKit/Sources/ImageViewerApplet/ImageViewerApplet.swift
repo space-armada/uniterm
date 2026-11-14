@@ -1,5 +1,6 @@
 import AppKit
 import AppletKit
+import HelperHost
 import ImageViewerModel
 import ImageWire
 import SourceAccess
@@ -161,7 +162,7 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
   /// reads it from another pane.
   public convenience init(startDirectory: String?) {
     self.init(
-      startDirectory: startDirectory, settings: HelperSettings(location: .bundled()),
+      startDirectory: startDirectory, settings: HelperSettings(location: .bundledImageDecoder),
       helperBudget: .shared, bitmapBudget: .shared)
   }
 
@@ -190,7 +191,7 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
   /// restoring touches nothing on disk. A description this build cannot read is refused.
   public convenience init(restoring description: AppletDescription) throws {
     try self.init(
-      restoring: description, settings: HelperSettings(location: .bundled()),
+      restoring: description, settings: HelperSettings(location: .bundledImageDecoder),
       helperBudget: .shared, bitmapBudget: .shared)
   }
 

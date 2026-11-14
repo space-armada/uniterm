@@ -7,15 +7,22 @@ import Foundation
 final class FixtureTypes: ContentTypeSystem, @unchecked Sendable {
   private let parents: [String: [String]]
   private let byExtension: [String: String]
+  private let registered: [String: [String]]
   private let lock = NSLock()
   private var seen: [Bool] = []
 
   /// Called with each URL the type lookup is asked about.
   private(set) var asked: [URL] = []
 
-  init(parents: [String: [String]], byExtension: [String: String]) {
+  /// `registered` lists every type the system would register for an extension, apart from the
+  /// one a file of that extension is given.
+  init(
+    parents: [String: [String]], byExtension: [String: String],
+    registered: [String: [String]] = [:]
+  ) {
     self.parents = parents
     self.byExtension = byExtension
+    self.registered = registered
   }
 
   /// A small graph: geojson conforms to json, which conforms to text. Folder and package kinds
@@ -57,6 +64,14 @@ final class FixtureTypes: ContentTypeSystem, @unchecked Sendable {
     }
 
     return byExtension[url.pathExtension]
+  }
+
+  func identifiers(forExtension ext: String) -> [String] {
+    lock.lock()
+    seen.append(Thread.isMainThread)
+    lock.unlock()
+
+    return registered[ext] ?? []
   }
 
   /// True when any lookup ran on the main thread.

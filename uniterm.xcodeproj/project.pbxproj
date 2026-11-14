@@ -23,7 +23,10 @@
 		7A000000000000000000004A /* BrowserApplet in Frameworks */ = {isa = PBXBuildFile; productRef = 7A000000000000000000004B /* BrowserApplet */; };
 		7A000000000000000000004C /* ImageDecoding in Frameworks */ = {isa = PBXBuildFile; productRef = 7A000000000000000000004D /* ImageDecoding */; };
 		7A000000000000000000004E /* ImageViewerApplet in Frameworks */ = {isa = PBXBuildFile; productRef = 7A000000000000000000004F /* ImageViewerApplet */; };
-		7A000000000000000000005C /* ImageDecoder in Embed image decoder */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000050 /* ImageDecoder */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		7A000000000000000000005C /* ImageDecoder in Embed helpers */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000050 /* ImageDecoder */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		7A0000000000000000000060 /* DocumentDecoding in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000061 /* DocumentDecoding */; };
+		7A0000000000000000000062 /* DocumentDecoder in Embed helpers */ = {isa = PBXBuildFile; fileRef = 7A0000000000000000000063 /* DocumentDecoder */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		7A0000000000000000000064 /* TextViewerApplet in Frameworks */ = {isa = PBXBuildFile; productRef = 7A0000000000000000000065 /* TextViewerApplet */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -41,18 +44,26 @@
 			remoteGlobalIDString = 7A0000000000000000000055;
 			remoteInfo = ImageDecoder;
 		};
+		7A0000000000000000000066 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7A0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A0000000000000000000069;
+			remoteInfo = DocumentDecoder;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		7A000000000000000000005B /* Embed image decoder */ = {
+		7A000000000000000000005B /* Embed helpers */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = Contents/Helpers;
 			dstSubfolderSpec = 1;
 			files = (
-				7A000000000000000000005C /* ImageDecoder in Embed image decoder */,
+				7A000000000000000000005C /* ImageDecoder in Embed helpers */,
+				7A0000000000000000000062 /* DocumentDecoder in Embed helpers */,
 			);
-			name = "Embed image decoder";
+			name = "Embed helpers";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -61,6 +72,7 @@
 		7A0000000000000000000006 /* uniterm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = uniterm.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A0000000000000000000007 /* uniterm UITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "uniterm UITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A0000000000000000000050 /* ImageDecoder */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ImageDecoder; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A0000000000000000000063 /* DocumentDecoder */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = DocumentDecoder; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -74,9 +86,20 @@
 		7A0000000000000000000052 /* Exceptions for "Helpers" folder in "ImageDecoder" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				DocumentDecoder/DocumentDecoder.entitlements,
+				DocumentDecoder/main.swift,
 				ImageDecoder/ImageDecoder.entitlements,
 			);
 			target = 7A0000000000000000000055 /* ImageDecoder */;
+		};
+		7A0000000000000000000067 /* Exceptions for "Helpers" folder in "DocumentDecoder" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				DocumentDecoder/DocumentDecoder.entitlements,
+				ImageDecoder/ImageDecoder.entitlements,
+				ImageDecoder/main.swift,
+			);
+			target = 7A0000000000000000000069 /* DocumentDecoder */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -98,6 +121,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				7A0000000000000000000052 /* Exceptions for "Helpers" folder in "ImageDecoder" target */,
+				7A0000000000000000000067 /* Exceptions for "Helpers" folder in "DocumentDecoder" target */,
 			);
 			path = Helpers;
 			sourceTree = "<group>";
@@ -124,6 +148,7 @@
 				7A0000000000000000000048 /* PlaceSearch in Frameworks */,
 				7A000000000000000000004A /* BrowserApplet in Frameworks */,
 				7A000000000000000000004E /* ImageViewerApplet in Frameworks */,
+				7A0000000000000000000064 /* TextViewerApplet in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -139,6 +164,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				7A000000000000000000004C /* ImageDecoding in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A0000000000000000000068 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A0000000000000000000060 /* DocumentDecoding in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -161,6 +194,7 @@
 				7A0000000000000000000006 /* uniterm.app */,
 				7A0000000000000000000007 /* uniterm UITests.xctest */,
 				7A0000000000000000000050 /* ImageDecoder */,
+				7A0000000000000000000063 /* DocumentDecoder */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -177,12 +211,13 @@
 				7A000000000000000000000B /* Frameworks */,
 				7A000000000000000000000C /* Resources */,
 				7A0000000000000000000038 /* Copy Ghostty resources and licenses */,
-				7A000000000000000000005B /* Embed image decoder */,
+				7A000000000000000000005B /* Embed helpers */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				7A000000000000000000005A /* PBXTargetDependency */,
+				7A000000000000000000006C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7A0000000000000000000004 /* App */,
@@ -204,6 +239,7 @@
 				7A0000000000000000000049 /* PlaceSearch */,
 				7A000000000000000000004B /* BrowserApplet */,
 				7A000000000000000000004F /* ImageViewerApplet */,
+				7A0000000000000000000065 /* TextViewerApplet */,
 			);
 			productName = uniterm;
 			productReference = 7A0000000000000000000006 /* uniterm.app */;
@@ -254,6 +290,28 @@
 			productReference = 7A0000000000000000000050 /* ImageDecoder */;
 			productType = "com.apple.product-type.tool";
 		};
+		7A0000000000000000000069 /* DocumentDecoder */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A000000000000000000006A /* Build configuration list for PBXNativeTarget "DocumentDecoder" */;
+			buildPhases = (
+				7A000000000000000000006B /* Sources */,
+				7A0000000000000000000068 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7A0000000000000000000051 /* Helpers */,
+			);
+			name = DocumentDecoder;
+			packageProductDependencies = (
+				7A0000000000000000000061 /* DocumentDecoding */,
+			);
+			productName = DocumentDecoder;
+			productReference = 7A0000000000000000000063 /* DocumentDecoder */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -272,6 +330,9 @@
 						TestTargetID = 7A0000000000000000000008;
 					};
 					7A0000000000000000000055 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					7A0000000000000000000069 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -296,6 +357,7 @@
 				7A0000000000000000000008 /* uniterm */,
 				7A0000000000000000000009 /* uniterm UITests */,
 				7A0000000000000000000055 /* ImageDecoder */,
+				7A0000000000000000000069 /* DocumentDecoder */,
 			);
 		};
 /* End PBXProject section */
@@ -386,6 +448,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A000000000000000000006B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -398,6 +467,11 @@
 			isa = PBXTargetDependency;
 			target = 7A0000000000000000000055 /* ImageDecoder */;
 			targetProxy = 7A0000000000000000000059 /* PBXContainerItemProxy */;
+		};
+		7A000000000000000000006C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7A0000000000000000000069 /* DocumentDecoder */;
+			targetProxy = 7A0000000000000000000066 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -550,6 +624,38 @@
 			};
 			name = Release;
 		};
+		7A000000000000000000006D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Helpers/DocumentDecoder/DocumentDecoder.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uniterm.app.DocumentDecoder;
+				PRODUCT_NAME = DocumentDecoder;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		7A000000000000000000006E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Helpers/DocumentDecoder/DocumentDecoder.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.uniterm.app.DocumentDecoder;
+				PRODUCT_NAME = DocumentDecoder;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -585,6 +691,15 @@
 			buildConfigurations = (
 				7A0000000000000000000057 /* Debug */,
 				7A0000000000000000000058 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A000000000000000000006A /* Build configuration list for PBXNativeTarget "DocumentDecoder" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A000000000000000000006D /* Debug */,
+				7A000000000000000000006E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -662,6 +777,14 @@
 		7A000000000000000000004F /* ImageViewerApplet */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ImageViewerApplet;
+		};
+		7A0000000000000000000061 /* DocumentDecoding */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DocumentDecoding;
+		};
+		7A0000000000000000000065 /* TextViewerApplet */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TextViewerApplet;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

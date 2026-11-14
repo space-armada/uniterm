@@ -1,11 +1,12 @@
 import Foundation
+@_exported import HelperWire
 
 /// What the protocol version means for both sides. A mismatch is refused before any image moves.
 public enum ImageProtocol {
   public static let version: UInt16 = 2
 
   /// The descriptor the helper finds its end of the socketpair on.
-  public static let socketDescriptor: Int32 = 3
+  public static let socketDescriptor: Int32 = HelperChannel.socketDescriptor
 
   /// What the pane tells the user when the two sides disagree.
   public static let mismatchText =
@@ -376,37 +377,6 @@ public enum HelperMessage: Equatable, Sendable {
     default:
       throw WireError.unknownType(type)
     }
-  }
-}
-
-/// A frame is a one-byte type, a four-byte body length, and the body.
-public enum FrameHeader {
-  public static let size = 5
-
-  static func frame(type: UInt8, body: Data) -> Data {
-    var data = Data()
-    data.append(type)
-
-    let count = UInt32(truncatingIfNeeded: body.count)
-
-    for shift in stride(from: 24, through: 0, by: -8) {
-      data.append(UInt8((count >> UInt32(shift)) & 0xFF))
-    }
-
-    data.append(body)
-
-    return data
-  }
-
-  /// Reads a header. The length is checked against `limit` by the caller before it allocates.
-  public static func parse(_ bytes: Data) throws -> (type: UInt8, length: Int) {
-    guard bytes.count == size else { throw WireError.truncated }
-
-    var reader = ByteReader(bytes)
-    let type = try reader.u8()
-    let length = try reader.u32()
-
-    return (type, Int(length))
   }
 }
 

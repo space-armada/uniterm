@@ -167,25 +167,15 @@ public enum SourceOpener {
   public static func regularFile(descriptor: Int32, path: String) -> Result<
     OpenedImageFile, SourceAccessError
   > {
-    var info = stat()
+    switch RegularFile.check(descriptor: descriptor, path: path) {
+    case .failure(let error):
+      return .failure(error)
 
-    guard fstat(descriptor, &info) == 0 else {
-      let code = errno
-      Darwin.close(descriptor)
-
-      return .failure(.posix(code, path: path))
+    case .success(let info):
+      return .success(
+        OpenedImageFile(
+          descriptor: descriptor, path: path, modified: OpenedFolder.seconds(info.modified),
+          size: info.size))
     }
-
-    guard info.st_mode & S_IFMT == S_IFREG else {
-      Darwin.close(descriptor)
-
-      return .failure(
-        .notARegularFile(path: path, kind: SourceAccessError.kind(of: info.st_mode)))
-    }
-
-    return .success(
-      OpenedImageFile(
-        descriptor: descriptor, path: path, modified: OpenedFolder.seconds(info.st_mtimespec),
-        size: Int(info.st_size)))
   }
 }

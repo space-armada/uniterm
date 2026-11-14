@@ -1,40 +1,9 @@
 import Darwin
 import Foundation
+import HelperHost
 import ImageViewerModel
 import ImageWire
 import os
-
-/// Why a helper stopped. The pane words each one, and only some offer a retry.
-public enum HelperEnd: Equatable, Sendable {
-  /// The process died or exited. A retry may work, since the cause was one file or one fault.
-  case crashed(String)
-
-  /// The process stopped answering pings, so it hung. A retry may work.
-  case unresponsive
-
-  /// The decode ran past the time bound while the helper still answered. That is a limit, so a
-  /// retry would repeat it.
-  case overranTimeBound
-
-  /// The helper's footprint passed the per-helper cap. That is a limit.
-  case overFootprint
-
-  /// The helper sent bytes the app refused.
-  case misbehaved(String)
-
-  case versionMismatch
-
-  /// The helper could not be started.
-  case unavailable(String)
-
-  /// True when trying again is likely to behave differently.
-  public var offersRetry: Bool {
-    switch self {
-    case .crashed, .unresponsive, .misbehaved: return true
-    case .overranTimeBound, .overFootprint, .versionMismatch, .unavailable: return false
-    }
-  }
-}
 
 /// Why the pane opens a file: to show it, or to have it ready for the next step.
 enum OpenRole: Equatable, Sendable {
@@ -68,6 +37,13 @@ enum HelperEvent: Equatable, Sendable {
 
   /// The helper is gone. The request in flight, if any, was lost with it.
   case ended(HelperEnd, lost: DecodeRequest?)
+}
+
+extension HelperLocation {
+  /// The image decoder in the app bundle. A debug build honors `UNITERM_IMAGE_HELPER`.
+  static var bundledImageDecoder: HelperLocation {
+    bundled(named: "ImageDecoder", debugOverride: "UNITERM_IMAGE_HELPER")
+  }
 }
 
 /// Tuning for one client. Tests shorten the times and the cap to reach each limit.
@@ -119,11 +95,8 @@ final class ImageHelperClient {
   var outputSpaces: [UInt32: OutputSpace] = [:]
 
   private var openingSources: [(id: UInt32, role: OpenRole)] = []
-  private var busySince: ContinuousClock.Instant?
+  private var liveness: HelperLiveness
   private var watchdog: Task<Void, Never>?
-  private var nonce: UInt32 = 0
-  private var pingOutstanding: (nonce: UInt32, since: ContinuousClock.Instant)?
-  private var lastPong: ContinuousClock.Instant?
   private var requestCounter: UInt32 = 0
   private var expectation: ImageExpectation?
 
@@ -148,6 +121,9 @@ final class ImageHelperClient {
   init(settings: HelperSettings, budget: ImageHelperBudget) {
     self.settings = settings
     self.budget = budget
+    self.liveness = HelperLiveness(
+      timeBound: settings.timeBound, pongGrace: settings.pongGrace,
+      footprintCap: settings.footprintCap)
     self.readLimit = OSAllocatedUnfairLock(initialState: 0)
     self.owner = Self.owners.withLock {
       $0 += 1
@@ -218,11 +194,13 @@ final class ImageHelperClient {
       generation += 1
 
       let current = generation
-      let stream = AsyncStream<HelperRead>.makeStream()
+      let stream = AsyncStream<HelperRead<HelperMessage>>.makeStream()
       let limit = readLimit
 
       spawned.startReading(
-        limit: { limit.withLock { $0 } },
+        threadName: "uniterm.image-helper.reader",
+        bodyLimit: { HelperMessage.bodyLimit(type: $0, maxImageBytes: limit.withLock { $0 }) },
+        decode: HelperMessage.decode(type:body:),
         deliver: { event in
           stream.continuation.yield(event)
 
@@ -267,7 +245,7 @@ final class ImageHelperClient {
     openingSources.append((id, role))
     touch(id)
 
-    if busySince == nil { markBusy() }
+    if !liveness.isBusy { markBusy() }
 
     do {
       try withExtendedLifetime(file) {
@@ -405,7 +383,7 @@ final class ImageHelperClient {
   func shutdown() {
     watchdog?.cancel()
     watchdog = nil
-    busySince = nil
+    liveness.markIdle()
 
     if let process {
       process.kill()
@@ -527,7 +505,7 @@ final class ImageHelperClient {
 
   // MARK: Receiving
 
-  private func handle(_ event: HelperRead, generation current: Int) {
+  private func handle(_ event: HelperRead<HelperMessage>, generation current: Int) {
     guard current == generation else { return }
 
     switch event {
@@ -637,10 +615,7 @@ final class ImageHelperClient {
       onEvent?(.failed(request, kind, text))
 
     case .pong(let value):
-      if pingOutstanding?.nonce == value {
-        pingOutstanding = nil
-        lastPong = .now
-      }
+      liveness.pong(value)
     }
   }
 
@@ -666,9 +641,7 @@ final class ImageHelperClient {
   // MARK: Watching
 
   private func markBusy() {
-    busySince = .now
-    pingOutstanding = nil
-    lastPong = nil
+    liveness.markBusy()
 
     guard watchdog == nil else { return }
 
@@ -687,8 +660,7 @@ final class ImageHelperClient {
   }
 
   private func markIdle() {
-    busySince = nil
-    pingOutstanding = nil
+    liveness.markIdle()
     watchdog?.cancel()
     watchdog = nil
 
@@ -699,42 +671,25 @@ final class ImageHelperClient {
   }
 
   private func probe() {
-    guard let process, let busySince else { return }
+    guard let process, liveness.isBusy else { return }
 
-    if let footprint = process.footprint() {
+    let footprint = process.footprint()
+
+    if let footprint {
       lastFootprint = footprint
       budget.record(owner: owner, footprint: footprint)
-
-      if footprint > settings.footprintCap {
-        end(.overFootprint, lost: scheduler.inFlight)
-        return
-      }
     }
 
-    let now = ContinuousClock.now
+    switch liveness.probe(footprint: footprint) {
+    case .healthy:
+      break
 
-    if let outstanding = pingOutstanding, now - outstanding.since > settings.pongGrace {
-      end(.unresponsive, lost: scheduler.inFlight)
-      return
+    case .end(let reason):
+      end(reason, lost: scheduler.inFlight)
+
+    case .sendPing(let value):
+      try? process.socket.send(AppMessage.ping(nonce: value).frame())
     }
-
-    if now - busySince > settings.timeBound, let ponged = lastPong, ponged > busySince,
-      now - ponged < settings.pongGrace
-    {
-      end(.overranTimeBound, lost: scheduler.inFlight)
-      return
-    }
-
-    if pingOutstanding == nil { sendPing() }
-  }
-
-  private func sendPing() {
-    guard let process else { return }
-
-    nonce &+= 1
-    pingOutstanding = (nonce, .now)
-
-    try? process.socket.send(AppMessage.ping(nonce: nonce).frame())
   }
 
   /// Ends the helper and tells the pane why.
@@ -745,8 +700,7 @@ final class ImageHelperClient {
 
     watchdog?.cancel()
     watchdog = nil
-    busySince = nil
-    pingOutstanding = nil
+    liveness.markIdle()
     expectation = nil
     scheduler.reset()
     openingSources = []

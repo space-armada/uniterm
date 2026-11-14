@@ -1,5 +1,6 @@
 import AppKit
 import AppletKit
+import FileWatching
 import GeoData
 import PlaceSearch
 import SourceAccess
@@ -1016,7 +1017,9 @@ extension MapViewerApplet {
 
   private func watch(_ url: URL) {
     watcher?.stop()
-    watcher = FileWatcher(url: url) { [weak self] in self?.fileChangedOnDisk() }
+    watcher = FileWatcher(url: url, policy: .fileOnly) { [weak self] _ in
+      self?.fileChangedOnDisk()
+    }
   }
 
   /// The file on disk changed. A pane with no edits reads it again. A pane with edits keeps them
@@ -1143,81 +1146,5 @@ extension MapViewerApplet {
       return .revert
     default: return .cancel
     }
-  }
-}
-
-/// Calls back when a file is written, renamed, or deleted. An editor that saves by writing a new
-/// file and renaming it over the old one replaces the watched file, so the watch moves to whatever
-/// file is at the path after each change.
-@MainActor
-final class FileWatcher {
-  private let url: URL
-  private let onChange: @MainActor () -> Void
-  private var source: (any DispatchSourceFileSystemObject)?
-
-  init(url: URL, onChange: @escaping @MainActor () -> Void) {
-    self.url = url
-    self.onChange = onChange
-    arm()
-  }
-
-  private var retries = 0
-
-  /// The most times a watch looks again for a file that is gone, half a second apart. An editor
-  /// that deletes the file before writing the new one puts it back within that time.
-  static let maximumRetries = 10
-
-  private func arm() {
-    let descriptor = open(url.path, O_EVTONLY)
-
-    guard descriptor >= 0 else {
-      guard retries < Self.maximumRetries else { return }
-
-      retries += 1
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-        MainActor.assumeIsolated {
-          guard let self, self.source == nil, !self.stopped else { return }
-
-          self.arm()
-
-          if self.source != nil { self.onChange() }
-        }
-      }
-
-      return
-    }
-
-    retries = 0
-
-    let source = DispatchSource.makeFileSystemObjectSource(
-      fileDescriptor: descriptor, eventMask: [.write, .extend, .delete, .rename], queue: .main)
-
-    source.setEventHandler { [weak self] in
-      MainActor.assumeIsolated {
-        guard let self, let source = self.source else { return }
-
-        let replaced = !source.data.isDisjoint(with: [.delete, .rename])
-
-        if replaced {
-          source.cancel()
-          self.source = nil
-          self.arm()
-        }
-
-        self.onChange()
-      }
-    }
-
-    source.setCancelHandler { close(descriptor) }
-    source.resume()
-    self.source = source
-  }
-
-  private var stopped = false
-
-  func stop() {
-    stopped = true
-    source?.cancel()
-    source = nil
   }
 }

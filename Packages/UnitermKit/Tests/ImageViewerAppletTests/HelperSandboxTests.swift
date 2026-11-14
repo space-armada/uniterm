@@ -1,4 +1,5 @@
 import Foundation
+import HelperHost
 import ImageIO
 import ImageTestSupport
 import ImageViewerModel

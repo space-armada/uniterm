@@ -68,6 +68,46 @@ final class BuiltInCommandsTests: XCTestCase {
     XCTAssertTrue(warnings.isEmpty, "\(warnings)")
   }
 
+  /// Catches a text viewer command whose key uniterm reserves, one that lands outside Edit > Find or
+  /// View, and a key the live menu takes from it. Find, Find Next, Find Previous, and Use Selection
+  /// for Find hold Cmd-F, Cmd-G, Cmd-Shift-G, and Cmd-E in Edit > Find. Show Contents has no key.
+  func testTheTextViewerFindAndContentsCommandsHoldTheirKeys() throws {
+    var warnings: [String] = []
+    let registry = CommandRegistry(app: AppCommandHooks(warn: { warnings.append($0) }))
+
+    for set in BuiltInApplets.commandSets {
+      registry.register(set)
+    }
+
+    let menu = CommandMenu(registry: registry, activeController: { nil })
+    menu.refreshKeys()
+
+    let viewer = try XCTUnwrap(BuiltInApplets.commandSets.first { $0.typeID == "text-viewer" })
+    let find = viewer.commands.filter { $0.home == .editFind }
+
+    XCTAssertEqual(
+      find.map(\.name), ["find", "find-next", "find-previous", "use-selection-for-find"])
+    XCTAssertEqual(
+      find.map(\.key),
+      [KeyChord("f"), KeyChord("g"), KeyChord("g", [.command, .shift]), KeyChord("e")])
+
+    for command in find {
+      let id = CommandRegistry.commandID(typeID: "text-viewer", name: command.name)
+      XCTAssertEqual(registry.appletKeys[id], command.key, command.title)
+    }
+
+    let contents = try XCTUnwrap(viewer.commands.first { $0.name == "show-contents" })
+
+    XCTAssertEqual(contents.home, .view)
+    XCTAssertNil(contents.key)
+
+    for name in ["reload", AppletCommand.openSourceName] {
+      XCTAssertNotNil(viewer.commands.first { $0.name == name }, name)
+    }
+
+    XCTAssertTrue(warnings.isEmpty, "\(warnings)")
+  }
+
   /// Catches a map command that gains or loses a key, lands in the wrong menu, or loses its name.
   /// The commands are the registry's contract with the menu and the palette. Open and Clear File
   /// Pins sit in File with no key, so Cmd-O stays with the window's File > Open. The three styles

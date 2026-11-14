@@ -14,6 +14,9 @@ public enum RouteDecision: Sendable, Equatable {
 
 /// Picks one applet type for each file by the file's content type.
 ///
+/// When the file's own type matches no applet, the types the system registers for its extension
+/// are tried instead, by the same rules. The file's own type always wins when it matches.
+///
 /// A more specific match wins, meaning one whose declared type conforms to the other's. Rank decides
 /// only between matches that are equally specific or unrelated. A saved choice for the file's exact
 /// type overrides both. Two applets claiming a type at the same rank is a catalog error that a test
@@ -85,7 +88,12 @@ public struct FileRouter: Sendable {
 
   /// The decision for a file of a known type.
   public func decision(file: URL, type: String, startDirectory: String) -> RouteDecision {
-    let claims = self.claims(forType: type)
+    var claims = self.claims(forType: type)
+    let preferredMatches = !claims.isEmpty
+
+    if !preferredMatches {
+      claims = extensionClaims(for: file)
+    }
 
     guard !claims.isEmpty else {
       return .refused(file: file, .unsupported(type: type))
@@ -93,7 +101,9 @@ public struct FileRouter: Sendable {
 
     let claimants = Self.applets(of: claims, in: declarations)
 
-    if let saved = savedChoices[type], claimants.contains(where: { $0.typeID == saved }) {
+    if preferredMatches, let saved = savedChoices[type],
+      claimants.contains(where: { $0.typeID == saved })
+    {
       return .open(file: file, appletTypeID: saved, startDirectory: startDirectory, type: type)
     }
 
@@ -106,6 +116,31 @@ public struct FileRouter: Sendable {
 
     return .open(
       file: file, appletTypeID: winner.typeID, startDirectory: startDirectory, type: type)
+  }
+
+  /// The claims of every type the system registers for the file's extension. The router falls back
+  /// to these only when the file's preferred type matches no claim. Another app can own the
+  /// extension with a type that conforms to nothing uniterm declares, while the system also
+  /// registers a type that does. A symlink takes its target's extension, as its type does.
+  func extensionClaims(for file: URL) -> [Claim] {
+    let ext = file.resolvingSymlinksInPath().pathExtension
+
+    guard !ext.isEmpty else { return [] }
+
+    var seen = Set<String>()
+    var claims: [Claim] = []
+
+    for identifier in types.identifiers(forExtension: ext) {
+      for claim in self.claims(forType: identifier) {
+        let key = "\(claim.appletTypeID)\n\(claim.declared)"
+
+        if seen.insert(key).inserted {
+          claims.append(claim)
+        }
+      }
+    }
+
+    return claims
   }
 
   /// Every applet that declares a type the file's type conforms to, the likeliest first. An "Open

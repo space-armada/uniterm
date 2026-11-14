@@ -75,20 +75,24 @@ test: test-ci test-package test-helper-sandbox test-app ## Run CI gating, packag
 test-package: ghostty ## Run the package tests with swift test
 	cd $(PACKAGE_DIR) && swift test --scratch-path ../../$(SWIFTPM_SCRATCH)
 
-# The image helper's sandbox cannot be proved from a package build. This runs the probe and a type
-# sample against the helper inside the built app, and it fails when that helper is missing, so a lost
-# copy phase cannot pass quietly. Run it outside an agent sandbox, where the helper can start.
+# A helper's sandbox cannot be proved from a package build. This runs the probe and the samples
+# against each helper inside the built app, and it fails when a helper is missing, so a lost copy
+# phase cannot pass quietly. Run it outside an agent sandbox, where the helpers can start.
 .PHONY: test-helper-sandbox
-test-helper-sandbox: build ## Run the image helper's sandbox probe and type sample against the helper in the built app
+test-helper-sandbox: build ## Run each helper's sandbox probe and samples against the helper in the built app
 	test -x "$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/ImageDecoder"
-	cd $(PACKAGE_DIR) && UNITERM_IMAGE_HELPER="$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/ImageDecoder" \
+	test -x "$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/DocumentDecoder"
+	cd $(PACKAGE_DIR) && \
+		UNITERM_IMAGE_HELPER="$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/ImageDecoder" \
+		UNITERM_DOCUMENT_HELPER="$(abspath $(DERIVED_DATA))/Build/Products/$(CONFIGURATION)/uniterm.app/Contents/Helpers/DocumentDecoder" \
 		swift test --scratch-path ../../$(SWIFTPM_SCRATCH) --filter HelperSandboxTests
 
 .PHONY: fuzz
-fuzz: ghostty ## Fuzz the table, GeoJSON, and image wire readers under ASan. Slow, so make ci skips it
+fuzz: ghostty ## Fuzz the table, GeoJSON, wire, and PDF readers under ASan. Slow, so make ci skips it
 	cd $(PACKAGE_DIR) && UNITERM_FUZZ_ITERATIONS=$(FUZZ_ITERATIONS) \
 		swift test --sanitize=address --scratch-path ../../$(FUZZ_SCRATCH) \
-		--filter TableFuzzTests --filter GeoJSONFuzzTests --filter ImageWireFuzzTests
+		--filter TableFuzzTests --filter GeoJSONFuzzTests --filter ImageWireFuzzTests \
+		--filter DocumentWireFuzzTests --filter PDFFuzzTests
 
 .PHONY: test-app
 test-app: ghostty ## Run the UI tests with xcodebuild. They need a GUI session and Accessibility permission
@@ -132,8 +136,12 @@ check-ghosttykit-imports: ## Fail when any module but TerminalSurface can reach 
 	scripts/check-ghosttykit-imports.sh
 
 .PHONY: licenses
-licenses: ## Collect the license notices for Ghostty, its libraries, and the Swift packages into Licenses/
+licenses: ## Collect the license notices for Ghostty, its libraries, the Swift packages, and the web assets into Licenses/
 	scripts/collect-licenses.sh
+
+.PHONY: web-assets
+web-assets: ## Fetch the pinned Markdown parser and sanitizer, verify them, and copy them in. Needs the network
+	scripts/fetch-web-assets.sh
 
 # CI runs ci-package, ci-app, and ghostty-offline-check as three jobs side by side, and skips the
 # offline rebuild once an earlier run proved the same Ghostty inputs on the same runner image. The

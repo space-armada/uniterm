@@ -2,15 +2,15 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-03
+**Updated:** 2026-11-08
 
 ## Dependencies
 
 - UTERM-001
 - UTERM-015: app-level opening and Cmd-O, and the type declarations its router reads. A later remote open command
   would use its path-reading power
-- UTERM-006: M1 builds its document helper the way UTERM-006's image helper is built, and whichever lands first
-  builds the shared helper bundling
+- UTERM-006: M1 builds its document helper the way UTERM-006's image helper is built. UTERM-006 landed first, so M1
+  built the shared helper code. Amended 2026-11-08; see Decision Log.
 - UTERM-013, and UTERM-002's command registry: the find, contents, open, and reload commands are registry entries the
   viewer declares
 - UTERM-004 M2 and M3: M5's remote commands need remote-controlled panes and the applet command hook
@@ -50,10 +50,12 @@ RTF and Word documents load through `NSAttributedString`'s document readers and 
 The readers run in a sandboxed helper process, not in the app. The helper returns the attributed string through secure
 coding, with embedded images already decoded to bitmaps, and the app shows it in its own text view. A helper crash or
 hang ends that load, and the pane says so. The helper is built the way UTERM-006's image helper is: its own
-executable with its own sandbox entitlements, a file descriptor the app opens and passes at spawn, a private
-decode-only protocol with a version handshake, and a footprint cap the app enforces. It is a separate executable from
-the image helper, since the document readers need sandbox operations, such as the font service, that the image
-decoders' sandbox denies. Whichever of the two proposals lands first builds the shared helper bundling. Amended 2026-11-03; see Decision Log.
+executable with its own sandbox entitlements, a file descriptor the app opens and passes with each decode request, a
+private decode-only protocol with a version handshake, and a footprint cap the app enforces. It is a separate
+executable from the image helper, since the document readers need sandbox operations, such as the font service, that
+the image decoders' sandbox denies. UTERM-006 landed first. This proposal's first milestone factored the framing, the
+process supervision, and the liveness rules out of the image helper into code both helpers share. Amended 2026-11-08;
+see Decision Log.
 
 PDFs are the exception. `PDFView`'s selection, find, links, and accessibility work only on an in-process
 `PDFDocument`, and no supported API remotes it. Rendering pages in a helper would mean rebuilding all of those over
@@ -67,7 +69,7 @@ tables and code blocks. Render HTML in a `WKWebView`, use a native Swift Markdow
 
 Decision: Markdown is parsed and laid out inside a `WKWebView`, by a pinned, bundled JavaScript Markdown parser such as
 markdown-it. Raw HTML in the Markdown renders through a pinned sanitizer's allowlist. Nothing parses Markdown or HTML in
-uniterm's own process. Amended 2026-11-03; see Decision Log.
+uniterm's own process. Amended 2026-11-08; see Decision Log.
 
 - The parser runs as a `WKUserScript` in its own `WKContentWorld`. Page JavaScript is off
   (`allowsContentJavaScript = false`), so nothing in the document can run script, even if the parser emits markup it
@@ -78,9 +80,10 @@ uniterm's own process. Amended 2026-11-03; see Decision Log.
   `<summary>`, `<img width>`, `<picture>`, `<kbd>`, `<sup>`, and in-page anchors render. It drops `script`, `style`,
   inline `style` attributes, `iframe`, `object`, `embed`, `form`, `input`, `audio`, `video`, `base`, `meta`, `link`,
   and event attributes.
-- The scheme handler sends a Content-Security-Policy that allows images only from its own scheme and denies scripts in
-  the page, frames, forms, objects, and media. A `WKContentRuleList` also blocks every load outside the handler's
-  scheme, whichever world started it, since WebKit may let loads from an isolated world skip the page's policy.
+- The scheme handler sends a Content-Security-Policy that allows images, the page's stylesheet, and the document's own
+  text, each only from its own scheme, and denies scripts in the page, frames, forms, objects, and media. A
+  `WKContentRuleList` also blocks every load outside the handler's scheme, whichever world started it, since WebKit may
+  let loads from an isolated world skip the page's policy.
 - The web view's light or dark appearance follows the uniterm theme, not the system, so `<picture>` sources that
   test `prefers-color-scheme` match the theme.
 - Each pane's `WKWebView` uses its own non-persistent data store. It shares no cookies, cache, or storage with other
@@ -97,8 +100,9 @@ uniterm's own process. Amended 2026-11-03; see Decision Log.
 - Colors come from CSS variables generated from the `ThemePalette` the host pushes through `apply(_:)`.
 - The page pushes its scroll position and headings to the host through the message handler. The host caches them, so
   `describe()` stays synchronous and never waits on the page.
-- The parser and sanitizer assets are each pinned by version and content hash, and their license notices join
-  `Licenses/` through the collect script.
+- The parser and sanitizer assets are each pinned by version and content hash. Their license notices join `Licenses/`
+  through the collect script, with the notices of the five packages that the parser's build inlines. Amended
+  2026-11-08; see Decision Log.
 
 Rationale: the Motivation asks for READMEs rendered properly, and many README headers are raw HTML, so showing that
 HTML as text puts markup at the top of the page. A README comes from clones and downloads, so it is untrusted input. WebKit's content process is sandboxed and
@@ -155,10 +159,12 @@ applet contract decision.
 - Every description, the empty one included, holds the directory the pane started in. The factory passes it. An empty
   pane reports it as `currentDirectory`. With a file open, the pane reports the file's folder. The open panel always
   starts in `currentDirectory`, never in AppKit's remembered folder.
-- Every format loads from bytes read in full off the main thread: a PDF through `PDFDocument(data:)`, RTF and Word
-  through `NSAttributedString`'s readers in the sandboxed helper with the document type set from the file type, and
-  Markdown through the scheme handler. The loaded document is a snapshot. A later change to the file, such as pdflatex rewriting its output in
-  place, never reaches a view that is already showing.
+- Every format loads from a file read in full off the main thread: a PDF through `PDFDocument(data:)` from bytes the
+  app reads, RTF and Word through `NSAttributedString`'s readers in the sandboxed helper, which reads the whole file
+  from the descriptor the app opened, with the document type set from the file type, and Markdown through the scheme
+  handler. A load is a snapshot. A later change to the file, such as pdflatex rewriting its output in place, reaches a
+  view that is already showing only as a reload, which reads the whole file again. Amended 2026-11-08; see Decision
+  Log.
 - RTF and Word are decoded in the helper, and the decoded text's length and table cell count are checked against caps
   off the main thread, before the text view lays anything out. A document past a cap shows a message naming the limit.
   This is the bound ADR-08 asks for on the text view's main-thread layout.
@@ -191,7 +197,10 @@ command, Cmd-R, re-reads the file on demand.
 
 - The watch follows the stored path. It watches the file and its parent folder, so both a write in place and an
   editor's write-new-then-rename save are caught. The watch re-arms on the path after a rename or delete.
-- Bursts of change coalesce. The last write is always loaded.
+- Bursts of change coalesce. The last write is always loaded. A burst delivers once the file has been quiet for 0.15
+  seconds, and a file rewritten without pause delivers at most once a second. A change that arrives while a load runs
+  waits for it, and one more reload follows. Reload and opening another file end the running load instead. Amended
+  2026-11-08; see Decision Log.
 - A reload loads like a first load, off the main thread or in WebKit, and swaps in only when it succeeds. A failed load
   keeps the last good render and posts a warning to the status bar. A file that disappears keeps the last render. The
   status bar says once that it was moved or deleted, and a "Moved or deleted" warning segment shows until the file is
@@ -211,12 +220,13 @@ Following the bookmark live would switch to an editor's backup during a save, wh
 
 Original question: find in document, and a table of contents from headings or PDF outlines.
 
-Decision: find, plus a contents sidebar built only from structural outline data.
+Decision: find, plus a contents sidebar built only from structural outline data. Amended 2026-11-08; see
+Decision Log.
 
 - Find (Cmd-F), Find Next (Cmd-G), and Find Previous (Cmd-Shift-G) are registry commands the viewer declares per
   UTERM-013, in Edit > Find. The viewer owns one find bar. It drives each format's engine: `PDFDocument`'s asynchronous
   find, a search of the text storage's string for RTF and Word, shown with selection and the find indicator, and
-  a find in the parser's isolated world for Markdown, which returns highlight ranges and a count, since
+  a find in the parser's isolated world for Markdown, which marks its matches in the page and returns a count, since
   `WKWebView.find` offers no diacritic option and no count. The text view's built-in find bar and find panel are off.
   `NSTextFinder` is not used, since it takes its query only from its own bar or the system find pasteboard.
 - The find query belongs to the pane. The viewer neither reads nor writes the system find pasteboard, so a search typed
@@ -224,8 +234,8 @@ Decision: find, plus a contents sidebar built only from structural outline data.
   previous, and whether there is a match. Match counts show where the engine gives one.
 - A Show Contents registry command, with no key, toggles a contents sidebar. It lists the PDF outline, the Markdown
   headings the page pushes, or RTF and Word headings from `NSParagraphStyle.headerLevel` where the system reader sets
-  it. Selecting an entry scrolls there. A document with no structural outline gets a disabled command and a sidebar that
-  says there are no contents. Nothing is inferred from fonts or text.
+  it. Selecting an entry scrolls there. A document with no structural outline gets a disabled command while the sidebar
+  is hidden, and a sidebar that says there are no contents. Nothing is inferred from fonts or text.
 - The sidebar's visibility is saved in the description.
 
 Rationale: find is the main way through a long document, and every engine already exists. A table of contents built
@@ -313,7 +323,7 @@ None.
 
 ### M1: PDF and RTF
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - A pane can run the text viewer and open a PDF
 - The viewer opens RTF and Word documents
@@ -332,7 +342,8 @@ None.
 - A restored file behind macOS privacy protection, such as Downloads, shows a permission message, and `start()` raises
   no prompt
 - A layout save never touches the disk to describe a pane, and an unchanged pane describes itself the same way twice
-- A PDF rewritten in place while showing keeps rendering the loaded document
+- A PDF rewritten in place while showing keeps rendering the loaded document until a reload succeeds and swaps in.
+  Amended 2026-11-08; see Decision Log.
 - RTF and Word load with the document type set from the file type, so a file is never read as HTML
 - A file too large to load shows a message naming its size, never a freeze or a crash
 - Every read, reloads included, opens the file and accepts it only when `fstat` shows a regular file after symlinks
@@ -351,9 +362,9 @@ None.
   the app and the pane running, and the pane shows a message
 - The app decodes the helper's reply only through secure coding of the expected classes, and embedded images arrive as
   bitmaps within the pixel caps
-- The document helper is its own executable, built the way UTERM-006's image helper is, and whichever proposal's
-  milestone lands first builds the shared helper bundling and handshake. The sandbox operations the readers need are
-  recorded, and the image helper's sandbox stays as narrow as before
+- The document helper is its own executable, built the way UTERM-006's image helper is, sharing its framing, process
+  supervision, and liveness rules, with a protocol version handshake of its own. The sandbox operations the readers
+  need are recorded, and the image helper's sandbox stays as narrow as before. Amended 2026-11-08; see Decision Log.
 - The document helper cannot open a file by path or make a network connection. It reads only the descriptor the app
   passes
 - Embedded images cross as raw pixel buffers in one fixed format, outside the archive, and the app builds images from
@@ -365,9 +376,53 @@ None.
 - The app enforces the helper's memory limit and kills it past the limit, which is what bounds `.docx` inflation
 - A link in an RTF, Word, or PDF document opens only `http`, `https`, or `mailto`
 
+**As built:**
+
+- Shared helper code now lives in two targets that the image viewer was rebased onto.
+  `HelperWire` holds the framed socket with descriptor passing, big-endian field coding, and page buffers.
+  `HelperHost` holds the helper location, spawn and reap, footprint reads, the end reasons, and a pure liveness state
+  machine that tells a hung helper from a slow one. Each helper keeps its own protocol, handshake, and entitlements.
+  The image viewer's tests changed in imports and in the reader-start call's signature only, and no assertion changed.
+  `SourceAccess` gained `RegularFile`, the one open, `fstat`, and counted capped read. The table loader, the GeoJSON
+  reader, and the image opener use it.
+- The document helper is a native Xcode tool target with sandbox-only entitlements, embedded in `Contents/Helpers`, plus
+  a SwiftPM twin for the package tests. The tests prove crash, stop, spin, over-footprint, supersede, and close against
+  the twin with faults read from a marker at the start of a file. Codesigning the built debug helper showed
+  `com.apple.security.app-sandbox` and `get-task-allow`, and `check-sandbox-off.sh` passed on the built app for both
+  helpers.
+- The sandbox operations the readers need are none beyond the default App Sandbox profile on this macOS. The
+  coordinator ran `make test-helper-sandbox` outside the agent sandbox: 6 tests, 0 failures, including the shipped
+  helper's denied file open and network connection, and RTF, `.doc`, `.docx`, link, and table samples decoding under the
+  sandbox. The unified log for that window showed "AppSandbox request successful" for each document helper spawn and no
+  deny lines for the reader decodes. The only denials were the probe's intended file read and outbound connection. A
+  plain `make test-package` skips the shipped-helper tests, since they need the built app's helper.
+  `scripts/check-sandbox-off.sh` passed on the built app for both helpers.
+- On the macOS this was built on, the RTF, Word 97, and Word XML readers returned no attachment for a picture in any
+  sample, hand-built `.docx` included. The helper's raster path, the placeholder archive, and the app's rebuild from raw
+  pixels are proved with attachments built in code. No reader-made picture was run through it.
+- Each decode starts its own helper process and ends it when the decode ends. No process outlives a load, a pane, or a
+  superseding open, and a PDF pane starts none. An undo-reopen therefore starts a fresh one.
+- The text view uses TextKit 1, since only that layout draws `NSTextTable`. The document page stays white with the
+  document's own colors, and the theme colors the surround and the messages.
+- Markdown showed the unsupported-type message until M2 declared the type. The format rule already mapped `README` and
+  the Markdown extensions to Markdown.
+- A PDF URL link opens through `PDFViewDelegate`'s link hook. The SDK header says a delegate that implements it handles
+  the click, and the default `NSWorkspace` open does not run. The PDF view also refuses every action that is not page
+  navigation or a link to a safe scheme: a remote go-to, a form reset, a print command, and a URL with another
+  scheme. Whether PDFKit's own click path calls the view's `perform` method for each of these was not driven with a
+  real click, so the filter is proved at the method, not through a click.
+- Fuzzing: `PDFFuzzTests` loads mutated PDFs through the shipped path, and `DocumentWireFuzzTests` mutates the helper
+  protocol. Both ran at 500 inputs in `make fuzz` and at 20,000 inputs each under the address sanitizer. The run found
+  no crash, hang, or sanitizer report. The corpus is two generated PDFs and one hand-written one, so it says little
+  about a PDF that resembles none of them.
+- A restored file behind macOS privacy protection reads like the data viewer's: the open fails with a permission
+  message and `start()` shows no prompt of uniterm's own. The system's own consent dialog for a protected folder was
+  not exercised.
+- Caps: see Decision Log.
+
 ### M2: Markdown
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - The viewer renders Markdown headings, lists, code blocks, tables, and links
 - Rendered Markdown uses the current theme's colors
@@ -388,8 +443,10 @@ None.
   nothing
 - A link opens in the default browser only when clicked, and only for `http`, `https`, or `mailto`
 - A 20 MB Markdown file opens without stalling the main thread
-- After a scroll and an immediate layout save, reopen lands on that scroll position
-- The parser and sanitizer assets are pinned by version and hash, and their license notices are collected
+- A layout save taken after the page's scroll report arrives, one message after the scroll, reopens on that scroll
+  position. Amended 2026-11-08; see Decision Log.
+- The parser and sanitizer assets are pinned by version and hash, and their license notices are collected, including
+  those of the packages the parser inlines. Amended 2026-11-08; see Decision Log.
 - Dropping a file on rendered Markdown opens it in the pane
 - An image path through `/net`, `/Volumes`, or any other mount point, directly or through a symlink in any component,
   is refused without triggering a mount
@@ -399,9 +456,66 @@ None.
 - Two Markdown panes, and the browser applet, share no web storage or cache
 - After reopen at a different pane width, the same heading or paragraph is at the top
 
+**As built:**
+
+- The page is three user scripts in one named content world, the pinned markdown-it and DOMPurify and the viewer's own
+  script, with page JavaScript off. The one message handler is registered for that world. A WebKit content process
+  runs all of it. A probe confirmed that user scripts in a world still run with `allowsContentJavaScript = false`, and
+  that the page's own scripts do not.
+- Each Markdown pane builds its web view when the first Markdown file opens, and removes it when the pane shows
+  anything else. A PDF or RTF pane starts no web content process. The data store is non-persistent, so no pane shares
+  cookies, cache, or storage with another pane or with the browser.
+- The scheme handler serves four routes: the page, its stylesheet, the document's text, and `image`. The world's
+  script rewrites each plain relative `src`, `srcset`, and `<source>` reference to an `image` request that carries the
+  path whole in one query value, so a `..` reaches the handler intact. A page URL would have collapsed it. Every other
+  image reference loses its attribute and shows alt text. The handler allows only image types by extension, and
+  answers 404 with no body for anything else.
+- Relative image files open through a new walk in `SourceAccess`. It goes one component at a time from the document's
+  folder, refuses any directory or file whose device differs from the folder's, follows links by splicing their target
+  into the walk, and refuses `net`, `home`, `Volumes`, and `Network` by name at the root before looking them up. The
+  system and Data volumes share one device on macOS, so the walk treats them as one volume. A path that reaches `/dev`,
+  an automount, or another volume's mount point stops at the mount. The final file is judged from its descriptor by
+  the same regular-file check as every other read, so a link to a device or a pipe loads nothing.
+- Raw HTML runs through DOMPurify with GitHub's published README allowlist as its configuration. The pin file records
+  the allowlist's source and commit. Three narrowings follow the proposal's "minus anything that needs the network": the
+  `longdesc` attribute is dropped, `srcset` is kept only on `<source>`, and links keep only `http`, `https`, and
+  `mailto`, where the published list also keeps `ftp` and others. The form attributes on the list stay and do
+  nothing, since no form element is allowed.
+- The source anchor comes from the parser's token map, kept in the world's state against each block's elements. The page
+  never reads a DOM attribute to learn a line. A block of raw HTML reports the line it starts at, and restores within
+  itself by fraction. The page pushes the anchor from its scroll handler, and `describe()` returns the last one pushed.
+  A save taken before that message arrives sees the position before the scroll. Every page message carries the
+  document's generation, and the host drops a message from an earlier document.
+- A debug build can swap the sanitizer for a pass-through that builds executable markup. The tests use it to show that
+  the Content-Security-Policy and the rule list each keep every request off the network without the other, and that
+  the sanitizer is not what holds the line. Release builds contain no such switch. WebKit's own fragment parser drops
+  script elements and handlers while page script is off, so the test also appends hand-built scripts.
+- Reload is a method on the pane with no key and no registry command. The message that shows when WebKit's content
+  process ends carries a Reload button, and the pane keeps its last position in the description meanwhile. Cmd-R
+  belongs to the next milestone.
+- Raw HTML that opens an element in one block and closes it in a later one, as `<details>` does around Markdown, would
+  strand its body outside the element if each block were sanitized alone. A block that leaves an element open starts a
+  unit, and the unit takes the following blocks until the element closes, up to 400 blocks, then sanitizes as one. A
+  unit counts as one block for scroll anchors, so a long `<details>` restores by fraction within it. Headings inside it
+  carry the unit's first line.
+- The `.md` extension types as another app's `com.unknown.md` on the machine this was built on. That type does not
+  conform to Markdown. `Info.plist` imports `net.daringfireball.markdown` with the Markdown extensions, but Launch
+  Services prefers the other app's claim, so a file typed that way was refused. The router now falls back to every type
+  the system registers for the extension, which includes Markdown, and routes by those. A router test pins the
+  fallback with fixture types. The built app was not registered to check which type a Finder open resolves to. Amended
+  2026-11-08; see Decision Log.
+- The page renders in slices and yields between them. WebKit lays out everything inserted so far while the page is idle,
+  and fixed 30 ms slices made that cost quadratic. Each slice is now three times the last yield's duration. A 20 MB file
+  went from 87 s to 4 s, and the host's longest main-thread gap stayed under 30 ms. See Decision Log.
+- Not done here: find, the contents sidebar, and the rule for a `<details>` match are M4. Live reload is M3. Task-list
+  checkboxes render as text, since `input` is off the allowlist. A drop on rendered Markdown is covered by the web
+  view registering for no drag types and the pane view receiving the drop, not by a real drag.
+- The viewer now declares the Markdown type and lists it in the open panel. M1's note that Markdown shows the
+  unsupported-type message no longer holds.
+
 ### M3: Live reload
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Saving the file in place, or by an editor's write-new-then-rename save, reloads the pane at the same place
 - A burst of writes, such as `cmd > file`, ends with the last write shown, and a continuously rewritten file reloads
@@ -414,9 +528,50 @@ None.
 - A detached pane reloads once at reattach, and close stops the watch
 - Reload, Cmd-R, re-reads the file
 
+**As built:**
+
+- The watcher is a new small target, `FileWatching`, that the map viewer and the text viewer share. The map viewer's
+  own watcher moved into it. The map keeps its policy: the file alone, every event at once, and ten looks for a gone
+  file, half a second apart. Its tests changed in an import and a callback signature only.
+- The text viewer's policy watches the file and its folder. A folder event counts only when it changes what the path
+  holds, which a signature of device, inode, size, and write time decides, so a neighbor's change delivers nothing. A
+  deleted or renamed folder, or file, re-arms both watches. When the folder is gone the watcher looks again every half
+  second, and every five seconds after ten looks, until the pane closes.
+- Coalescing runs on an injected clock, so the burst, ceiling, and last-write rules test without waiting. The
+  filesystem tests use real events with 50 ms windows.
+- A reload swaps in only on success and keeps the anchor read when the reload began, not when it swaps. A reader who
+  scrolls during a slow RTF decode lands where they were at the start. A failed reload posts its warning once for the
+  load, and a later reload posts again. A Cmd-R while the file is still gone is a new load. It posts the moved or
+  deleted warning again, and no failed-load warning beside it.
+- The watch starts once a load finds the file, before the read, and the load waits for the watch to be in place. A
+  first load that finds the file and cannot read it keeps the watch, so fixing the file reloads it. A path that cannot
+  be found starts no watch. Cmd-R reads the stored path, and a success starts the watch.
+- The Moved or deleted segment clears whenever the watch sees the file again, even when the reload then fails. The
+  failed-load warning shows beside the kept render.
+- Every stat and open of the watched path runs on the watcher's own queue, never the main thread, so a stalled network
+  mount or an automount blocks only that queue. A rename of a folder above the watched folder is not detected, since
+  the folder's descriptor follows the moved folder. Cmd-R covers it.
+- A watcher stops its sources and timers when it is released, as well as on `stop()`. The text viewer test harness
+  defaults to a silent watch, so a test that leaves a pane open cannot reload or poll after its folder is deleted. Only
+  the live reload tests and one Markdown reload test ask for a live watch.
+- A reload reads the stored path alone. The bookmark is remade for the file that opens and never followed.
+- Opening a named pipe hung the main thread, because opening a pipe for reading waits for a writer. An existing
+  Markdown test, whose pane is pointed at a pipe, found it. The watch now opens with `O_NONBLOCK`, and a watcher test
+  pins it.
+- Not run here: the two new UI tests, which need a GUI session. They build.
+- The Markdown suites failed in a full package run while the display was idle. Under `caffeinate -dimsu` the full suite
+  passes with no skips.
+- A PDF shown with no anchor landed about 90 points down its first page whenever the view already had a size when the
+  document arrived, which a restored pane's launch does and a pane sized later does not. PDFKit picks the scroll
+  position, and it differs with timing. The pane now scrolls the document view to its top once it has a size, so a
+  restore with no anchor, a fresh open, and a pane sized later all start at the same place, with the page's top margin
+  showing. An anchored restore and a reload already put the stored point back where it was saved, and a test pins
+  both. The first screenshot of this milestone's UI run showed the shifted page.
+- Cmd-R is also the browser's reload key. Keys apply per applet while its pane has focus, so the two do not collide.
+
 ### M4: Find and contents
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Find, Find Next, Find Previous, Show Contents, Open..., and Reload are registry commands the viewer declares, and none
   of their keys is a reserved window key
@@ -427,7 +582,8 @@ None.
   the system find pasteboard. Use Selection for Find sets the pane's query only
 - The contents sidebar lists the PDF outline, Markdown headings, and RTF and Word headings where the reader sets a
   heading level. Selecting an entry scrolls there
-- A document with no outline disables Show Contents. A huge or cyclic outline is capped, and the sidebar says it was cut
+- A document with no outline disables Show Contents while the sidebar is hidden. A huge or cyclic outline is capped, and
+  the sidebar says it was cut. Amended 2026-11-08; see Decision Log.
 - The sidebar's visibility survives reopen and relaunch
 - RTF and Word heading levels survive the trip through the helper, so the sidebar lists them
 - Searching an RTF or Word document at the decoded cap never blocks the main thread
@@ -438,6 +594,57 @@ None.
   `</script>` search literally
 - Markdown find matches text that spans inline elements, and one documented rule says whether a match inside a closed
   `<details>` is revealed or skipped
+
+**As built:**
+
+- Each format has its own engine behind one `FindCoordinator` and one find bar. RTF and Word search a copy of the text
+  storage's string off the main thread, then show matches as temporary background highlights, with the current match
+  selected and given the find indicator. A PDF searches through PDFKit's `beginFindString` and shows its matches as
+  highlighted selections. Markdown searches in the parser's world and wraps each match in a `mark` element. All three
+  pass `.caseInsensitive` and `.diacriticInsensitive` to PDFKit and Foundation, and the page reimplements Foundation's
+  fold. A test judges 28 pairs both ways, among them the sharp s, a ligature, a dotted capital I, and final sigma, and
+  pins agreement. See Decision Log.
+- The query reaches the page as a `callAsyncJavaScript` argument. A test finds `"hi" and </script> and \ '` literally.
+  A match spans inline elements, since the page searches one string built from a block's text nodes, and it never spans
+  two blocks.
+- Cmd-E, Cmd-F, Cmd-G, and Cmd-Shift-G are free of every reservation, and a catalog test pins the keys through the real
+  registry and menu. The text view, the PDF view, and the web view override their built-in find actions and hand them to
+  the pane, and a test sends `performFindPanelAction` to the first two. A package test per format shows the system find
+  pasteboard's change count unmoved across a search, a step, and Use Selection for Find. The UI test does the same with
+  a sentinel string. The web view's override compiles against `NSResponder`'s `performTextFinderAction`, and no test
+  reaches it with a real menu action.
+- The 4,000,000-character cap: a test shows a string of that length in the pane, runs the pane's own find, and counts
+  the main actor's turns while it runs. A search on the main actor would let none through.
+- A reload, a new document, or a close bumps a generation that every result checks. A query the open bar still holds
+  searches the new document again without moving the view or selecting a match, so Next then lands on the first.
+- PDFKit's `cancelFindString` delivered no match to a cancelled search in the test. The find object also ignores
+  callbacks after a cancel.
+- The contents come from structure only. A PDF walks `outlineRoot` with a visited set, a depth of 32, and 5,000
+  entries. A hand-written PDF whose one entry names itself as its first child loads as one entry, since PDFKit ends the
+  loop itself. The model tests drive the walker's own cycle, depth, and entry caps. RTF and Word headings come from
+  `NSParagraphStyle.headerLevel`, found off the main thread with the decode. Markdown headings come from the page. The
+  page now reports whether it cut its list, and the sidebar says so.
+- Real RTF and Word files get no contents on the macOS this was built on, and their sidebar says so. See Decision Log.
+  The heading extraction is proved with a string that carries levels, and the helper's archive keeping the level was
+  already proved in M1.
+- Use Selection for Find on a selection across lines or table cells searches for its first non-empty line or cell, and
+  that match inside the selection becomes current. A package test per format selects a span that crosses lines, and in
+  RTF and Markdown a table cell boundary, and checks that the query matches and the current match lies inside the
+  selection. All three failed before the change, when the lines were joined with spaces. See Decision Log.
+- A PDF outline jump uses the same placement. A destination near the top of its page shows the page top, and any other
+  destination sits about a third of the way down the view. A selected sidebar title takes the system selection text
+  color, and the list runs to the sidebar's bottom edge unless a cut message needs room.
+- The current PDF match scrolls to a third of the way down the view, since scrolling to the selection put it flush
+  against the top edge and clipped its find indicator. In Markdown, every match is a 35 percent wash of the theme's mark
+  color and the current one is the full color with an outline, so the current match is the most prominent.
+- The sidebar is a fixed 240 points wide and not resizable. Its visibility is the description's `sidebarShown`, and
+  opening another file in the pane keeps it. The Show Contents menu item has a fixed title.
+- Every element inside the pane reports Disabled in the UI hierarchy, the sidebar's rows included. The pane group did
+  so before this milestone. The cause is unexplained and pane-wide, and it is left for the user.
+- A sidebar entry is a text field in the table cell, so the accessibility tree lists its title, and UI tests find it
+  by that text.
+- Not run here: the UI tests for find in each format, Use Selection for Find, and the sidebar. They build, and they
+  attach screenshots.
 
 ### M5: Remote control
 
@@ -562,6 +769,128 @@ None.
   file is told by "the pane". A failed load now posts a warning. A moved or deleted file posts one warning and shows a
   "Moved or deleted" warning segment until the file is back. This follows the rule the user set for the map and data
   viewers: a notice about content still shown posts once, with a segment while it holds.
+- 2026-11-08: Amended "RTF and Word use the system readers", "The applet contract", and M1's helper bullet. The text
+  said the helper receives its file descriptor at spawn, that RTF and Word load from bytes the app reads in full, and
+  that a later milestone builds the shared helper bundling and handshake. The shipped design passes the descriptor with
+  each decode request over `SCM_RIGHTS`, as the image helper does, so the app never reads an RTF or Word file's bytes.
+  It starts one helper for each decode. UTERM-006 landed first, so this milestone factored its framing, supervision,
+  and liveness rules into shared targets, and each helper keeps its own protocol and handshake. The Dependencies line
+  for UTERM-006 said whichever proposal lands first builds the shared helper bundling, and now says M1 built it.
+  (work-queue best guess)
+- 2026-11-08: M1 caps. A PDF reads up to 256 MiB, since PDFKit's decoded pages use more memory than the file. An RTF or
+  Word file passes up to 64 MiB to the helper. A decoded document may hold 4,000,000 UTF-16 characters, 20,000 table
+  cells, and 64 images, each up to 16,000,000 pixels and 64,000,000 together. The helper's archive may be 32 MiB. The
+  app ends the helper at a 1 GiB footprint and at 10 seconds, following UTERM-006. The numbers rest on the data
+  viewer's per-file cap and on UTERM-006's helper limits. A document past a cap shows a message that names it.
+  (work-queue best guess)
+- 2026-11-08: The format rule reads names only: `README` with no extension and the Markdown extensions are Markdown, and
+  other extensions go through the system type database. Markdown shows the unsupported-type message and is not declared
+  as an opened type until M2, so Cmd-O does not route a Markdown file to a viewer that cannot show it. (work-queue best
+  guess)
+- 2026-11-08: The document page stays white with the document's own text colors in every theme, since an RTF or Word
+  file names black text for white paper. The theme colors the surround, the PDF background, and the messages. (work-queue
+  best guess)
+- 2026-11-08: Each decode starts its own helper and ends it when the decode ends. Keeping one helper for the pane's
+  life would need a refcount of what it holds and would leave a process behind an idle pane. The cost is one spawn for
+  each RTF or Word load. (work-queue best guess)
+- 2026-11-08: Unowned finding. The system RTF, Word 97, and Word XML readers returned no picture attachments for any
+  sample on the macOS used. Embedded pictures therefore do not appear in this run, though the path for them is built
+  and tested with attachments made in code. Revisit when a reader that does return attachments is found on a supported
+  macOS.
+- 2026-11-08: Amended "Markdown rendering" while building M2. The CSP sentence said "allows
+  images only from its own scheme". The page also reads its stylesheet and the document's text from the scheme, by
+  fetch, so the policy allows `style-src` and `connect-src` for that scheme alone, and `script-src 'none'` still holds
+  because WebKit exempts user scripts in a content world from the page's policy. (work-queue best guess)
+- 2026-11-08: The payload stays at version 1. The Markdown anchor's source line and fraction are optional fields of it,
+  and a payload without them reads unchanged. ADR-06 bumps the version for a field that an older reader would drop. No
+  build outside this branch has read a version 1 text viewer payload, since M1 has not left it, so no older reader
+  exists to drop them. An entry written earlier today called the bump required and set version 2. This entry replaces
+  that reading. (work-queue best guess)
+- 2026-11-08: Amended M2's check "After a scroll and an immediate layout save, reopen lands on that scroll position".
+  `describe()` is synchronous and reads the host's cache, and the page reports a scroll by message from its scroll
+  handler. A save taken in the same turn as the scroll, before that message arrives, cannot hold the new position,
+  and no host call can read the page without waiting for it. The check now says a save taken after the page's scroll
+  report arrives lands there. The report follows the scroll by one message, with no timer. (work-queue best guess)
+- 2026-11-08: M2 caps and mechanics. A Markdown file reads up to 32 MiB, and one image up to 16 MiB. The parse happens
+  in WebKit, so the cap bounds the content process and the host's one read. Relative image references are rewritten
+  by the world's script to `image?p=<path>` after sanitizing, because a relative URL collapses `..` before the handler
+  sees it. Links keep only `http`, `https`, and `mailto`, and `srcset` stays only on `<source>`. The rule list is
+  compiled once into WebKit's default rule list store, and a pane that cannot compile it shows a message and loads
+  nothing. Reload is a pane method and a button on the process-ended message, with no key and no command. (work-queue
+  best guess)
+- 2026-11-08: M2 measurement. A 20 MB Markdown file of 285,000 short paragraphs reached its rendered state in 87 s with
+  fixed 30 ms slices, because each yield made WebKit lay out the whole document again. Slices that grow with the last
+  yield's cost brought it to 4 s. Parsing took 0.6 s and sanitizing 2.6 s of the original run. The host's longest
+  main-thread gap was 0.03 s either way. One run on one machine. (work-queue best guess)
+- 2026-11-08: ADR candidate (cuts across the system): a path named by a document's content never leaves the
+  document's volume and never triggers an automount, whatever viewer follows it. M2's Markdown images are the first
+  case, and the map viewer and any later viewer of linked files would follow the same rule. Undecided. Found in
+  UTERM-007 M2.
+- 2026-11-08: Amended "The applet contract" (the snapshot sentence), M1's rewritten-PDF check, and "Live reload" while
+  building M3. The contract text said a later change to the file never reaches a view that is showing, and the M1
+  check said a PDF rewritten in place keeps rendering the loaded document. Live reload now reloads such a change. A
+  load is still one full read of the file, and no mapped or lazy file backs the view afterward. A reload reads
+  whatever bytes are there, and PDFKit may accept a truncated PDF, so the guarantee is not that a half-written file is
+  never shown. A failed parse keeps the last render, the settle delay only makes a partial read less likely, and the
+  next write reloads again. The shown document changes only when a reload succeeds. (work-queue best guess)
+- 2026-11-08: M3 watcher mechanics. The map viewer's watcher moved into a shared `FileWatching` target and gained a
+  folder watch, a signature filter, and coalescing, with the map keeping its old behavior as a policy. The numbers are
+  0.15 s of quiet and a one second ceiling. A burst of RTF or Word saves would otherwise start a decode for each
+  write. A missing path or folder is looked at without limit, at half a second and then five seconds, for the text
+  viewer, since the proposal says the file reloads when it reappears and sets no time. The map keeps its ten looks.
+  (work-queue best guess)
+- 2026-11-08: A watcher event during a load queues one reload after the load, not a cancel and restart. Restarting would
+  starve a file that is rewritten without pause, since each restart discards the decode in progress. Reload (Cmd-R)
+  and opening another file still end the running load, and its helper, first, so no second decode runs beside one. This
+  is M1's "a reload never starts a second decode while one runs" for the watch, and its supersede rule for the
+  commands. (work-queue best guess)
+- 2026-11-08: Reload sits in the View menu on Cmd-R, the browser's reload key, and is off for a pane with no file.
+  UTERM-007 M4 lists Reload among the registry commands, and this milestone declares it. The status bar text for a gone
+  file is "Moved or deleted" as a warning segment, and the one warning says the pane keeps the last version it read.
+  (work-queue best guess)
+- 2026-11-08: M4 matching rule. Every format matches by Foundation's `.caseInsensitive` and `.diacriticInsensitive`.
+  PDFKit and `NSString` take the options, and the page folds text in JavaScript by decomposing it, dropping combining
+  marks, lowercasing, and applying the folds Foundation applies and `toLowerCase` lacks. Those are the sharp s, final
+  sigma, long s, and the Latin ligatures. Compatibility forms such as fullwidth letters and `ǆ` do not fold, as in
+  Foundation. A hit counts only when it starts and ends between source characters, since Foundation does not match an
+  s inside a sharp s or an f inside a ligature. Eight of the test's 28 pairs pin that case. A search reports at most
+  10,000 matches and says when it stopped. A query is cut at 500 characters. (work-queue best guess)
+- 2026-11-08: M4 `<details>` rule. A match inside a closed `<details>` counts. It opens that element only when it
+  becomes the current match, and the other closed elements stay closed. Skipping would make the count lie about the
+  document, and opening every element would rewrite the reader's page. (work-queue best guess)
+- 2026-11-08: M4 find behavior. A typed query selects the first match. A reload searches and highlights without moving
+  the view or the selection, so a reader editing a file keeps their place. Use Selection for Find takes the
+  selection's first non-empty line or table cell as the query, trimmed and cut at 500 characters, since the field
+  holds one line and the engines do not match across line breaks alike. It then makes the first match inside the
+  selection current, so Next steps on from it. Closing the bar drops the query. A selection of one line is the query
+  whole. (work-queue best guess)
+- 2026-11-08: Amended "Search and navigation" and M4, in one marker on the decision and one on the M4 outline check. The
+  text said the page's find returns highlight ranges, and that a document with no outline gets a disabled Show Contents.
+  The page marks its matches with `mark` elements and returns a count. Show Contents stays on while the sidebar is
+  showing, so a sidebar left shown by one document can be hidden when the next has no outline, and it is off only when
+  the sidebar is hidden and the document lists nothing. Show Contents sits in View beside Reload with no key.
+  (work-queue best guess)
+- 2026-11-08: Amended "Design" and the M2 license check. The parser build inlines `entities`, `linkify-it`, `mdurl`,
+  `punycode.js`, and `uc.micro`, as the build's source map shows. Collecting only markdown-it's own notice missed the
+  BSD-2-Clause notice of `entities` and the MIT notices of the rest. Each is now pinned by version, tarball hash, and
+  integrity string in `web-assets.pin`, fetched by the fetch script, kept in `ThirdParty/web`, and written to
+  `Licenses/web-assets/` by `make licenses`. The tarball carries no lockfile. Each version is the highest that
+  markdown-it's dependency ranges allow, as published before markdown-it 15.0.3. DOMPurify has no runtime
+  dependencies. (work-queue best guess)
+- 2026-11-08: M4 contents caps. A list holds at most 5,000 entries and follows an outline at most 32 levels deep, and
+  a title is cut at 200 characters. The Markdown page reports a `headingsCut` flag, since the host could not tell that
+  the page stopped at its heading cap. A Markdown entry scrolls by the heading's position in the page's list, not by
+  its `id`, because an authored element can share an `id`. A cut list says why: the entry cap, the depth cap, or an
+  entry that points back to one already listed. The sidebar is 240 points wide and not resizable. A pane keeps its
+  sidebar when it opens another file. (work-queue best guess)
+- 2026-11-08: Unowned finding. On this macOS the system RTF and Word XML readers set no `NSParagraphStyle.headerLevel`
+  for headings in a hand-built `.docx` with heading styles or in an RTF with outline levels, and the system writers
+  drop it. The sidebar for real RTF and Word files is therefore empty here, which "Search and navigation" already
+  lists as left undone. Revisit if a supported macOS sets the level.
+- 2026-11-08: Amended the M2 As built note on the `.md` extension. It said the router had no extension fallback and
+  that the import alone was meant to make Markdown route. A Finder open of a `.md` file opened no pane, since Launch
+  Services prefers another app's `com.unknown.md`. The router now falls back to the extension's types. See UTERM-015
+  "How a file type maps to an applet".
 
 ## References
 

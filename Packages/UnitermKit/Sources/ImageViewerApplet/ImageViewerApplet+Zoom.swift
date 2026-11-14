@@ -1,4 +1,5 @@
 import AppKit
+import HelperHost
 import ImageViewerModel
 import ImageWire
 

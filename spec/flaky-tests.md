@@ -37,6 +37,41 @@ fixed ones.
 - Suspected cause: the pane-opening key went nowhere, as in the entry above.
 - Status: unresolved.
 
+### `MapViewerUITests.testCommandORoutesAGeoJSONFileToTheMapAndShowsItsPins`
+
+- Seen: 2026-11-08, once, in a run of `TextViewerUITests` and `MapViewerUITests` together.
+- Evidence: the shared open-panel helper at `UnitermUITestCase.swift:227` failed with "no go-to-folder sheet" after
+  Cmd-Shift-G. The cg server restarted while that run was going. `MapViewerUITests` then passed 8 of 8 alone.
+- Suspected cause: Cmd-Shift-G sent before the open panel took key focus, as in the pane-tree entries above.
+- Status: unresolved.
+
+### `LaunchOpenCoordinatorTests.testABatchOpensOnePanePerFileAndSummarizesFailures`
+
+- Seen: 2026-11-14, once, in CI's package job on a branch that changed only tab keys.
+- Evidence: `LaunchOpenCoordinatorTests.swift:357` saw 0 of 2 folder panes open, and no failure message. It was the
+  only failure of 1767 tests. The same code passed main's last run and a local `make ci-package`.
+- Suspected cause: `settle()` yields 50 times instead of waiting for the opens to finish, so a slow runner asserts
+  before they land.
+- Status: unresolved.
+
+### `FileWatcherTests.testChangesToOtherFilesInTheFolderDeliverNothing`
+
+- Seen: 2026-11-14, once, in CI's package job.
+- Evidence: `FileWatcherTests.swift:112` counted 2 notes where it expects 1. The test passed 10 of 10 alone.
+- Suspected cause: two notes can both come from the file's own write. A folder event from the neighbor churn can be
+  handled after the write, so it sees the file changed. The in-place write can also raise two file events. The
+  coalescer merges them, so the viewer still reloads once.
+- Status: unresolved.
+
+### `FindTests.testSearchingTheDecodedCapNeverBlocksTheMainThread`
+
+- Seen: 2026-11-14, once, in CI's package job, in the same run as the entry above.
+- Evidence: `FindTests.swift:172` counted 3 main-actor turns during the search, where it expects more than 100. The
+  test took 6.6 s there and about 1.2 s locally, where it passed 10 of 10 alone.
+- Suspected cause: the main actor was busy for seconds at a time, likely laying out the four-million-character text,
+  so few turns came while the off-main search ran. Counting turns measures time, not where the search runs.
+- Status: unresolved.
+
 ## Fixed
 
 ### `BrowserRecoveryTests.testKillingTheSelectedTabShowsTheMessageAndReloadBringsBackItsHistory`

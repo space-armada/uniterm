@@ -1,6 +1,7 @@
 import AppKit
 import AppletKit
 import AppletTestSupport
+import FileWatching
 import Foundation
 import GeoData
 import MapKit
@@ -233,12 +234,13 @@ final class MapPinEditingTests: XCTestCase {
     var changes = 0
     let replaced = expectation(description: "replaced")
     let written = expectation(description: "written")
-    let watcher = FileWatcher(url: file) {
+    let watcher = FileWatcher(url: file) { _ in
       changes += 1
       if changes == 1 { replaced.fulfill() }
       if changes == 2 { written.fulfill() }
     }
     defer { watcher.stop() }
+    await watcher.whenArmed()
 
     let replacement = scratch.url.appendingPathComponent("replacement.geojson")
     try Data("{}".utf8).write(to: replacement)

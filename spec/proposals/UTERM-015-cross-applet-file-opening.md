@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-03
-**Updated:** 2026-11-04
+**Updated:** 2026-11-08
 
 ## Dependencies
 
@@ -154,6 +154,10 @@ per-type choice the user saves overrides the rank.
   so no silent tiebreak ever picks a default. Two unrelated declared types can still tie at run time, when one file's
   type conforms to both. The router then asks the user to pick, and refuses the file with a message when nothing can
   ask. Amended 2026-11-03; see Decision Log.
+- When the file's own type matches no applet's declaration, the router also considers every type the system registers
+  for the file's filename extension. It pools their claims and picks among them by the same specificity, rank, and tie
+  rules. The file's own type wins whenever it matches, and the saved choice still keys on that exact type. A file with
+  no extension has no extension types. Amended 2026-11-08; see Decision Log.
 - An "Open With" choice in uniterm lists every applet that declares the file's type. It can save the choice for the
   file's exact type, and the user can clear a saved choice.
 - A saved choice matches the file's exact resolved type only, never types that conform to it. A choice for `.json`
@@ -894,6 +898,13 @@ Amended 2026-11-03 and 2026-11-04; see Decision Log. Moved from M2. This milesto
   Launch Services senders count as the user's act no longer waits on this record. It stays Undecided.
 - 2026-11-05: Amended "Scope" for UTERM-016. The out-of-scope list said "Every viewer is read-only." The map viewer
   now edits and saves the GeoJSON file it shows. Opening and routing are unchanged, and no other viewer writes.
+- 2026-11-08: Amended "How a file type maps to an applet". The rule matched a file's type alone, so a file whose type
+  conformed to no declaration was refused. Opening `README.md` from Finder then launched uniterm and opened no pane.
+  The system types `.md` as `com.unknown.md`, another app's type that does not conform to
+  `net.daringfireball.markdown`, and Launch Services prefers that claim over uniterm's import. The user chose a
+  fallback: when the preferred type matches no declaration, the router pools the claims of every type the system
+  registers for the extension. The user chose it over claiming `com.unknown.md`, which names another app's type, and
+  over leaving the refusal.
 
 ## References
 
