@@ -342,10 +342,21 @@ final class ScriptListenerTests: XCTestCase {
 
     try socket.send(ScriptHelperMessage.begin(name: "flood").frame())
 
-    let sender = Task.detached {
+    // The flood blocks once the socket's buffer fills, and a blocked send can outlive the
+    // disconnect. The timeout ends it, and its own thread keeps it off the cooperative pool, which a
+    // small CI runner cannot spare for the rest of the run.
+    var timeout = timeval(tv_sec: 1, tv_usec: 0)
+
+    _ = setsockopt(
+      socket.rawDescriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+      socklen_t(MemoryLayout<timeval>.size))
+
+    let stop = OverflowFlag()
+
+    Thread.detachNewThread {
       var sent: UInt32 = 0
 
-      while sent < 200_000 {
+      while sent < 200_000, !stop.value {
         sent += 1
 
         do {
@@ -357,8 +368,6 @@ final class ScriptListenerTests: XCTestCase {
           break
         }
       }
-
-      return sent
     }
 
     let tracker = QueueTracker()
@@ -379,7 +388,7 @@ final class ScriptListenerTests: XCTestCase {
       }
     }
 
-    sender.cancel()
+    stop.set()
     socket.shutdownAndClose()
 
     let peak = tracker.peak

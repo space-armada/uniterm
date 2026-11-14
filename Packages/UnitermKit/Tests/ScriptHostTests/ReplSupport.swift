@@ -74,12 +74,19 @@ final class ReplProcess: @unchecked Sendable {
     // A write to a helper that has gone must fail, and never end the test run.
     signal(SIGPIPE, SIG_IGN)
 
+    // A handler must clear itself at the end of its pipe even after this object is gone. A pipe
+    // at its end stays readable, so a handler left in place runs in a tight loop for the rest of
+    // the test run. Enough of them starve a small CI runner until the run times out.
     output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-      self?.take(handle, into: \.text)
+      guard let data = Self.read(handle) else { return }
+
+      self?.append(data, into: \.text)
     }
 
     error.fileHandleForReading.readabilityHandler = { [weak self] handle in
-      self?.take(handle, into: \.errorText)
+      guard let data = Self.read(handle) else { return }
+
+      self?.append(data, into: \.errorText)
     }
 
     try process.run()
@@ -115,19 +122,26 @@ final class ReplProcess: @unchecked Sendable {
   }
 
   deinit {
+    output.fileHandleForReading.readabilityHandler = nil
+    error.fileHandleForReading.readabilityHandler = nil
+
     if process.isRunning { kill(process.processIdentifier, SIGKILL) }
   }
 
-  private func take(_ handle: FileHandle, into path: ReferenceWritableKeyPath<ReplProcess, String>)
-  {
+  /// Reads what the pipe holds, or clears the handler and returns nil at the pipe's end.
+  private static func read(_ handle: FileHandle) -> Data? {
     let data = handle.availableData
 
     guard !data.isEmpty else {
       handle.readabilityHandler = nil
 
-      return
+      return nil
     }
 
+    return data
+  }
+
+  private func append(_ data: Data, into path: ReferenceWritableKeyPath<ReplProcess, String>) {
     lock.lock()
     self[keyPath: path] += String(decoding: data, as: UTF8.self)
     lock.unlock()
