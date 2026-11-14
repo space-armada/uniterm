@@ -164,4 +164,49 @@ final class TerminalUITests: UnitermUITestCase {
 
     XCTAssertTrue(waitFor(terminal, timeout: 10) { !$0.contains("C:42:") })
   }
+
+  /// Catches a Ctrl-C that the app never turns into the terminal's interrupt. The shell runs a
+  /// foreground `sleep`, and the key must end it, so the echo after it never runs and the prompt
+  /// takes the next command. The marker is computed, so only the echo's output can show it.
+  func testControlCInterruptsAForegroundProgram() {
+    let app = launchApp()
+    let terminal = waitForTerminal(in: app)
+
+    app.typeText("sleep 30; echo slept-$((40+2))\n")
+    Thread.sleep(forTimeInterval: 1)
+
+    app.typeKey("c", modifierFlags: .control)
+    app.typeText("echo after-$((40+2))\n")
+
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 5) { $0.contains("after-42") },
+      "Ctrl-C did not end the sleep. Screen: \(terminal.value as? String ?? "")")
+    XCTAssertFalse(
+      (terminal.value as? String ?? "").contains("slept-42"), "the sleep ran to its end")
+  }
+
+  /// Catches a Ctrl-F that a window menu item takes before the terminal sees it. macOS adds
+  /// Window > Fill with the key fn-Ctrl-F, and a menu match that ignores the fn flag fires it for a
+  /// plain Ctrl-F. `cat -v` runs in the foreground, so the pty echoes the byte as `^F` and cat
+  /// prints it the same way. Neither shows unless the byte reaches the pty.
+  ///
+  /// The marker is computed, so only the echo's output shows that the shell has handed the
+  /// terminal to cat. It cannot prove that other fn-Control items leave their plain keys alone.
+  func testControlFReachesTheTerminal() {
+    let app = launchApp()
+    let terminal = waitForTerminal(in: app)
+
+    app.typeText("echo ready-$((40+2)); cat -v\n")
+
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 10) { $0.contains("ready-42") },
+      "the shell never ran the command. Screen: \(terminal.value as? String ?? "")")
+
+    app.typeKey("f", modifierFlags: .control)
+    app.typeText("x\n")
+
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 5) { $0.contains("^Fx") },
+      "Ctrl-F never reached the terminal. Screen: \(terminal.value as? String ?? "")")
+  }
 }

@@ -200,6 +200,17 @@ public final class HelperProcess: @unchecked Sendable {
 
     guard !gone else { return nil }
 
+    return Self.usage(ofPID: pid)
+  }
+
+  /// The physical footprint in bytes of any process this user may inspect, or nil when it cannot
+  /// be read. A helper that something else started, such as a terminal, is read through its pid.
+  /// The caller makes sure the pid still names the process it means.
+  public static func footprint(ofPID pid: pid_t) -> Int? {
+    usage(ofPID: pid)?.ri_phys_footprint.asInt
+  }
+
+  private static func usage(ofPID pid: pid_t) -> rusage_info_current? {
     var info = rusage_info_current()
 
     let result = withUnsafeMutablePointer(to: &info) {

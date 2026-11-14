@@ -9,6 +9,8 @@ import MapViewerApplet
 import OSLog
 import PlaceSearch
 import Preferences
+import ReplApplet
+import ScriptHost
 import SettingsKit
 import StatusKit
 import TerminalApplet
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var layoutPersistence: LayoutPersistence?
   private var settingsWindowController: SettingsWindowController?
   private var browserWebsiteData: BrowserWebsiteData?
+  private var scriptHost: ScriptHost?
   private var askingToQuit = false
 
   /// The `UNITERM_` variables the process started with. The scrub of the inherited environment
@@ -121,6 +124,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return try LayoutPersistence.defaultDirectory()
   }
 
+  /// UI tests set `UNITERM_SCRIPT_DIR` so the script socket stays out of the developer's Application
+  /// Support folder. The folder must be short, since a socket path holds 104 bytes. Only debug
+  /// builds honor it, for the same reason as the layout folder.
+  private func scriptDirectory() throws -> URL {
+    #if DEBUG
+      if let path = debugEnvironment["UNITERM_SCRIPT_DIR"] {
+        return URL(fileURLWithPath: path, isDirectory: true)
+      }
+    #endif
+
+    return try ScriptSocketDirectory.defaultDirectory()
+  }
+
+  /// UI tests set `UNITERM_SENT_DIR` so content that scripts send stays out of the developer's
+  /// Application Support folder. Only debug builds honor it, for the same reason as the layout
+  /// folder.
+  private func sentContentDirectory() throws -> URL {
+    #if DEBUG
+      if let path = debugEnvironment["UNITERM_SENT_DIR"] {
+        return URL(fileURLWithPath: path, isDirectory: true)
+      }
+    #endif
+
+    return try ScriptSentContent.defaultRoot()
+  }
+
+  /// The folder for content scripts send. A failure leaves scripting running without sends, and
+  /// says so in the log.
+  private func makeSentContent() -> ScriptSentContent? {
+    do {
+      return try ScriptSentContent(root: try sentContentDirectory())
+    } catch {
+      logger.error("sent content is off: \(String(describing: error), privacy: .public)")
+      return nil
+    }
+  }
+
+  /// Starts the listener that script helpers connect to. A failure leaves the app running without
+  /// scripting, and says so.
+  private func startScripting(windows: WindowSet) {
+    do {
+      let listener = try ScriptListener.start(directory: try scriptDirectory())
+
+      let host = ScriptHost(
+        listener: listener,
+        issueProducer: { [weak windows] name in
+          windows?.issueProducer(kind: .script, name: name)
+        },
+        windows: WindowScripting(windows: windows),
+        sentContent: makeSentContent(),
+        onRefusal: { [weak self] refusal in
+          self?.logger.error("a script connection was refused: \(refusal.text, privacy: .public)")
+          self?.windowSet?.post(level: .warning, text: refusal.text)
+        })
+
+      host.start()
+      scriptHost = host
+    } catch {
+      logger.error("scripting did not start: \(String(describing: error), privacy: .public)")
+      windows.post(level: .warning, text: "Scripts cannot connect to uniterm: \(error)")
+    }
+  }
+
   /// UI tests set `UNITERM_BROWSER_DIR` so the browser's own files stay out of the developer's
   /// Application Support folder. Only debug builds honor it, for the same reason as the layout
   /// folder. Nil means the default folder.
@@ -197,6 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       app: AppCommandHooks(
         newWindow: { [weak self] in self?.openWindow() },
         showSettings: { [weak self] in self?.presentSettings() },
+        installCommandLineTool: { [weak self] in self?.installCommandLineTool() },
         openFile: { [weak self] anchor in
           Task { await self?.fileOpens?.open(from: anchor) }
         },
@@ -231,6 +298,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       services: browserServices, inMemory: browserStoreIsInMemory())
     browserWebsiteData = websiteData
 
+    // The closures read the script host when they run. A REPL restored at launch asks for its
+    // channel after the listener has started, and a REPL opened later finds it the same way.
+    let replServices = ReplServices(
+      helper: { ScriptCommandInstaller.command(in: Bundle.main.bundleURL) },
+      openChannel: { [weak self] history in
+        self?.scriptHost?.admitRepl(history: history) ?? .refused(.scriptingOff)
+      },
+      traceSigint: debugEnvironment["UNITERM_REPL_TRACE_SIGINT"] == "1")
+
     let restoreApplet: AppletRestorer = { description in
       switch description.type {
       case TerminalDescription.typeID:
@@ -252,6 +328,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       case BrowserApplet.descriptionTypeID:
         return try BrowserApplet(
           restoring: description, dataStore: websiteData.store, services: browserServices)
+
+      case ReplDescription.typeID:
+        return try ReplApplet(engine: engine, services: replServices, restoring: description)
 
       default:
         throw AppletRestoreError.unsupported("the applet type \"\(description.type)\" is unknown")
@@ -281,6 +360,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
       case .textViewer:
         return TextViewerApplet(startDirectory: directory)
+
+      case .repl:
+        return ReplApplet(engine: engine, services: replServices)
       }
     }
 
@@ -307,6 +389,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           places: places, makeApplet: makeApplet)
       })
     windowSet = windows
+
+    // Scripting starts before any window, so a REPL that a window restores finds the listener.
+    startScripting(windows: windows)
 
     let sourceFactories: [String: AppletSourceFactory] = [
       TerminalDescription.typeID: { _, startDirectory in
@@ -444,6 +529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    scriptHost?.stop()
     layoutPersistence?.saveForQuit()
     terminalEngine?.removeConfigFile()
   }
@@ -548,6 +634,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       alert.runModal()
       return false
     }
+  }
+
+  /// Asks where to put the `uniterm` command, then links it into this bundle. The panel opens in
+  /// `~/.local/bin`, which is made first so the panel has somewhere to start.
+  private func installCommandLineTool() {
+    let installer = ScriptCommandInstaller(
+      command: ScriptCommandInstaller.command(in: Bundle.main.bundleURL))
+
+    installer.prepareDefaultDirectory()
+
+    let panel = NSSavePanel()
+    panel.title = "Install Command Line Tool"
+    panel.message = "uniterm links its command here, so a shell can run uniterm by name."
+    panel.prompt = "Install"
+    panel.directoryURL = installer.defaultDirectory
+    panel.nameFieldStringValue = "uniterm"
+    panel.canCreateDirectories = true
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+
+    let alert = NSAlert()
+
+    do {
+      let installed = try installer.install(at: url)
+
+      alert.messageText = "The uniterm command is installed"
+      alert.informativeText = installed.message
+    } catch {
+      alert.alertStyle = .warning
+      alert.messageText = "The uniterm command was not installed"
+      alert.informativeText = "\(error)"
+    }
+
+    alert.runModal()
   }
 
   private func presentSettings() {

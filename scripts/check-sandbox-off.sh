@@ -11,6 +11,15 @@
 # before. The check also asserts that each helper holds the sandbox and no file or network
 # entitlement, in the source file and in the copy inside a built app. A new sandboxed helper is
 # added to HELPERS and nowhere else.
+#
+# The `uniterm` command is the one helper that is deliberately not sandboxed, and it is named in
+# COMMANDS. `uniterm run` is the user's own process. It reads the script by path, connects to a
+# socket by path, and may be granted `--allow fs-read`. A REPL helper starts from a terminal, which
+# can pass only a directory, an environment, and a program, so it connects by path too. Janet's own
+# sandbox, the memory cap, and process isolation bound it instead. The check still insists that the
+# built command exists, is signed, and holds no sandbox or other entitlement, so it can never be
+# mistaken for a sandboxed decoder. Its build settings must turn the hardened runtime on. A local
+# build is signed ad hoc, which carries no runtime flag, so the built file cannot show it.
 
 set -euo pipefail
 
@@ -19,6 +28,7 @@ PROJECT="$ROOT/uniterm.xcodeproj/project.pbxproj"
 status=0
 
 HELPERS="ImageDecoder DocumentDecoder"
+COMMANDS="uniterm"
 
 fail() {
   echo "error: $*" >&2
@@ -94,6 +104,60 @@ if [ "$#" -ge 1 ]; then
         fail "the built $helper_name does not carry the App Sandbox entitlement set to true."
       if printf '%s\n' "$signed" | grep -Eq "$helper_forbidden"; then
         fail "the built $helper_name carries a file or network entitlement."
+      fi
+    fi
+  done
+fi
+
+while IFS= read -r problem; do
+  fail "$problem"
+done < <(
+  python3 -I - "$PROJECT" <<'PY'
+import re
+import sys
+
+text = open(sys.argv[1]).read()
+blocks = re.split(r"(?=\n\t\t[0-9A-F]{24} /\* [A-Za-z]+ \*/ = \{\n\t\t\tisa = XCBuildConfiguration;)", text)
+seen = 0
+
+for block in blocks:
+    if "isa = XCBuildConfiguration;" not in block or "PRODUCT_NAME = uniterm;" not in block:
+        continue
+
+    seen += 1
+
+    if "ENABLE_HARDENED_RUNTIME = YES;" not in block:
+        print("a uniterm command build configuration does not enable the hardened runtime.")
+
+    if "ENABLE_APP_SANDBOX = YES;" in block:
+        print("a uniterm command build configuration enables the App Sandbox.")
+
+if seen == 0:
+    print("the project has no uniterm command build configuration.")
+PY
+)
+
+if [ -e "$ROOT/Helpers/UnitermCLI/UnitermCLI.entitlements" ]; then
+  fail "the uniterm command has an entitlements file. It must hold none."
+fi
+
+if [ "$#" -ge 1 ]; then
+  for command_name in $COMMANDS; do
+    command_path="$1/Contents/Helpers/$command_name"
+    if [ ! -x "$command_path" ]; then
+      fail "$command_path is missing from the built app."
+    else
+      if ! codesign --verify "$command_path" 2>/dev/null; then
+        fail "the built $command_name is unsigned or its signature does not verify."
+      fi
+
+      signed="$(codesign -d --entitlements - "$command_path" 2>/dev/null || true)"
+      if printf '%s\n' "$signed" | grep -q 'com.apple.security.app-sandbox'; then
+        fail "the built $command_name carries the App Sandbox entitlement. It must stay unsandboxed."
+      fi
+
+      if printf '%s\n' "$signed" | grep -Eq "$helper_forbidden"; then
+        fail "the built $command_name carries an entitlement it must not hold."
       fi
     fi
   done

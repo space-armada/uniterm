@@ -47,6 +47,10 @@ let package = Package(
     .library(name: "TextViewerApplet", targets: ["TextViewerApplet"]),
     .library(name: "ImageDecoding", targets: ["ImageDecoding"]),
     .library(name: "ImageViewerApplet", targets: ["ImageViewerApplet"]),
+    .library(name: "ScriptWire", targets: ["ScriptWire"]),
+    .library(name: "ScriptRuntime", targets: ["ScriptRuntime"]),
+    .library(name: "ScriptHost", targets: ["ScriptHost"]),
+    .library(name: "ReplApplet", targets: ["ReplApplet"]),
   ],
   dependencies: [
     // The first third-party Swift package. Only TableData uses it. The version is exact, and
@@ -69,7 +73,7 @@ let package = Package(
       name: "WindowKit",
       dependencies: [
         "Theme", "Preferences", "AppletKit", "StatusKit", "PaneModel", "LayoutKit", "FileRouting",
-        "GeoData", "PlaceSearch",
+        "GeoData", "PlaceSearch", "ScriptHost", "ScriptWire",
       ]),
     .target(name: "SettingsKit", dependencies: ["Preferences"]),
     .binaryTarget(name: "GhosttyKit", path: ghosttyKitPath),
@@ -165,11 +169,42 @@ let package = Package(
         "StatusKit", "TextViewerModel", "Theme",
       ],
       resources: [.copy("Resources/web")]),
+    // Embedded Janet, vendored from the release janet.pin names, and the small C shim that is the
+    // only code that calls it. Only the script helper targets may depend on it, so Janet never
+    // links into the app. scripts/check-janet-isolation.sh enforces that.
+    //
+    // The vendored source is not edited, so its own deprecation warning is silenced here instead.
+    // Unbuilt holds Janet's line editor, vendored from the same release. Its own file is not
+    // compiled. uniterm_janet_line.c includes it with `main` renamed away, so the REPL reaches the
+    // editor's history without any edit to the vendored source.
+    .target(
+      name: "CJanet", exclude: ["Unbuilt"],
+      cSettings: [.headerSearchPath("."), .unsafeFlags(["-Wno-deprecated-declarations"])]),
+    // The wire between the app and a script helper: the protocol version, the host calls a script
+    // makes, and their replies. It has no AppKit and no Janet, so the app and the helper share one
+    // codec and the fuzzers can reach it alone.
+    .target(name: "ScriptWire", dependencies: ["HelperWire"]),
+    // The helper side of scripting. It owns the one Janet VM of its process, on its main thread.
+    .target(name: "ScriptRuntime", dependencies: ["CJanet", "ScriptWire"]),
+    // A thin main over ScriptRuntime, so tests can run a helper without the hardened runtime. The
+    // shipped command is the Xcode target UnitermCLI.
+    .executableTarget(name: "ScriptHelper", dependencies: ["ScriptRuntime"]),
+    // The app side of scripting: the listener, the peers, and the dispatch of their calls. It
+    // never imports Janet.
+    .target(
+      name: "ScriptHost", dependencies: ["FileRouting", "HelperHost", "ScriptWire", "StatusKit"]),
+    // The REPL applet. It hosts a terminal session whose child is the REPL helper, and binds the
+    // helper's control channel to its pane through the script host. It never imports Janet.
+    .target(
+      name: "ReplApplet",
+      dependencies: [
+        "AppletKit", "ScriptHost", "ScriptWire", "StatusKit", "TerminalSurface", "Theme",
+      ]),
     .target(
       name: "AppletCatalog",
       dependencies: [
         "AppletKit", "BrowserApplet", "DataViewerApplet", "ImageViewerApplet", "MapViewerApplet",
-        "TerminalApplet", "TextViewerApplet",
+        "ReplApplet", "TerminalApplet", "TextViewerApplet",
       ]),
     .testTarget(name: "StatusKitTests", dependencies: ["StatusKit"]),
     .testTarget(name: "FileRoutingTests", dependencies: ["FileRouting", "AppletKit"]),
@@ -250,6 +285,20 @@ let package = Package(
         "BrowserApplet", "AppletKit", "StatusKit", "Theme", "AppletTestSupport",
         "DocumentTestSupport", "TableTestSupport", "BrowserTestSupport",
       ]),
+    .testTarget(name: "ScriptWireTests", dependencies: ["ScriptWire", "TableTestSupport"]),
+    // Holds the shim's reply reader against crafted bytes, so it reaches the Janet C target.
+    .testTarget(
+      name: "ScriptRuntimeTests", dependencies: ["ScriptRuntime", "ScriptWire", "CJanet"]),
+    .testTarget(
+      name: "ScriptHostTests",
+      dependencies: ["ScriptHost", "ScriptWire", "ScriptHelper", "StatusKit"],
+      resources: [.copy("Fixtures")]),
+    .testTarget(
+      name: "ReplAppletTests",
+      dependencies: [
+        "ReplApplet", "AppletKit", "ScriptHost", "ScriptWire", "StatusKit", "TerminalSurface",
+        "WindowKit", "Preferences", "AppletTestSupport",
+      ]),
     .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
     .testTarget(name: "AppletKitTests", dependencies: ["AppletKit", "AppletTestSupport"]),
     .testTarget(name: "LayoutKitTests", dependencies: ["LayoutKit", "AppletKit", "PaneModel"]),
@@ -257,7 +306,7 @@ let package = Package(
       name: "TerminalAppletTests",
       dependencies: [
         "TerminalApplet", "AppletKit", "StatusKit", "TerminalSurface", "Theme", "WindowKit",
-        "Preferences", "AppletTestSupport",
+        "Preferences", "AppletTestSupport", "ScriptHost", "ScriptWire",
       ]),
     .testTarget(name: "SettingsKitTests", dependencies: ["SettingsKit", "Preferences"]),
     .testTarget(name: "ThemeTests", dependencies: ["Theme"]),
@@ -267,8 +316,9 @@ let package = Package(
       name: "WindowKitTests",
       dependencies: [
         "WindowKit", "Theme", "Preferences", "StatusKit", "AppletKit", "PaneModel", "LayoutKit",
-        "FileRouting", "GeoData", "PlaceSearch",
+        "FileRouting", "GeoData", "PlaceSearch", "ScriptHost", "ScriptWire",
       ]),
   ],
-  swiftLanguageModes: [.v6]
+  swiftLanguageModes: [.v6],
+  cLanguageStandard: .c99
 )

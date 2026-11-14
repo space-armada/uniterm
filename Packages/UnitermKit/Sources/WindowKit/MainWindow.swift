@@ -200,14 +200,33 @@ enum MenuKeyMatch {
     }
   }
 
-  /// A key equivalent is compared by the key it types, in the canonical form of `KeyChord`. So
-  /// Cmd-Shift-= matches an item whose key is "+", and Cmd-} matches Cmd-Shift-]. The Delete key
-  /// sends 0x7F, and menus spell it 0x08.
+  /// Whether a menu item's key equivalent matches a key event.
   @MainActor
   static func triggers(_ item: NSMenuItem, _ event: NSEvent) -> Bool {
     guard !item.isHidden, !item.keyEquivalent.isEmpty, !item.isSeparatorItem else { return false }
 
-    return KeyChord(item.keyEquivalent, item.keyEquivalentModifierMask)
-      == KeyChord(event.charactersIgnoringModifiers ?? "", event.modifierFlags)
+    return match(
+      itemKey: item.keyEquivalent, itemMask: item.keyEquivalentModifierMask,
+      eventChars: event.charactersIgnoringModifiers ?? "", eventMods: event.modifierFlags)
+  }
+
+  /// A key equivalent is compared by the key it types, in the canonical form of `KeyChord`. So
+  /// Cmd-Shift-= matches an item whose key is "+", and Cmd-} matches Cmd-Shift-]. The Delete key
+  /// sends 0x7F, and menus spell it 0x08.
+  ///
+  /// The `.function` flag has special handling. When the item's mask contains it, the event must
+  /// contain it too. When the item's mask lacks it, the event's `.function` is ignored. This keeps
+  /// window tiling items (Center is fn-Ctrl-C) from stealing plain Ctrl-C, while arrow keys and
+  /// function keys, which always carry `.function`, still match items without it.
+  @MainActor
+  static func match(
+    itemKey: String, itemMask: NSEvent.ModifierFlags, eventChars: String,
+    eventMods: NSEvent.ModifierFlags
+  ) -> Bool {
+    if itemMask.contains(.function), !eventMods.contains(.function) {
+      return false
+    }
+
+    return KeyChord(itemKey, itemMask) == KeyChord(eventChars, eventMods)
   }
 }

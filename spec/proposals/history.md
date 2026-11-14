@@ -15,3 +15,4 @@
 | UTERM-005 M1-M7 | None | Split at M7: M8 needs the control permissions from UTERM-004 M6 |
 | UTERM-006 M1-M3 | None | Split at M3: M4's control and exec support need UTERM-015 M4's read power |
 | UTERM-007 M1-M4 | None | Split at M4: M5's remote commands need UTERM-004 M3 |
+| UTERM-003 M1-M5 | None | |

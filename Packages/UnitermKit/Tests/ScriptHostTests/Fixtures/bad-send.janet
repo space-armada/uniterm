@@ -1,0 +1,25 @@
+(import uniterm)
+
+(defn refuses [label needle f]
+  (def [ok message] (protect (f)))
+  (assert (not ok) (string label " was accepted"))
+  (assert (string/find needle (string message)) (string label " failed with: " message)))
+
+(def pane {:window 7 :pane 1})
+
+(refuses "no argument" "arity" (fn [] (uniterm/send)))
+(refuses "no content" "arity" (fn [] (uniterm/send pane "a.txt")))
+(refuses "a bad pane" "must be a struct" (fn [] (uniterm/send 1 "a.txt" "x")))
+(refuses "a negative pane" "negative" (fn [] (uniterm/send {:window 7 :pane -2} "a.txt" "x")))
+(refuses "a keyword name" "must be a string" (fn [] (uniterm/send pane :csv "x")))
+(refuses "an empty name" "empty" (fn [] (uniterm/send pane "" "x")))
+(refuses "a path as a name" "not a path" (fn [] (uniterm/send pane "dir/a.txt" "x")))
+(refuses "an absolute path as a name" "not a path" (fn [] (uniterm/send pane "/etc/hosts" "x")))
+(refuses "a dot file" "dot" (fn [] (uniterm/send pane ".hidden" "x")))
+(refuses "dot dot" "dot" (fn [] (uniterm/send pane ".." "x")))
+(refuses "a name with a NUL" "NUL" (fn [] (uniterm/send pane "a\0.txt" "x")))
+(refuses "a name that is not UTF-8" "not UTF-8" (fn [] (uniterm/send pane "\xFF.txt" "x")))
+(refuses "a long name" "most is" (fn [] (uniterm/send pane (string (string/repeat "n" 252) ".txt") "x")))
+(refuses "a number as content" "string or a buffer" (fn [] (uniterm/send pane "a.txt" 5)))
+(refuses "nil as content" "string or a buffer" (fn [] (uniterm/send pane "a.txt" nil)))
+(refuses "content past the limit" "most is" (fn [] (uniterm/send pane "a.bin" (string/repeat "x" 1048577))))

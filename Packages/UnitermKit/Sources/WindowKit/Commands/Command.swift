@@ -23,6 +23,7 @@ extension CommandID {
   public static let openFile: CommandID = "uniterm.open"
   public static let openFileWith: CommandID = "uniterm.open-with"
   public static let showSettings: CommandID = "uniterm.settings"
+  public static let installCommandLineTool: CommandID = "uniterm.install-command-line-tool"
   public static let hideApp: CommandID = "uniterm.hide"
   public static let quit: CommandID = "uniterm.quit"
   public static let minimizeWindow: CommandID = "uniterm.minimize"

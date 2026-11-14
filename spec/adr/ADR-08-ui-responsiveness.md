@@ -1,6 +1,6 @@
 # ADR-08: UI Responsiveness
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-02
 
 ## Context

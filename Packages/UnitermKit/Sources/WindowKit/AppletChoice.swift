@@ -22,6 +22,9 @@ public enum AppletChoice: Sendable, Equatable {
   /// A text viewer with nothing open, started in the pane's directory.
   case textViewer
 
+  /// A Janet REPL. It starts in the home folder, whatever pane it is opened from.
+  case repl
+
   /// A browser with no page loaded. It has no directory, so the pane's directory goes unused.
   case browser
 }

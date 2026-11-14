@@ -74,6 +74,7 @@ public final class WindowSet {
   private let visibleFrame: @MainActor (NSWindow) -> NSRect?
   private let screens: @MainActor () -> [ScreenArea]
   private var serial = 0
+  private var windowIDs: WindowIDSource
 
   /// Messages posted while no window was open, oldest first.
   private var held: [(level: StatusLevel, text: String)] = []
@@ -131,8 +132,10 @@ public final class WindowSet {
     unsavedConfirmer: @escaping UnsavedConfirmer = UnsavedDialog.present,
     makeRestoredController: RestoringFactory? = nil,
     makeRoutedController: RoutedFactory? = nil,
+    windowIDs: WindowIDSource = WindowIDSource(),
     makeController: @escaping Factory
   ) {
+    self.windowIDs = windowIDs
     self.visibleFrame = visibleFrame
     self.screens = screens
     self.confirmer = confirmer
@@ -331,7 +334,14 @@ public final class WindowSet {
     return controller
   }
 
+  /// The open window a script's ID names. An ID from another launch, or of a window that closed,
+  /// names nothing.
+  func controller(forScriptWindow id: UInt64) -> MainWindowController? {
+    controllers.first { $0.scriptWindowID == id }
+  }
+
   private func register(_ controller: MainWindowController) {
+    controller.scriptWindowID = windowIDs.next()
     controller.onClose = { [weak self] controller in
       self?.windowDidClose(controller)
     }

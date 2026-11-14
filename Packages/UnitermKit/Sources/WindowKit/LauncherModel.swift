@@ -10,6 +10,7 @@ struct LauncherEntry: Equatable {
     case browser
     case imageViewer
     case textViewer
+    case repl
   }
 
   let kind: Kind
@@ -42,6 +43,9 @@ struct LauncherEntry: Equatable {
     LauncherEntry(
       kind: .textViewer, name: "Text viewer",
       detail: "Shows a PDF, RTF, or Word document", symbol: "doc.text"),
+    LauncherEntry(
+      kind: .repl, name: "REPL",
+      detail: "Runs Janet code against uniterm", symbol: "curlybraces"),
   ]
 }
 
@@ -168,6 +172,9 @@ struct LauncherModel: Equatable {
     case .textViewer:
       return .success(.textViewer)
 
+    case .repl:
+      return .success(.repl)
+
     case nil:
       return .failure(LauncherRefusal(reason: "No applet matches."))
     }
@@ -184,6 +191,7 @@ extension LauncherEntry.Kind {
     case .browser: return "launcher-browser"
     case .imageViewer: return "launcher-image-viewer"
     case .textViewer: return "launcher-text-viewer"
+    case .repl: return "launcher-repl"
     }
   }
 }

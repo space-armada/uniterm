@@ -23,7 +23,7 @@ private final class TerminalContainerView: NSView {
 /// each has its own tty. Program mode runs one program in one tab and opens no others. The tab bar
 /// shows only while there is more than one tab.
 @MainActor
-public final class TerminalApplet: Applet {
+public final class TerminalApplet: Applet, TabOpening, InputOwning {
   /// The longest notification text that reaches the status bar.
   static let maximumMessageLength = 200
 
@@ -409,14 +409,22 @@ public final class TerminalApplet: Applet {
   /// Program mode runs its one program in its one tab and never opens another.
   public var canOpenTab: Bool { mode == .shell }
 
-  /// Opens a shell right after the selected tab, in the directory that tab last reported, and
-  /// selects it. A directory that does not exist locally, as after an ssh login, falls back to the
-  /// home directory.
+  /// Opens a shell as `openTab(startingIn:)` does, with no directory named.
   public func openTab() {
-    guard canOpenTab else { return }
+    openTab(startingIn: nil)
+  }
+
+  /// Opens a shell right after the selected tab and selects it. The shell starts in the directory
+  /// the caller names, which the caller has checked. With none named, it starts in the directory
+  /// the selected tab last reported. A directory that does not exist locally, as after an ssh
+  /// login, is not reported, so the shell starts in the home directory then. The tab's ID is nil
+  /// when the applet cannot open a tab, or its session did not start.
+  @discardableResult
+  public func openTab(startingIn directory: String?) -> AppletTabID? {
+    guard canOpenTab else { return nil }
 
     let launch = TerminalLaunch.loginShell(
-      workingDirectory: currentDirectory ?? home, environment: shellEnvironment)
+      workingDirectory: directory ?? currentDirectory ?? home, environment: shellEnvironment)
     let tab = Tab(launch: launch, title: Self.defaultTitle)
 
     if started {
@@ -424,7 +432,7 @@ public final class TerminalApplet: Applet {
         try startSession(for: tab)
       } catch {
         alerts.deliver(.warning, "The tab could not open: \(error)", from: self, to: host)
-        return
+        return nil
       }
     }
 
@@ -437,7 +445,11 @@ public final class TerminalApplet: Applet {
     host?.appletDidChange(self)
     host?.appletTabsDidChange(self)
     focus()
+
+    return tab.id
   }
+
+  public var tabsStartInDirectory: Bool { true }
 
   public func selectTab(at index: Int) {
     guard tabs.indices.contains(index), index != selectedIndex else { return }

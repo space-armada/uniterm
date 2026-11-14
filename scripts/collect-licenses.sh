@@ -4,7 +4,7 @@
 #
 # Usage: scripts/collect-licenses.sh
 #
-# The notices come from five places:
+# The notices come from six places:
 #   - Ghostty's own LICENSE, its bundled font notices, and its vendored nerd-fonts notice. They are
 #     read from the pinned source tarball in the Ghostty cache.
 #   - Every Zig package that the pinned Ghostty build fetched, from the kept package cache. These
@@ -14,6 +14,8 @@
 #     under .build/SourcePackages or .build/swiftpm. The checkout must be at the pinned revision.
 #   - The web assets the Markdown viewer bundles, markdown-it and DOMPurify, and the five packages
 #     that markdown-it's build inlines. Their notices are kept in ThirdParty/web, and the shipped files are checked against web-assets.pin first.
+#   - Janet, which the script helper embeds. Its license is kept in ThirdParty/janet, and checked
+#     against janet.pin first.
 #   - Catppuccin, whose palette uniterm uses.
 #
 # Rerun it when ghostty.pin changes, and commit the result. The Xcode build copies Licenses/ into
@@ -30,6 +32,8 @@ SWIFT_CHECKOUTS="${SWIFTPM_CHECKOUTS_DIRS:-$ROOT/.build/SourcePackages/checkouts
 WEB_PIN="${WEB_ASSETS_PIN_FILE:-$ROOT/web-assets.pin}"
 WEB_NOTICES="${WEB_ASSETS_NOTICES_DIR:-$ROOT/ThirdParty/web}"
 WEB_RESOURCES="${WEB_ASSETS_RESOURCES_DIR:-$ROOT/Packages/UnitermKit/Sources/TextViewerApplet/Resources/web}"
+JANET_PIN="${JANET_PIN_FILE:-$ROOT/janet.pin}"
+JANET_NOTICES="${JANET_NOTICES_DIR:-$ROOT/ThirdParty/janet}"
 
 die() {
   echo "error: $*" >&2
@@ -44,6 +48,7 @@ tarball="$CACHE/dl/$GHOSTTY_COMMIT.tar.gz"
 [ -d "$CACHE/zig-global/p" ] || die "the Zig package cache is missing. Run make build first."
 [ -f "$SWIFT_PINS" ] || die "$SWIFT_PINS is missing."
 [ -f "$WEB_PIN" ] || die "$WEB_PIN is missing."
+[ -f "$JANET_PIN" ] || die "$JANET_PIN is missing."
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/uniterm-licenses.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -52,7 +57,7 @@ tar -xzf "$tarball" -C "$work" --strip-components=1 \
   --exclude='.gitmodules' --exclude='.gitattributes' --exclude='.gitignore' --exclude='.git'
 
 python3 -I - "$work" "$CACHE/zig-global/p" "$OUT" "$GHOSTTY_TAG" "$SWIFT_PINS" "$SWIFT_CHECKOUTS" \
-  "$WEB_PIN" "$WEB_NOTICES" "$WEB_RESOURCES" <<'PY'
+  "$WEB_PIN" "$WEB_NOTICES" "$WEB_RESOURCES" "$JANET_PIN" "$JANET_NOTICES" <<'PY'
 import hashlib
 import json
 import os
@@ -62,7 +67,7 @@ import subprocess
 import sys
 import tarfile
 
-source, packages, out, tag, swift_pins, swift_checkouts, web_pin, web_notices, web_resources = sys.argv[1:10]
+source, packages, out, tag, swift_pins, swift_checkouts, web_pin, web_notices, web_resources, janet_pin, janet_notices = sys.argv[1:12]
 
 LICENSE_NAME = re.compile(r"^(licen[sc]e|copying|copyright|notice|unlicense|ofl)([-_.].*)?$", re.I)
 
@@ -140,6 +145,24 @@ for name, version, shipped, digest, notices in web_assets:
     for source_name, _ in notices:
         if not os.path.isfile(os.path.join(web_notices, source_name)):
             sys.exit("error: %s has no notice %s in %s." % (name, source_name, web_notices))
+
+# Janet's license is checked before the wipe too. The pin records the hash of the file that the
+# release shipped, so a notice that was edited or swapped fails here.
+janet_values = {}
+with open(janet_pin) as handle:
+    for line in handle:
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, value = line.split("=", 1)
+            janet_values[key] = value
+
+janet_license = os.path.join(janet_notices, "LICENSE")
+if not os.path.isfile(janet_license):
+    sys.exit("error: %s is missing. Run scripts/vendor-janet.sh." % janet_license)
+with open(janet_license, "rb") as handle:
+    actual = hashlib.sha256(handle.read()).hexdigest()
+if actual != janet_values.get("LICENSE_SHA256"):
+    sys.exit("error: %s is %s, and janet.pin pins %s." % (janet_license, actual, janet_values.get("LICENSE_SHA256")))
 
 shutil.rmtree(out, ignore_errors=True)
 os.makedirs(out)
@@ -241,6 +264,8 @@ for name, version, shipped, digest, notices in web_assets:
     for source_name, target_name in notices:
         copy(os.path.join(web_notices, source_name), os.path.join(out, "web-assets", name, target_name))
 
+copy(janet_license, os.path.join(out, "janet", "LICENSE"))
+
 catppuccin = """MIT License
 
 Copyright (c) 2021 Catppuccin
@@ -274,6 +299,7 @@ lines = [
     "ghostty-dependencies/     the libraries that Ghostty's build fetched, one folder each",
     "swift-packages/           the Swift packages that uniterm pins, one folder each",
     "web-assets/               the parser and sanitizer that the Markdown viewer bundles, and the packages the parser inlines",
+    "janet/                    Janet %s, which the script helper embeds" % janet_values["JANET_TAG"],
     "Catppuccin/               the Catppuccin color palette",
     "",
 ]

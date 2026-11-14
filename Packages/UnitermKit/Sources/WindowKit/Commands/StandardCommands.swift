@@ -24,6 +24,10 @@ enum StandardCommands {
         menu: MenuPlacement(.app, section: 0, title: "Settings\u{2026}")
       ) { _ in app.showSettings() },
       Command(
+        .installCommandLineTool, "Install Command Line Tool", scope: .app,
+        menu: MenuPlacement(.app, section: 0, title: "Install Command Line Tool\u{2026}")
+      ) { _ in app.installCommandLineTool() },
+      Command(
         .hideApp, "Hide uniterm", scope: .app, key: KeyChord("h"),
         menu: MenuPlacement(.app, section: 1)
       ) { _ in NSApp.hide(nil) },

@@ -18,7 +18,7 @@ import WebKit
 /// navigation each have a source, and the policy is the one place that says what that source may
 /// load. A refused address leaves the page where it was.
 @MainActor
-public final class BrowserApplet: Applet, BrowserTabDelegate, BrowserDownloadsDelegate {
+public final class BrowserApplet: Applet, TabOpening, BrowserTabDelegate, BrowserDownloadsDelegate {
   /// The type of the description this applet writes and restores.
   public nonisolated static let descriptionTypeID = BrowserDescription.typeID
 
@@ -574,7 +574,18 @@ public final class BrowserApplet: Applet, BrowserTabDelegate, BrowserDownloadsDe
   /// Opens a blank tab right after the selected one, selects it, and puts the keyboard in the
   /// address bar.
   func openTab() {
-    guard !closed else { return }
+    openTab(startingIn: nil)
+  }
+
+  public var canOpenTab: Bool { !closed }
+
+  /// A browser tab has no directory, so one named by a caller is refused before this runs.
+  public var tabsStartInDirectory: Bool { false }
+
+  /// Opens a blank tab as `openTab()` does. The directory is not used.
+  @discardableResult
+  public func openTab(startingIn directory: String?) -> AppletTabID? {
+    guard !closed else { return nil }
 
     let opened = BrowserTab(
       id: .make(), record: BrowserDescription.Tab(), dataStore: dataStore, hsts: services.hsts,
@@ -588,6 +599,8 @@ public final class BrowserApplet: Applet, BrowserTabDelegate, BrowserDownloadsDe
     showSelectedTab(replacingEdit: true)
     refresh()
     content.focusAddress()
+
+    return opened.id
   }
 
   public func selectTab(at index: Int) {

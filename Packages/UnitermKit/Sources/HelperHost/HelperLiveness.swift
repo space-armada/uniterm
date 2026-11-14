@@ -6,8 +6,11 @@ import Foundation
 ///
 /// A helper that stops answering pings is hung and offers a retry. One that answers past the time
 /// bound is working on something too large, which is a limit and offers none.
+///
+/// A helper with no time bound is never ended for how long it works, only for not answering. A REPL
+/// has none, since a legitimate evaluation may run as long as the user likes.
 public struct HelperLiveness: Sendable {
-  public var timeBound: Duration
+  public var timeBound: Duration?
   public var pongGrace: Duration
   public var footprintCap: Int
 
@@ -16,7 +19,7 @@ public struct HelperLiveness: Sendable {
   private var pingOutstanding: (nonce: UInt32, since: ContinuousClock.Instant)?
   private var lastPong: ContinuousClock.Instant?
 
-  public init(timeBound: Duration, pongGrace: Duration, footprintCap: Int) {
+  public init(timeBound: Duration?, pongGrace: Duration, footprintCap: Int) {
     self.timeBound = timeBound
     self.pongGrace = pongGrace
     self.footprintCap = footprintCap
@@ -60,7 +63,7 @@ public struct HelperLiveness: Sendable {
       return .end(.unresponsive)
     }
 
-    if now - busySince > timeBound, let ponged = lastPong, ponged > busySince,
+    if let timeBound, now - busySince > timeBound, let ponged = lastPong, ponged > busySince,
       now - ponged < pongGrace
     {
       return .end(.overranTimeBound)

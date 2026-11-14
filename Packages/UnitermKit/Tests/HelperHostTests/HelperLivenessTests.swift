@@ -56,4 +56,36 @@ final class HelperLivenessTests: XCTestCase {
 
     XCTAssertEqual(liveness.probe(footprint: 1, now: start + .seconds(4)), .end(.unresponsive))
   }
+
+  /// Catches a helper with no time bound being ended for working long while it answers. A REPL has
+  /// none, since an evaluation may run as long as the user likes. It is ended only when it stops
+  /// answering.
+  func testAHelperWithNoTimeBoundIsNeverEndedForAnsweringLate() {
+    var liveness = HelperLiveness(
+      timeBound: nil, pongGrace: .seconds(3), footprintCap: Int.max)
+    var now = start
+
+    liveness.markBusy(now: now)
+
+    for second in 1...120 {
+      now = start + .seconds(second)
+
+      guard case .sendPing(let nonce) = liveness.probe(footprint: nil, now: now) else {
+        return XCTFail("no ping at second \(second)")
+      }
+
+      liveness.pong(nonce, now: now + .milliseconds(10))
+    }
+
+    XCTAssertEqual(liveness.probe(footprint: nil, now: now + .seconds(1)).isEnd, false)
+    XCTAssertEqual(liveness.probe(footprint: nil, now: now + .seconds(10)), .end(.unresponsive))
+  }
+}
+
+extension HelperLiveness.Verdict {
+  fileprivate var isEnd: Bool {
+    if case .end = self { return true }
+
+    return false
+  }
 }
