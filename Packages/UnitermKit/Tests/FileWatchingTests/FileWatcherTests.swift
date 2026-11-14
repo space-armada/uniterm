@@ -83,9 +83,15 @@ final class FileWatcherTests: XCTestCase {
     try await next(log, count: before + 1) { try Data("three three".utf8).write(to: file) }
   }
 
-  /// Catches a folder watch that notes every neighbor's change. The neighbors churn first, then the
-  /// file itself changes. The injected scheduler counts the notes, so the one that the file's own
-  /// write makes is the only one, and nothing waits for an absence.
+  /// Catches a folder watch that notes every neighbor's change. The neighbors churn first, and the
+  /// watcher's own queue is drained before the file itself changes, so a note from the churn lands
+  /// before the write. Then the write must be noted.
+  ///
+  /// The file's write may be noted more than once, since an in-place write can raise two events and
+  /// a neighbor's folder event can be handled after it. The coalescer merges those into one
+  /// delivery, so only the churn's notes count. A neighbor's event that the kernel delivers after
+  /// the drain counts as the write's, so this can miss a watcher that notes neighbors late. It never
+  /// fails a watcher that ignores them.
   func testChangesToOtherFilesInTheFolderDeliverNothing() async throws {
     let folder = try scratch()
     let file = folder.appendingPathComponent("a.txt")
@@ -105,11 +111,18 @@ final class FileWatcherTests: XCTestCase {
     try Data("xy".utf8).write(to: neighbor)
     try FileManager.default.moveItem(at: neighbor, to: folder.appendingPathComponent("c.txt"))
     try FileManager.default.removeItem(at: folder.appendingPathComponent("c.txt"))
+
+    // The worker sends each note to the main queue before this barrier resumes on it, so every
+    // note the churn made has reached the scheduler once this returns.
+    await watcher.whenArmed()
+
+    XCTAssertEqual(scheduler.scheduled, 0, "a neighbor's change was noted")
+
     try Data("two two".utf8).write(to: file)
 
     await fulfillment(of: [noted], timeout: 5)
 
-    XCTAssertEqual(scheduler.scheduled, 1)
+    XCTAssertGreaterThanOrEqual(scheduler.scheduled, 1)
   }
 
   /// Catches a delete that the watch loses, and a file that comes back unseen. The delivery after

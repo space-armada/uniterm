@@ -54,15 +54,6 @@ fixed ones.
   before they land.
 - Status: unresolved.
 
-### `FileWatcherTests.testChangesToOtherFilesInTheFolderDeliverNothing`
-
-- Seen: 2026-11-14, once, in CI's package job.
-- Evidence: `FileWatcherTests.swift:112` counted 2 notes where it expects 1. The test passed 10 of 10 alone.
-- Suspected cause: two notes can both come from the file's own write. A folder event from the neighbor churn can be
-  handled after the write, so it sees the file changed. The in-place write can also raise two file events. The
-  coalescer merges them, so the viewer still reloads once.
-- Status: unresolved.
-
 ### `FindTests.testSearchingTheDecodedCapNeverBlocksTheMainThread`
 
 - Seen: 2026-11-14, once, in CI's package job, in the same run as the entry above.
@@ -73,6 +64,19 @@ fixed ones.
 - Status: unresolved.
 
 ## Fixed
+
+### `FileWatcherTests.testChangesToOtherFilesInTheFolderDeliverNothing`
+
+Fixed by: "Assert that a folder watch notes no neighbor's change, not one note per write"
+
+- Seen: 2026-11-14, four times in CI's package job, in the text viewer PR and the Janet scripting PR.
+- Evidence: `FileWatcherTests.swift:112` counted 2 notes where it expects 1. The test passed 10 of 10 alone.
+- Cause: the test expected exactly one note for the file's own write, and a write can make two. A folder event from the
+  neighbor churn can be handled after the write, so it sees the file changed. The in-place write can also raise two file
+  events. The coalescer merges them, so the viewer still reloads once. The watcher itself was right.
+- Fix: the test drains the watcher's queue after the churn and asserts that the churn made no note. Then it asserts the
+  write made at least one. A watcher made to note every folder event fails it, with 3 churn notes. After the fix, the
+  file watching tests passed 30 of 30 alone.
 
 ### `BrowserRecoveryTests.testKillingTheSelectedTabShowsTheMessageAndReloadBringsBackItsHistory`
 
