@@ -87,10 +87,10 @@ final class ScriptOpenUITests: UnitermUITestCase {
   }
 
   /// Catches a command that opens before it is allowed, a question that names no path or offers the
-  /// wrong buttons, a pane that lands in another window, and a pane that takes the keyboard. The
-  /// command runs from the first terminal and waits. The panel names the folder in full and offers
-  /// a session answer. Once the user allows it, a new terminal opens beside the first, in the
-  /// folder, the command exits 0, and the first pane keeps the focus.
+  /// wrong buttons, a pane that lands in another window, and a pane that leaves the keyboard behind.
+  /// The command runs from the first terminal and waits. The panel names the folder in full and
+  /// offers a session answer. Once the user allows it, a new terminal opens beside the first, in the
+  /// folder, the command exits 0, and the new pane takes the focus as the user's own open does.
   func testAnOpenWaitsForTheUserThenOpensAFolderBesideTheCallersPane() throws {
     let target = try makeFolder()
     let script = try writeScript(named: "open", opening: target.url.path, outside: false)
@@ -142,8 +142,10 @@ final class ScriptOpenUITests: UnitermUITestCase {
 
     XCTAssertTrue(created.waitForExistence(timeout: 15), "no pane opened beside the first")
     XCTAssertFalse(app.windows["main-window-2"].exists, "the folder opened in a new window")
-    XCTAssertTrue(isFocused(window.groups["pane-1"]), "the first pane lost the focus")
-    XCTAssertFalse(isFocused(window.groups["pane-2"]), "the new pane took the focus")
+    XCTAssertTrue(
+      waitFor(window.groups["pane-2"], timeout: 10) { $0 == "focused" },
+      "the new pane did not take the focus")
+    XCTAssertFalse(isFocused(window.groups["pane-1"]), "the first pane kept the focus")
 
     XCTAssertTrue(waitFor(created, timeout: 40) { $0.contains("% ") }, "no prompt in the new pane")
   }

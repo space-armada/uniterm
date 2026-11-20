@@ -71,9 +71,10 @@ final class LaunchServicesOpenUITests: UnitermUITestCase {
   }
 
   /// Catches an open from a program that is not Finder or the Dock that opens a pane before the
-  /// user answers, a question that does not name the folder, and an allowed open that takes the
-  /// keyboard or lands in another window. The question lists the folder in full. Once the user
-  /// allows it, a new terminal opens beside the first and the first keeps the focus.
+  /// user answers, a question that does not name the folder, and an allowed open that leaves the
+  /// keyboard behind or lands in another window. The question lists the folder in full. Once the
+  /// user allows it, a new terminal opens beside the first and takes the focus, as the user's own
+  /// open does.
   func testAnOpenFromAnotherProgramWaitsForTheUserThenOpensBesideTheFocusedPane() throws {
     let target = try makeFolder()
 
@@ -115,8 +116,10 @@ final class LaunchServicesOpenUITests: UnitermUITestCase {
       window.groups["pane-2"].textViews["terminal"].waitForExistence(timeout: 20),
       "no pane opened beside the first")
     XCTAssertFalse(app.windows["main-window-2"].exists, "the folder opened in a new window")
-    XCTAssertTrue(isFocused(window.groups["pane-1"]), "the first pane lost the focus")
-    XCTAssertFalse(isFocused(window.groups["pane-2"]), "the new pane took the focus")
+    XCTAssertTrue(
+      waitFor(window.groups["pane-2"], timeout: 10) { $0 == "focused" },
+      "the new pane did not take the focus")
+    XCTAssertFalse(isFocused(window.groups["pane-1"]), "the first pane kept the focus")
   }
 
   /// Catches a Deny that still opens a pane, or says nothing. The user denies the question, no
