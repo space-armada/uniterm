@@ -37,6 +37,7 @@
 | [UTERM-033](UTERM-033-reclaim-restored-group.md) | A controller that runs again after a relaunch adopts its restored group, with the user's approval | accepted |
 | [UTERM-034](UTERM-034-script-file-read-by-invoker.md) | Who reads a script file, so the app never opens a path the program chose | draft |
 | [UTERM-035](UTERM-035-keyboard-after-an-applet-ends.md) | Where the keyboard goes when a pane's or window's applet ends without the user's doing | retracted |
+| [UTERM-036](UTERM-036-program-opens-take-focus.md) | A program's opens and layouts take focus as the user's do | implemented |
 
 ## Dependency Graph
 
@@ -73,6 +74,7 @@ UTERM-030 ← UTERM-004, UTERM-007, UTERM-015, UTERM-024, UTERM-032
 UTERM-032 ← UTERM-003, UTERM-004, UTERM-015, UTERM-021
 UTERM-033 ← UTERM-004, UTERM-021
 UTERM-034 ← UTERM-003, UTERM-015, UTERM-021, UTERM-032
+UTERM-036 ← UTERM-004, UTERM-015
 ```
 
 ## Not Yet Filed

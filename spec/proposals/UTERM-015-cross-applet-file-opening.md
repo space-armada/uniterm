@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-11-03
-**Updated:** 2026-11-17
+**Updated:** 2026-11-20
 
 ## Dependencies
 
@@ -325,6 +325,8 @@ terminal would be a special case beside it. Refusing folders loses opening a ter
 case.
 
 ### Where a routed pane goes
+
+Superseded in part by UTERM-036; see Decision Log.
 
 Original question: where the router places the pane a routed file opens in.
 
@@ -743,6 +745,8 @@ Amended 2026-11-17; see Decision Log.
 
 ### M5: `uniterm open`
 
+Superseded in part by UTERM-036; see Decision Log.
+
 **Status:** DONE
 
 Amended 2026-11-17; see Decision Log.
@@ -906,6 +910,8 @@ Amended 2026-11-17; see Decision Log.
   they did not recur once the log was on. A potential flake is filed in `spec/flaky-tests.md`.
 
 ### M7: Launch Services approvals
+
+Superseded in part by UTERM-036; see Decision Log.
 
 **Status:** DONE
 
@@ -1437,6 +1443,10 @@ Amended 2026-11-03 and 2026-11-04; see Decision Log. Moved from M2. This milesto
   group a controller owns. Until it lands, the check runs against a fixture group". UTERM-004 M4 has landed, and
   `testARoutedSplitNeverJoinsAControllerGroup` runs against a real controller-owned group from `openPane` with an
   owner. The line now says so.
+- 2026-11-20: Superseded in part by UTERM-036. A program's approved open lands as a Launch Services open does. The
+  anchor's window comes forward, the routed pane takes focus, and a new window becomes key. This replaces the bullet that
+  a pane or window a program's open makes takes no focus, and the anchor bullet's lines that such an open raises no
+  window. It also replaces the M5 and M7 checks that an approved open takes no focus and raises no existing window.
 
 ## References
 
