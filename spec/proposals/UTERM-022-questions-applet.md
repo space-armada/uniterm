@@ -84,8 +84,8 @@ Decision: a requester has at most one open form.
 - The Questions pane caps its open forms. A form past the cap is refused as busy, with the same busy error that
   UTERM-004's Pending Requests limits use. A resolved tab never counts toward the cap. When a new requester's form
   arrives and the pane already holds as many tabs as the cap, the oldest resolved tab that is not selected closes to
-  make room. When the selected tab is the only resolved one, it closes, and the pane shows the placeholder that
-  "Focus when a form arrives" describes. Amended 2026-11-14; see Decision Log.
+  make room. When the selected tab is the only resolved one, it closes. The arriving form opens its tab as
+  "Focus when a form arrives" describes. Amended 2026-11-20; see Decision Log.
 
 ### Two API layers
 
@@ -425,29 +425,22 @@ that the first Ctrl-C stops a run. Converged in 1 pass, on an option the critic 
 Original question: Return activates the `primary` button. A form that takes focus while the user types elsewhere can
 receive a keystroke the user meant for another pane.
 
-Decision: never take focus. (autonomous)
+Decision: a form opens as the user's own open does. Amended 2026-11-20; see Decision Log.
 
-- An arriving form never moves focus. A split that opens a Questions pane leaves focus where it was.
-- A change the user did not choose never shows a different requester's form. When the selected tab closes because its
-  requester ended or it was evicted, the pane selects no neighbor. It shows a placeholder that says what closed, and
-  it holds no control, until the user picks a tab. A new requester's form that caused an eviction takes its tab
-  unselected. When the closed tab was the last one, the pane closes like any pane. Amended 2026-11-19; see Decision
-  Log.
-- A requester's next form may replace its own resolved tab while the pane has focus. When the user resolved the
-  previous form in that tab, a click, Tab, or typed character in a field arms the new one. When the previous form
-  ended without the user, the new one arms only on a click.
-- Input from before the change and key autorepeat never count, and Return, Escape, and Space never arm a form.
-- An arriving form never switches the selected tab away from another requester's open form.
-- Resolving a form moves no focus either. Focus stays in the tab, which shows the outcome. A multi-step script's next
-  form then replaces it under the rule above, so the user answers each step with a Tab or a typed character, not a
-  click.
-- Arrival is announced to assistive technology and posts a status line, as Pending Requests does.
-- A form in an unfocused pane, including one from a script the user just started, needs a click or the pane-focus key
-  before the keyboard answers it. A form shown in a focused pane needs one deliberate input. That is the cost.
+- A split that opens a Questions pane takes focus as a split the user makes does.
+- A new requester's form opens its tab in the window's Questions pane. The tab takes focus as a tab the user opens
+  does.
+- A form's content is live at once. No input arms it.
+- A tab that closes, however it closes, leaves the pane as a tab the user closes does. When it was the last tab, the
+  pane closes like any pane.
+- A requester's next form reuses its own tab, per "One form at a time". Its content is live at once. Whether the reuse
+  selects the tab or moves focus is open, per "Reusing a requester's tab".
+- Resolving a form leaves focus in its tab, which shows the outcome.
+- Arrival posts a status line, as Pending Requests does.
 
-Rationale: a user typing a `sudo` password in another pane would otherwise type the rest of it into a background
-script's field, and a later Return would submit it. A delay guards only Return and Escape, never typed text. `confirm`
-puts Yes on Return, so a captured Return answers yes. Pending Requests already never moves focus. Converged in 1 pass.
+Rationale: a program's operation behaves exactly as the user's. Opening a form beside the asker is a split or a tab
+open, so it takes focus as those do. Keys the user is typing elsewhere then reach the form, as they reach any pane that
+opens.
 
 ### The `pattern` dialect
 
@@ -498,7 +491,11 @@ Decision: the change follows UTERM-004's skew rules.
 
 ## Design Decisions (Open)
 
-None.
+### Reusing a requester's tab
+
+A requester's next form reuses its own resolved tab, and its content is live at once. The user has no equivalent of
+one form replacing another in a tab. Whether that reuse selects the tab, and whether it moves focus to the Questions
+pane, is not settled. M2 pins neither until it is.
 
 ## Risks
 
@@ -507,8 +504,7 @@ None.
   additive. A change in a key's meaning needs a new key, never a new reading of an old one.
 - **A script spoofs a uniterm prompt or phishes for secrets** — likelihood: medium, impact: medium.
   Mitigation: the header is drawn by uniterm and names the established requester. Forms look clearly different from
-  permission prompts. Text carries no links, and there are no password fields. An arriving form never takes focus, so
-  a background script cannot capture keystrokes meant for another pane.
+  permission prompts. Text carries no links, and there are no password fields.
 - **A hostile pattern or spec stalls the app** — likelihood: low, impact: high.
   Mitigation: `pattern` runs off the main thread with time and input caps. Every other check is linear over capped
   input. The spec's size caps are checked before the form appears.
@@ -568,28 +564,19 @@ None.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-20; see Decision Log.
+
 - The Questions pane shows a tab per form, with a tab bar even for one form, and uniterm-drawn requester chrome
 - Every answer type and content block renders and returns the answer shape in the table
 - Return, Escape, and the button roles behave as "Buttons" says, including in multiline fields and open pickers
 - Return, or a click on a disabled validating button, counts as trying to submit. It shows every error and moves focus
   to the first one
 - A restored or reopened Questions pane with no tab closes, or shows an empty state, and never sits blank
-- An arriving form takes no focus and switches no tab away from an open form
-- When the selected tab closes because its requester ended or it was evicted, the pane shows a placeholder with no
-  control and selects no neighbor. Keys typed then reach no form, until the user picks a tab
-- A requester's next form in its own focused tab arms on a typed character only when the user resolved the previous
-  form there. After an ended form it arms only on a click. Return, Escape, and Space never arm a form, and a key held
-  across the change, with its key-up, reaches no field. Key events queued in the same run-loop turn as the change
-  count as before it
+- A new requester's form opens its tab, which takes focus as a tab the user opens does. Its fields take keys at once
+- A tab that closes, however it closes, leaves the pane as a tab the user closes does
+- A requester's next form in its own tab takes keys at once, with no arming input
 - A pane whose last tab closes, however it closes, closes like any pane
-- A form that arrives during the placeholder takes its tab unselected. Picking a tab with the tab-switch keys arms the
-  picked form, and the check pins which field takes focus
-- The placeholder state passes no selected tab to the tab bar, and VoiceOver reports no tab as selected
-- A placeholder pane stays focused when the user leaves the app or window and returns. The pane-close command works on
-  it and returns no outcome
-- A click that arms an inert form only arms it, and activates no button
-- When a requester's own next form replaces its resolved tab, the check pins which field takes keyboard focus
-- Arrival is announced to VoiceOver and posts a status line. Resolving a form leaves focus in its tab
+- Arrival posts a status line. Resolving a form leaves focus in its tab
 - A field's error appears beside it when the user leaves the field or tries to submit, not while typing, and clears
   as soon as the input is valid. Validating buttons stay disabled until the form passes
 - The user looks at the pane in light and dark mode and confirms the layout and the chrome's contrast with permission
@@ -598,6 +585,8 @@ None.
 ### M3: The ask power and the form calls
 
 **Status:** NOT STARTED
+
+Amended 2026-11-20; see Decision Log.
 
 - `ask-user` is a permission kind in `controller.json` and in declarations. An undeclared use is refused with the
   kind named
@@ -610,8 +599,8 @@ None.
   connection, is refused under UTERM-021's one-run rule
 - An unsafe undeclared run's header names it as unverified and never implies a verified file
 - Filling the tab cap with resolved tabs never refuses a new requester. The oldest unselected resolved tab gives way,
-  and evicting the selected one shows the placeholder while the arriving form takes its tab unselected. A form never
-  evicts its own requester's resolved tab, which it reuses instead
+  and the selected one gives way only when it is the only resolved tab. A form never evicts its own requester's
+  resolved tab, which it reuses instead
 - A resolved tab that gives way leaves its handle's result readable by `wait-form` until the caller discards it or
   the slot's lifetime ends
 - A bare terminal-session caller's `open-form` is allowed without a prompt, though the host prompts for other powers
@@ -619,7 +608,7 @@ None.
 - Two terminal tabs in one pane each hold their own form, and a resolved tab stays until its requester's next form,
   its shell ending, or the user closing it
 - A form opens in the window's Questions pane or in a split beside the asker, and the asking pane shows a badge. The
-  split leaves focus where it was
+  split takes focus as a split the user makes does
 - A REPL's stop request fails its connection's pending `wait-form`, and the REPL keeps its VM state
 - A second form while one is open, and a form past the open-form cap, are refused as busy
 - Tab close and pane close return dismissed. Run end, revocation, and a dropped connection fail the wait as ended and
@@ -765,6 +754,22 @@ None.
   open on the placeholder, so the keyboard never falls to a neighbor pane." M2 lost the checks that kept that pane
   open and that kept it from closing the window. The placeholder for a selected tab that closes while other tabs remain
   is unchanged.
+- 2026-11-20: ADR-12 was retracted. The user set that a program's operation behaves as the user's. "Focus when a form
+  arrives" now opens a form as the user's own open does. It said "never take focus". An arriving form moved no focus,
+  and a split left focus where it was. When the selected tab closed because its requester ended or it was evicted, the
+  pane showed a placeholder with no control and selected no neighbor. A requester's next form armed on a click, Tab,
+  or typed character, or only on a click after an ended form. Return, Escape, and Space never armed a form. An
+  arriving form never switched the selected tab away from another requester's open form. Arrival was announced to
+  assistive technology. A form in an unfocused pane needed a click or the pane-focus key. Its rationale argued from a
+  `sudo` password typed into a background script's field. Now a split or a new tab takes focus as the user's does, and
+  a form's content is live at once. A tab close leaves the pane as the user's close does. The status line stays. A
+  requester's next form that reuses its own tab has no user equivalent, so whether it selects the tab or moves focus
+  is open, as "Reusing a requester's tab". "One form at a time" said that evicting the selected tab, when it was the
+  only resolved one, showed "the placeholder that 'Focus when a form arrives' describes". The tab now just closes. The
+  spoofing risk lost "An arriving form never takes focus, so a background script cannot capture keystrokes meant for
+  another pane." M2 lost its placeholder, arming, inert-click, and VoiceOver checks. Its focus check said "An arriving
+  form takes no focus and switches no tab away from an open form". M3's eviction check lost the placeholder and the
+  unselected arriving tab. Its split check said "The split leaves focus where it was". References lost ADR-12.
 
 ## References
 
@@ -775,5 +780,3 @@ None.
 - [ADR-09](../adr/ADR-09-control-authority-requires-authenticated-identity-and-explicit-scope.md): the ask power and
   truthful requester chrome
 - [ADR-11](../adr/ADR-11-deferred-applet-replies-never-hide-effects.md): the handle and the deferred wait
-- [ADR-12](../adr/ADR-12-unchosen-changes-never-move-focus-or-arm-input.md): forms never take focus or arm input the
-  user did not choose
