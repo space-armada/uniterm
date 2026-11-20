@@ -14,6 +14,7 @@
   out of packages
 - UTERM-024, for controller commands, which a group across two windows must keep working
 - UTERM-025, for the presentation controller and its deck format
+- UTERM-036, for a layout request's last new pane taking focus
 
 ## Impacts
 
@@ -154,8 +155,10 @@ permission kind of its own. A controller's zoom behaves as the user's zoom, so t
   never gets it. The approval says the controller may hide your other panes in the windows it controls.
 - The user ends zoom with Zoom Pane again, a split, a close, or a focus move to a hidden pane.
 - A script's `open-pane` is the user's split. So it ends zoom, and its new pane takes focus.
-- Any other program change that touches only hidden panes keeps zoom. A pane a layout request adds opens hidden and
-  detached. Removing or replacing the zoomed pane ends zoom.
+- A layout request that makes a new pane is a set of the user's splits made at once, per UTERM-036. So it ends zoom,
+  and its last new pane takes focus. A layout request that makes no new pane behaves as the same rearrangement by the
+  user would (best guess).
+- Any other program change that touches only hidden panes keeps zoom. Removing or replacing the zoomed pane ends zoom.
 - A zoomed window shows that panes are hidden, so the user never takes them for closed.
 - Zoom Pane is a window key uniterm owns, and the user may remap it, per ADR-04. The presenter's start message names the
   command, not a key.
@@ -167,8 +170,10 @@ from landing on a hidden terminal. The user chose that zoom state belongs to the
 zoom the user made on the slide. A controller still never ends a zoom on a pane it does not own. A zoom that waits for
 the user's click would add a pending effect for a click that already serves. Ending zoom on any program change would
 show the audience hidden panes when another script changes a hidden pane mid-talk. A script's `open-pane` still ends
-zoom, as the user's split does. Riding on pane control would widen every stored pane-control approval with no consent,
-against ADR-09. Converged in 1 pass, and the user chose it.
+zoom, as the user's split does. The user set that a layout request's new panes behave as the user's splits, so a layout
+that makes a new pane ends zoom too. Another script's layout mid-talk therefore shows the audience the hidden panes.
+Riding on pane control would widen every stored pane-control approval with no consent, against ADR-09. Converged in 1
+pass, and the user chose it.
 
 ### Authority across windows
 
@@ -365,7 +370,8 @@ Amended 2026-11-20; see Decision Log.
 
 - A pane fills its window and returns, and the other panes keep their state
 - Zoom sends detach to each hidden pane and reattach when it ends, and a playing video or audio pauses while hidden
-- A layout request in a zoomed window keeps zoom, and its new panes open hidden
+- A layout request that makes new panes in a zoomed window ends zoom, and its last new pane takes focus, as the user's
+  splits do
 - A script's `open-pane` in a zoomed window ends zoom, and its new pane takes focus, as the user's split does
 - A zoomed window shows that other panes are hidden
 - Zoom Pane is remappable
@@ -635,6 +641,15 @@ Amended 2026-11-20; see Decision Log.
   - Amended M2. Removed the check that Zoom Slide is refused while the projector window's keyboard sits in the
     terminal. The checks that opening the notes window and placing the source window keep the key window became checks
     that each behaves as the user's action.
+- 2026-11-20: A program's layout request now behaves as a set of the user's splits made at once, per UTERM-036. The
+  user set that its new panes behave as the user's splits, and the last new pane takes focus. This settles the layout
+  request that the entry above left with its old text.
+  - Amended "Pane zoom". It said "A pane a layout request adds opens hidden and detached", so zoom stayed. A layout
+    request that makes a new pane now ends zoom, as the user's split does, and its last new pane takes focus. A layout
+    request that makes no new pane behaves as the same rearrangement by the user would (best guess). The rationale now
+    says another script's layout mid-talk shows the audience the hidden panes.
+  - Amended M1. The check "A layout request in a zoomed window keeps zoom, and its new panes open hidden" now checks
+    that such a request ends zoom and its last new pane takes focus. No check covers a layout that makes no new pane.
 
 ## References
 

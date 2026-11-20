@@ -15,6 +15,7 @@
 - UTERM-004, for controller runs, layout requests, groups, and remote control of the pane it opens
 - UTERM-007, for the text viewer that shows the slides
 - UTERM-021, for the `declare-permissions` form
+- UTERM-036, for a layout request's last new pane taking focus
 
 ## Impacts
 
@@ -165,12 +166,12 @@ Previous.
 
 Decision: a Stop Presentation command joins Next Slide and Previous Slide, in the palette, with no key. Stop, Ctrl-C in
 the presenter's terminal, Revoke, and the end of the source session all end the presenter the same way. Its commands
-and keys leave, and the pane keeps the last slide. (autonomous)
+and keys leave, and the pane keeps the last slide. (autonomous) Amended 2026-11-20; see Decision Log.
 
 - Stop ends the script. The presenter treats a read that fails as ended, after Revoke, as the end too, and exits
   without an error.
-- Stop is reachable where stepping is: in the slide pane, after the user clicks it, per UTERM-024's rule for a pane
-  whose first body a program sent.
+- Stop is reachable where stepping is: in the slide pane while it has focus, per UTERM-024 "When commands are live".
+  The slide pane has focus when it first shows, per "Layout".
 
 Rationale: during the talk, focus sits in the slide pane. Ctrl-C reaches the presenter only from its own terminal, so
 ending with it means moving focus there first. A Stop in the palette ends it from the slide pane. A palette entry
@@ -186,7 +187,7 @@ Original question: where the slide pane sits beside the starting terminal, and i
 
 Decision: the presenter's first layout request splits the starting terminal's slot in a row, with the terminal on the
 left and the slide pane on the right at two thirds. When that layout is refused for room, the presenter asks once more
-at equal weight. Amended 2026-11-16; see Decision Log.
+at equal weight. Amended 2026-11-20; see Decision Log.
 
 ```janet
 {:split :row :children [{:pane me} {:open :text-viewer :control :remote-controlled :weight 2}]}
@@ -201,6 +202,8 @@ at equal weight. Amended 2026-11-16; see Decision Log.
   close a stale slide pane.
 - The split replaces only the starting terminal's slot. Other panes in the window keep their places.
 - The slide pane opens remote-controlled, so it is a member of the presenter's group and takes its keys, per UTERM-024.
+- The slide pane takes focus when it opens. It is the layout's last new pane, and a layout request's new panes behave
+  as the user's splits, per UTERM-036. So the keys step the deck from the first slide, with no click.
 - A column split is out, since "Slides only, beside the terminal" settles a slide beside the terminal.
 - The user may drag the split, and the slide refits, per UTERM-030.
 
@@ -285,10 +288,10 @@ None.
   UTERM-004 M6, is done. UTERM-032 uses only some of M4: the confined open and the protected-location list. It keeps
   its remembered folders in a store of its own. Mitigation: it is queued, and UTERM-032 M1 starts after it, so the
   grant never ships without its checks.
-- **Stepping needs focus in the slide pane** — likelihood: medium, impact: low. During a live demo in another pane, the
-  user clicks back into the slide pane to step. Accepted: the click is the step back into the talk, and the start
-  message says to click the slide. A key pressed in another pane belongs to that pane, and UTERM-031, which weighed keys
-  there, is retracted. Amended 2026-11-20; see Decision Log.
+- **Stepping needs focus in the slide pane** — likelihood: medium, impact: low. The slide pane takes focus when it
+  opens, per "Layout". During a live demo in another pane, the user clicks back into the slide pane to step. Accepted:
+  the click is the step back into the talk. A key pressed in another pane belongs to that pane, and UTERM-031, which
+  weighed keys there, is retracted. Amended 2026-11-20; see Decision Log.
 - **Running the presenter after a relaunch leaves a second slide pane** — likelihood: high, impact: low. The restored
   group has no owner, and the new run opens its own. Accepted: the user closes the stale pane. UTERM-033 adds reclaiming.
 - **Stopping and running again in the same launch nests a second split** — likelihood: high, impact: low. Rehearsal
@@ -316,9 +319,12 @@ None.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-20; see Decision Log.
+
 - Starting the presenter on a Markdown deck opens a slide pane beside the starting terminal, in the slide style
-- The arrow keys, Page Up and Page Down, Space, and the palette step the deck after the user clicks the slide pane or
-  moves focus into it. Before that, the keys reach the terminal, and the start message says to click the slide
+- The arrow keys, Page Up and Page Down, Space, and the palette step the deck as soon as the first slide shows, with no
+  click. After the user works in another pane, they step it again once the user clicks the slide pane or moves focus
+  into it
 - A deck that is empty, or holds only separators and whitespace, opens no pane and says so
 - Two separators in a row make no blank slide, a `---` inside `<pre>`, `<script>`, or `<style>` never splits, and a
   deck that starts with YAML shows it as text
@@ -347,7 +353,7 @@ None.
 - The example catches its own errors during the talk and posts them to the status bar, where the user looking at the
   slide sees them
 - The example's usage line names the remote-control step, and its start message says how to end it
-- The slide pane opens to the right of the starting terminal at two thirds, and the starting terminal keeps focus
+- The slide pane opens to the right of the starting terminal at two thirds, and the slide pane takes focus
 - In a slot too narrow for two thirds but wide enough for equal weight, the slide opens at equal weight
 - In a slot too narrow for either, the presenter opens no pane, and its message says to widen the terminal's pane or
   close a stale slide pane, not only that the layout does not fit
@@ -473,6 +479,23 @@ None.
   change. Amended the risk "Stepping needs focus in the slide pane". It said "The slide's keys also start disarmed until
   the user clicks it, per UTERM-024." That sentence is gone. The click into the slide pane is still needed, since the
   presenter's layout request leaves focus in the starting terminal.
+- 2026-11-20: A program's layout request now behaves as a set of the user's splits made at once, per UTERM-036. The
+  user set that its new panes behave as the user's splits, and the last new pane takes focus. The presenter's first
+  layout makes one new pane, the slide pane, so the slide pane takes focus at start. This replaces the reason in the
+  entry above, which said the layout leaves focus in the starting terminal.
+  - Amended "Layout". It said nothing on focus. A bullet now says the slide pane takes focus when it opens, so the keys
+    step the deck with no click. Its 2026-11-16 marker became this one.
+  - Amended "How it ends". It said Stop is reachable "in the slide pane, after the user clicks it, per UTERM-024's rule
+    for a pane whose first body a program sent". It now says in the slide pane while it has focus, per UTERM-024 "When
+    commands are live", and that the slide pane has focus when it first shows. UTERM-024 no longer has a rule for a
+    program-sent first body, so the citation moved to the rule that makes a palette entry live (best guess).
+  - Amended the risk "Stepping needs focus in the slide pane". It said "the start message says to click the slide".
+    That clause is gone, and the risk now says the slide pane takes focus when it opens. The click back into the slide
+    after a live demo in another pane stays.
+  - Amended M1. One check said the keys step the deck after the user clicks the slide pane, and before that reach the
+    terminal while the start message says to click the slide. It now says they step as soon as the first slide shows,
+    and again after a click back from another pane. Another check said the starting terminal keeps focus. It now says
+    the slide pane takes focus.
 
 ## References
 
