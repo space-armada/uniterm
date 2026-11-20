@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-16
+**Updated:** 2026-11-20
 
 ## Dependencies
 
@@ -286,10 +286,9 @@ None.
   its remembered folders in a store of its own. Mitigation: it is queued, and UTERM-032 M1 starts after it, so the
   grant never ships without its checks.
 - **Stepping needs focus in the slide pane** — likelihood: medium, impact: low. During a live demo in another pane, the
-  user clicks back into the slide pane to step. The slide's keys also start disarmed until the user clicks it, per
-  UTERM-024. Accepted: the click is the step back into the talk, and the start message says to click the slide.
-  A key pressed in another pane belongs to that pane, and UTERM-031, which weighed keys there, is retracted. Amended
-  2026-11-16; see Decision Log.
+  user clicks back into the slide pane to step. Accepted: the click is the step back into the talk, and the start
+  message says to click the slide. A key pressed in another pane belongs to that pane, and UTERM-031, which weighed keys
+  there, is retracted. Amended 2026-11-20; see Decision Log.
 - **Running the presenter after a relaunch leaves a second slide pane** — likelihood: high, impact: low. The restored
   group has no owner, and the new run opens its own. Accepted: the user closes the stale pane. UTERM-033 adds reclaiming.
 - **Stopping and running again in the same launch nests a second split** — likelihood: high, impact: low. Rehearsal
@@ -470,6 +469,10 @@ None.
   later presenter, and a format change that alters rendering opts in by a marker. Declined: the user chose no ADR, and
   UTERM-026 and UTERM-029, which could break it, depend on this proposal.
 - 2026-11-16: Accepted. The user chose it after the review gate. No ADR written.
+- 2026-11-20: ADR-12 was retracted, and UTERM-024 no longer disarms a controller's keys after a program-driven
+  change. Amended the risk "Stepping needs focus in the slide pane". It said "The slide's keys also start disarmed until
+  the user clicks it, per UTERM-024." That sentence is gone. The click into the slide pane is still needed, since the
+  presenter's layout request leaves focus in the starting terminal.
 
 ## References
 
