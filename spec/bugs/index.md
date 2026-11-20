@@ -17,5 +17,3 @@
 | [20261115-helper-sandbox-tests-fail-after-ui-test-build](20261115-helper-sandbox-tests-fail-after-ui-test-build.md) | The helper sandbox tests fail after a UI test build leaves test entitlements on the helpers | fixed |
 | [20261117-stderr-line-split-across-reads-shows-as-two-lines](20261117-stderr-line-split-across-reads-shows-as-two-lines.md) | A driver's stderr line split across two reads shows as two status lines | fixed |
 | [20261117-read-scope-compared-as-written-hides-real-paths](20261117-read-scope-compared-as-written-hides-real-paths.md) | A read scope written through a link hides every path from its own controller | fixed |
-| [20261118-script-opened-tab-takes-keyboard](20261118-script-opened-tab-takes-keyboard.md) | A tab a script opens with `uniterm/open-tab` takes the keyboard, against ADR-12 | open |
-| [20261118-program-changes-never-announced-to-assistive-technology](20261118-program-changes-never-announced-to-assistive-technology.md) | A change a program makes is never announced to assistive technology, against ADR-12 | open |
