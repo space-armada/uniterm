@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-16
+**Updated:** 2026-11-20
 
 ## Dependencies
 
@@ -196,12 +196,12 @@ can be a member of one controller's group and the anchor of a driver. UTERM-024 
 keys. Which controller's commands are live there.
 
 Decision: both controllers' palette rows are listed there, each naming its controller. Keys there go to the attached
-driver alone. (autonomous)
+driver alone. (autonomous) Amended 2026-11-20; see Decision Log.
 
 - The driver is the more specific claim on its own anchor. The group owner's keys leave that pane while the driver holds
   the grant, so no pane has two controllers' keys.
-- The driver's keys arm at the user's next focus change into the pane or click in its content, per ADR-12. When the
-  driver's grant ends, the group owner's keys come back on the same latch, never as an unchosen change.
+- The driver's keys are live there as soon as the user allows its declaration. When the driver's grant ends, the group
+  owner's keys come back at once. Neither waits for a focus change or a click.
 - Revoke Controller there ends both controllers, as it ends every controller of a pane today. The badge menu names both,
   and the key indicator names the controller taking keys.
 
@@ -264,7 +264,7 @@ None.
   driver, and a driver gains nothing a script source does not already have. See "Members while the anchor is
   disconnected".
 - **This proposal rests on UTERM-024, which is accepted but not built** — likelihood: medium, impact: medium. Its
-  registry, key route, liveness latch, and label rule may change during its build, and this proposal amends two of its
+  registry, key route, liveness rule, and label rule may change during its build, and this proposal amends two of its
   rules. Mitigation: UTERM-024 is a dependency, so its milestones land first. A UTERM-024 amendment to "When commands
   are live", "Where a controller lives", "Which panes take a controller's keys", or "Palette only, with the controller
   named" reopens the matching decision here.
@@ -274,6 +274,8 @@ None.
 ### M1: Driver commands
 
 **Status:** NOT STARTED
+
+Amended 2026-11-20; see Decision Log.
 
 - A version-5 driver's declared commands show in the palette after the user allows them, and choosing one pushes an
   invocation that carries the command, the pane, and the input
@@ -295,7 +297,8 @@ None.
 - A driver whose anchor is disconnected commands a remote-controlled member it owns, and its keys stay live there. A
   layout from that anchor is still refused
 - A pane that is a controller's member and a driver's anchor lists both controllers' rows, and its keys reach the
-  driver alone. Each controller's keys there arm only on the user's focus change or click
+  driver alone. The driver's keys reach it there as soon as the user allows its declaration, with no focus change or
+  click first
 - A declaration refused for its bounds or a repeated name can be sent again in the same run
 - The declaration's success reply reaches the driver before any invocation. A revocation pushes the `commands` frame
 - Revocation and run end drop only queued invocation frames, and keep queued replies and events in order. A frame being
@@ -308,7 +311,7 @@ None.
 - A version-4 driver with a disconnected anchor commands its remote-controlled members
 - At a pane that is both a member and an anchor, Revoke Controller ends both controllers, the badge menu names both,
   the key indicator names the driver, and the group owner's rows advertise no key that is not live there. When the
-  driver's grant ends, the group owner's keys stay off until the user's next focus change or click
+  driver's grant ends, the group owner's keys reach it there at once
 - A driver with no layout lists its rows at its anchor, disconnected or not, and the anchor offers Revoke Controller
 - Revoking ends the driver's rows and keys at once, withdraws an unanswered declaration from Pending Requests, and
   leaves its own applet commands and events working. The refusal text covers its anchor commands
@@ -359,6 +362,17 @@ None.
   "A version-4 driver with a disconnected anchor commands its remote-controlled members" is met by it. So is the first
   half of "A driver whose anchor is disconnected commands a remote-controlled member it owns", and its layout refusal.
   M1 still owes the keys staying live there.
+- 2026-11-20: ADR-12 was retracted. The user set that a program's operation behaves as the user's. So a driver's keys
+  are live as soon as its declaration is allowed, and a program's change arms or disarms nothing. UTERM-024 amended
+  "When commands are live" the same day, which the last risk says reopens the matching decision here. Every settled
+  decision here was read again. Only "Two controllers in one pane" rested on ADR-12, and none moved to open:
+  - "Two controllers in one pane" said the driver's keys arm at the user's next focus change into the pane or click in
+    its content, per ADR-12. When the grant ended, the group owner's keys came back on the same latch. It now says the
+    driver's keys are live as soon as the user allows its declaration, and the group owner's keys come back at once.
+  - M1 checked that each controller's keys at such a pane arm only on the user's focus change or click. It also checked
+    that the group owner's keys stay off after the grant ends until one. It now checks that both take keys at once.
+  - The last risk named UTERM-024's "liveness latch". It now names its liveness rule.
+  - References listed ADR-12.
 
 ## References
 
@@ -368,5 +382,4 @@ None.
 - ADR-11: deferred applet replies never hide effects
 - ADR-03: restored state never runs a program
 - ADR-08: UI responsiveness
-- ADR-12: unchosen changes never move focus or arm input
 - ADR-13: outside wires stay compatible across versions
