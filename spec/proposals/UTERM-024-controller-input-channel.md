@@ -117,8 +117,9 @@ Decision: a controller's keys reach it only in a pane body that opts in, and onl
 
 Rationale: uniterm cannot tell in general when a pane is taking text input. A browser cannot see focus inside a web
 page without page script. Opting in body kinds that are known safe means a controller never takes keys from a body nobody
-vetted. Because a key reaches a controller only where nothing is typed, any key may be bound without the
-controller learning typed text.
+vetted. A key reaches a controller only from a body that takes no typed text. Keys typed for one body still reach the
+controller once the body becomes one that opts in, whoever swapped it, per "A body that changes while the pane has
+focus". Amended 2026-11-20; see Decision Log.
 
 ### Any key
 
@@ -129,8 +130,9 @@ as UTERM-025's arrows and Page Up and Page Down.
   "Against the applet's own keys" and "How keys reach the controller". M2 proves a remap onto a plain arrow still
   wins. A key that loses is dropped, and the user is told.
 
-Rationale: the input channel is general. The opt-in rule, not a key list, keeps typed text from a controller, so a
-list would only limit controllers with no safety gain. The user chose this.
+Rationale: the input channel is general. The opt-in rule, not a key list, decides which body's keys reach a
+controller, so a list would only limit controllers with no safety gain. Keys typed for a body that swapped to one that
+opts in reach the controller, whatever it binds. The user chose this. Amended 2026-11-20; see Decision Log.
 
 ### When commands are live
 
@@ -696,6 +698,11 @@ Amended 2026-11-20; see Decision Log.
     checks that keys and commands are live at once and that the rows stay listed. The arming and repeat checks are
     removed. Its marker moved from its last check to the milestone head.
   - References listed ADR-12.
+- 2026-11-20: Reworded the rationales of "Which panes take a controller's keys" and "Any key". With no latch, a key
+  the user types for a body that swaps to one that opts in reaches the controller. The first rationale said "Because a
+  key reaches a controller only where nothing is typed, any key may be bound without the controller learning typed
+  text." The second said "The opt-in rule, not a key list, keeps typed text from a controller". Both now say plainly
+  that typed keys reach the controller after such a swap, whoever made it. No mechanism was added.
 
 ## References
 
