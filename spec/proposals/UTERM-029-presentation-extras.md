@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-17
+**Updated:** 2026-11-20
 
 ## Dependencies
 
@@ -207,9 +207,9 @@ Rationale: a number is how people jump in every presentation app, and digits in 
 stepping needs it. The index serves "the slide about X" with no new contract. Binding the digits to one command keeps
 the palette from listing a digit row that carries no digit. Slide titles declared at runtime would reopen UTERM-024's
 fixed registry, and a long deck would flood the palette with rows that match uniterm's own commands. A palette argument
-or a list chooser drawn by uniterm is a new palette contract with one caller. A Questions form is unbuilt, needs the
-`ask-user` power, and takes no focus under ADR-12, so the user clicks into it and back out mid-talk. Typing in the
-presenter's terminal moves focus away from the slide. The index is projected to the audience. Converged in 3 passes.
+or a list chooser drawn by uniterm is a new palette contract with one caller. A Questions form is unbuilt, and needs
+the `ask-user` power. Typing in the presenter's terminal moves focus away from the slide. The index is projected to the
+audience. Converged in 3 passes. Amended 2026-11-20; see Decision Log.
 
 **Revisit:** when UTERM-026 M2, the presenter view, is done, move the index and the typed number into its notes window,
 which the audience does not see.
@@ -400,6 +400,10 @@ None.
 - 2026-11-17 (autonomous): UTERM-026 was accepted during this review, with its `notes:` syntax unchanged. Go to
   Slide's revisit hook fired on that acceptance with no window to move to, so it now waits on UTERM-026 M2.
 - 2026-11-17: Accepted. The user chose it after the review gate. No ADR written.
+- 2026-11-20: ADR-12 was retracted. The user retracted it and set that a program's operation behaves as the user's.
+  Amended the rationale of "Go to Slide". It said a Questions form "takes no focus under ADR-12, so the user clicks into
+  it and back out mid-talk". That reason rested on ADR-12, so it is gone. The decision stands on its other reasons: a
+  form is unbuilt and needs the `ask-user` power.
 
 ## References
 
