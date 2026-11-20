@@ -28,24 +28,19 @@ public typealias OpenWithPresenter =
 
 /// What a caller's authority says about one open.
 ///
-/// File > Open and Apple's openers are the user's own act, so the default moves focus to the pane
-/// the user asked for and asks about a large batch itself. A program's open is not the user's act.
+/// A program's open is the same open as the user's, and the new pane takes focus either way. The
+/// default asks about a large batch itself.
 public struct RoutedOpenOptions: Sendable, Equatable {
   /// The user already approved this many files, so the batch confirmation is skipped. The count
   /// the approval named is the count that opens.
   public var countApproved = false
 
-  /// False for an open a program asked for. The new pane or window then takes no focus, so the
-  /// user's next keystroke goes where it was going.
-  public var takesFocus = true
-
-  public init(countApproved: Bool = false, takesFocus: Bool = true) {
+  public init(countApproved: Bool = false) {
     self.countApproved = countApproved
-    self.takesFocus = takesFocus
   }
 
   /// An open the user approved by name and count, for a program that asked.
-  public static let approvedProgram = RoutedOpenOptions(countApproved: true, takesFocus: false)
+  public static let approvedProgram = RoutedOpenOptions(countApproved: true)
 }
 
 /// What an open did. The failures are already posted as one message.
@@ -152,8 +147,7 @@ public final class RoutedOpener {
     }
 
     let live = Self.live(anchor)
-    place(
-      ready, anchor: live, batch: files.count > 1, takesFocus: options.takesFocus, report: &report)
+    place(ready, anchor: live, batch: files.count > 1, report: &report)
     summarize(report.failures, total: files.count, anchor: live)
 
     return report
@@ -201,7 +195,7 @@ public final class RoutedOpener {
       make(file, typeID: typeID, startDirectory: startDirectory, into: &ready, report: &report)
 
       let live = Self.live(anchor)
-      place(ready, anchor: live, batch: false, takesFocus: true, report: &report)
+      place(ready, anchor: live, batch: false, report: &report)
       summarize(report.failures, total: 1, anchor: live)
       return report
 
@@ -251,16 +245,15 @@ public final class RoutedOpener {
   }
 
   private func place(
-    _ ready: [Ready], anchor: RouteAnchor?, batch: Bool, takesFocus: Bool,
-    report: inout RoutedOpenReport
+    _ ready: [Ready], anchor: RouteAnchor?, batch: Bool, report: inout RoutedOpenReport
   ) {
     var current: MainWindowController?
 
     for item in ready {
       let routed =
         batch
-        ? current.flatMap { placeInLargest(item, in: $0, takesFocus: takesFocus) }
-        : anchor.flatMap { placeBeside(item, anchor: $0, takesFocus: takesFocus) }
+        ? current.flatMap { placeInLargest(item, in: $0) }
+        : anchor.flatMap { placeBeside(item, anchor: $0) }
 
       if let routed {
         report.opened.append(routed)
@@ -268,7 +261,7 @@ public final class RoutedOpener {
       }
 
       do {
-        let controller = try windows.open(routing: item.applet, takesFocus: takesFocus)
+        let controller = try windows.open(routing: item.applet)
         current = controller
 
         if let pane = controller.paneIDs.first {
@@ -283,20 +276,16 @@ public final class RoutedOpener {
     }
   }
 
-  private func placeBeside(_ item: Ready, anchor: RouteAnchor, takesFocus: Bool) -> RoutedPane? {
-    guard
-      let pane = anchor.controller.placeRouted(
-        item.applet, beside: anchor.pane, takesFocus: takesFocus)
-    else { return nil }
+  private func placeBeside(_ item: Ready, anchor: RouteAnchor) -> RoutedPane? {
+    guard let pane = anchor.controller.placeRouted(item.applet, beside: anchor.pane) else {
+      return nil
+    }
 
     return RoutedPane(file: item.file, controller: anchor.controller, pane: pane)
   }
 
-  private func placeInLargest(
-    _ item: Ready, in controller: MainWindowController, takesFocus: Bool
-  ) -> RoutedPane? {
-    guard let pane = controller.placeRoutedInLargestPane(item.applet, takesFocus: takesFocus)
-    else { return nil }
+  private func placeInLargest(_ item: Ready, in controller: MainWindowController) -> RoutedPane? {
+    guard let pane = controller.placeRoutedInLargestPane(item.applet) else { return nil }
 
     return RoutedPane(file: item.file, controller: controller, pane: pane)
   }

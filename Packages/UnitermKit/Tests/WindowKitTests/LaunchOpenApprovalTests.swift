@@ -49,7 +49,7 @@ private let goBetween = SenderIdentity(
 
 /// An open another program sends through Launch Services, through the real coordinator, the
 /// permission queue, the router, and windows with fixture applets. They prove what the question
-/// says, that no path is looked at before the user allows it, that an allowed open takes no focus,
+/// says, that no path is looked at before the user allows it, that an allowed open takes focus,
 /// and that a session grant lives and dies with its sender. They cannot prove the system's own
 /// sender lookup or its process watcher, which need a live process and are covered by hand.
 @MainActor
@@ -253,13 +253,14 @@ final class LaunchOpenApprovalTests: XCTestCase {
 
   // MARK: Allowed
 
-  /// Catches an approved program's open that takes the keyboard or raises a window. It lands
-  /// beside the focused pane, the first pane keeps the focus, and the file is looked at only now.
+  /// Catches an approved program's open that leaves the keyboard behind. A program's open is the
+  /// user's open, so it lands beside the focused pane, the new pane takes the focus, and the file
+  /// is looked at only now.
   ///
   /// This is the placement contract through the Launch Services authority: a sender's own
   /// identity is asked about, and the focused pane of the key window is the anchor. The
   /// `uniterm open` test of the same contract isolates the terminal-session anchor.
-  func testAnAllowedOpenLandsBesideTheFocusedPaneAndTakesNoFocus() async throws {
+  func testAnAllowedOpenLandsBesideTheFocusedPaneAndTakesFocus() async throws {
     let anchor = try running()
     let original = anchor.controller.focusedPane
     let file = try fixture.textFile("a.txt")
@@ -271,7 +272,8 @@ final class LaunchOpenApprovalTests: XCTestCase {
     await settle()
 
     XCTAssertEqual(anchor.controller.paneIDs.count, 2)
-    XCTAssertEqual(anchor.controller.focusedPane, original)
+    let created = try XCTUnwrap(anchor.controller.paneIDs.first { $0 != original })
+    XCTAssertEqual(anchor.controller.focusedPane, created)
     XCTAssertEqual(fixture.windows.controllers.count, 1)
     XCTAssertEqual(fixture.box.entries.map(\.file), [file])
     XCTAssertEqual(spy.looked, [file.path])

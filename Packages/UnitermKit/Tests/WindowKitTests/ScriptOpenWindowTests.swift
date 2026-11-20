@@ -12,7 +12,7 @@ import XCTest
 
 /// A program's open through the real host, listener, coordinator, router, and windows, with fixture
 /// applets. They prove that no path is looked at before the user allows it, that an allowed open
-/// lands beside the caller's pane with no focus change, and that one approval covers a batch.
+/// lands beside the caller's pane and takes focus, and that one approval covers a batch.
 /// They cannot prove what the real applets do with the file, or the key window of a live display.
 @MainActor
 final class ScriptOpenWindowTests: XCTestCase {
@@ -128,14 +128,14 @@ final class ScriptOpenWindowTests: XCTestCase {
 
   // MARK: After the answer
 
-  /// Catches a program's open that moves the keyboard or lands in the wrong place. The approved open
-  /// splits the caller's own pane, starts in the file's folder, and leaves focus on the caller's
-  /// pane, as a pane a program opens must. The router looks at the path only now.
+  /// Catches a program's open that leaves the keyboard behind or lands in the wrong place. The
+  /// approved open splits the caller's own pane, starts in the file's folder, and takes the focus,
+  /// as the user's own open does. The router looks at the path only now.
   ///
   /// This is the placement contract through the `uniterm open` authority: a command's own terminal
   /// session names the anchor. The Launch Services test of the same contract isolates the sender
   /// authority, where the focused pane of the key window is the anchor.
-  func testAnAllowedOpenSplitsBesideTheCallersPaneAndTakesNoFocus() async throws {
+  func testAnAllowedOpenSplitsBesideTheCallersPaneAndTakesFocus() async throws {
     let file = try fixture.textFile("a.txt")
     let focused = anchor.controller.focusedPane
 
@@ -155,7 +155,8 @@ final class ScriptOpenWindowTests: XCTestCase {
 
     XCTAssertEqual(anchor.controller.paneIDs.count, 2)
     XCTAssertEqual(fixture.windows.controllers.count, 1)
-    XCTAssertEqual(anchor.controller.focusedPane, focused, "the new pane took the focus")
+    let created = try XCTUnwrap(anchor.controller.paneIDs.first { $0 != focused })
+    XCTAssertEqual(anchor.controller.focusedPane, created, "the new pane did not take the focus")
     XCTAssertEqual(spy.looked, [file.path])
     XCTAssertEqual(fixture.box.entries.map(\.start), [fixture.directory.path])
   }
@@ -221,24 +222,5 @@ final class ScriptOpenWindowTests: XCTestCase {
 
     XCTAssertEqual(anchor.controller.paneIDs.count, 2)
     XCTAssertEqual(fixture.windows.controllers.count, 1)
-  }
-
-  // MARK: The route's options
-
-  /// Catches an option that does not reach placement. A program's open takes no focus, and a user's
-  /// open still does. The same opener serves both.
-  func testOnlyAUsersOpenMovesFocusToTheNewPane() async throws {
-    let first = try fixture.textFile("u.txt")
-    let second = try fixture.textFile("p.txt")
-    let focused = anchor.controller.focusedPane
-
-    let program = await fixture.opener.open([first], from: anchor, options: .approvedProgram)
-
-    XCTAssertEqual(anchor.controller.focusedPane, focused)
-    XCTAssertNotEqual(program.opened.first?.pane, focused)
-
-    let user = await fixture.opener.open([second], from: anchor)
-
-    XCTAssertEqual(anchor.controller.focusedPane, user.opened.first?.pane)
   }
 }

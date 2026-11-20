@@ -53,7 +53,7 @@ public final class LaunchOpenCoordinator {
     let files: [URL]
 
     /// Where a program's open anchors, read when the request runs. Nil for a Launch Services open,
-    /// which anchors to the most recently key window and brings it forward.
+    /// which anchors to the most recently key window. Either way the anchor's window comes forward.
     let programAnchor: (@MainActor () -> RouteAnchor?)?
   }
 
@@ -116,8 +116,8 @@ public final class LaunchOpenCoordinator {
 
   /// Takes the files of a program's open that the user already approved. It waits for layout
   /// restore as a Launch Services open does. The anchor is asked when the open runs, so a pane
-  /// that closed while it waited falls back to the most recently key window. The new pane takes
-  /// no focus, and no window is brought forward.
+  /// that closed while it waited falls back to the most recently key window. It lands as the
+  /// user's own open does: the anchor's window comes forward, and the new pane takes focus.
   ///
   /// The approval named every path and the count. Nothing here has looked at a path.
   public func receiveProgramOpen(_ urls: [URL], anchor: @escaping @MainActor () -> RouteAnchor?) {
@@ -283,14 +283,7 @@ public final class LaunchOpenCoordinator {
 
     guard !files.isEmpty else { return }
 
-    if let programAnchor = request.programAnchor {
-      await opener.open(
-        files, from: programAnchor() ?? windows.launchAnchor(), options: .approvedProgram)
-
-      return
-    }
-
-    let anchor = windows.launchAnchor()
+    let anchor = request.programAnchor?() ?? windows.launchAnchor()
 
     if let anchor {
       windows.bringForward(anchor.controller)
@@ -298,6 +291,7 @@ public final class LaunchOpenCoordinator {
       NSApp.activate()
     }
 
-    await opener.open(files, from: anchor)
+    let options: RoutedOpenOptions = request.programAnchor == nil ? .init() : .approvedProgram
+    await opener.open(files, from: anchor, options: options)
   }
 }
