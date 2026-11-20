@@ -433,8 +433,8 @@ Decision: a form opens as the user's own open does. Amended 2026-11-20; see Deci
 - A form's content is live at once. No input arms it.
 - A tab that closes, however it closes, leaves the pane as a tab the user closes does. When it was the last tab, the
   pane closes like any pane.
-- A requester's next form reuses its own tab, per "One form at a time". Its content is live at once. Whether the reuse
-  selects the tab or moves focus is open, per "Reusing a requester's tab".
+- A requester's next form reuses its own tab, per "One form at a time". The reused tab is selected and takes focus,
+  as a tab the user opens does, and its content is live at once.
 - Resolving a form leaves focus in its tab, which shows the outcome.
 - Arrival posts a status line, as Pending Requests does.
 
@@ -491,11 +491,7 @@ Decision: the change follows UTERM-004's skew rules.
 
 ## Design Decisions (Open)
 
-### Reusing a requester's tab
-
-A requester's next form reuses its own resolved tab, and its content is live at once. The user has no equivalent of
-one form replacing another in a tab. Whether that reuse selects the tab, and whether it moves focus to the Questions
-pane, is not settled. M2 pins neither until it is.
+None.
 
 ## Risks
 
@@ -574,7 +570,8 @@ Amended 2026-11-20; see Decision Log.
 - A restored or reopened Questions pane with no tab closes, or shows an empty state, and never sits blank
 - A new requester's form opens its tab, which takes focus as a tab the user opens does. Its fields take keys at once
 - A tab that closes, however it closes, leaves the pane as a tab the user closes does
-- A requester's next form in its own tab takes keys at once, with no arming input
+- A requester's next form in its own tab selects that tab and takes focus, and its fields take keys at once, with no
+  arming input
 - A pane whose last tab closes, however it closes, closes like any pane
 - Arrival posts a status line. Resolving a form leaves focus in its tab
 - A field's error appears beside it when the user leaves the field or tries to submit, not while typing, and clears
@@ -770,6 +767,9 @@ Amended 2026-11-20; see Decision Log.
   another pane." M2 lost its placeholder, arming, inert-click, and VoiceOver checks. Its focus check said "An arriving
   form takes no focus and switches no tab away from an open form". M3's eviction check lost the placeholder and the
   unselected arriving tab. Its split check said "The split leaves focus where it was". References lost ADR-12.
+- 2026-11-20: Settled "Reusing a requester's tab". A requester's next form that reuses its own tab selects it and
+  takes focus, as a newly opened tab does. "Focus when a form arrives" said whether the reuse selects the tab or moves
+  focus was open. M2's reuse check now pins the selection and the focus. The open question is removed.
 
 ## References
 
