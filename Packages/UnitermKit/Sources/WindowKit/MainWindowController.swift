@@ -836,9 +836,10 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   }
 
   /// Publishes a staged layout: the tree changes, each new pane takes its applet and its control,
-  /// a declared driver attaches inert, and the new applets start. The tree checks the layout
-  /// again against the tree as it is now, so a change while the layout was staged refuses it.
-  /// Returns the pane at each leaf of the layout, in order.
+  /// a declared driver attaches inert, the new applets start, and the last new pane takes focus,
+  /// as the last of the user's splits would. The tree checks the layout again against the tree as
+  /// it is now, so a change while the layout was staged refuses it. Returns the pane at each leaf
+  /// of the layout, in order.
   ///
   /// The caller checks the controller's authority right before it calls this, with nothing
   /// suspended between. A driver runs only once the user chooses Run, so no program starts here.
@@ -883,6 +884,9 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     refreshControlMarks()
     startPendingApplets()
+
+    if let last = outcome.created.last { paneArea.focus(last) }
+
     return outcome.panes(of: request.plan)
   }
 
