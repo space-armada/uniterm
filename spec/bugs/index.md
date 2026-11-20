@@ -12,7 +12,6 @@
 | [20261116-pdf-form-fields-take-typed-text](20261116-pdf-form-fields-take-typed-text.md) | The text viewer's PDF body lets the user type into form fields | fixed |
 | [20261116-unclaimed-command-key-reaches-terminal-program](20261116-unclaimed-command-key-reaches-terminal-program.md) | A Command key that no menu item takes reaches the terminal program, against the surface's own comment | fixed |
 | [20261116-disconnected-source-badge-hides-live-controller](20261116-disconnected-source-badge-hides-live-controller.md) | A disconnected pane that a live controller acts from shows no control badge | fixed |
-| [20261116-script-opened-pane-takes-focus](20261116-script-opened-pane-takes-focus.md) | A pane a script opens with `uniterm/open-pane` takes keyboard focus, against ADR-12 | fixed |
 | [20261116-disconnected-driver-cannot-command-owned-members](20261116-disconnected-driver-cannot-command-owned-members.md) | A driver whose pane is disconnected cannot command the members it owns | fixed |
 | [20261116-groupless-driver-clipboard-grant-has-no-revoke](20261116-groupless-driver-clipboard-grant-has-no-revoke.md) | A driver that owns no group keeps its clipboard grant until its run ends | fixed |
 | [20261115-helper-sandbox-tests-fail-after-ui-test-build](20261115-helper-sandbox-tests-fail-after-ui-test-build.md) | The helper sandbox tests fail after a UI test build leaves test entitlements on the helpers | fixed |

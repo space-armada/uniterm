@@ -749,8 +749,6 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// and its applet learns that before it starts. Returns nil when the type does not support the
   /// access, the pane is too small, or the applet could not start. A refusal of the access
   /// builds nothing.
-  ///
-  /// The new pane takes no focus. A pane a program opens leaves the keyboard where the user left it.
   @discardableResult
   func openPane(
     _ choice: AppletChoice, typeID: String, axis: Axis, from pane: NodeID, directory: String?,
@@ -791,6 +789,7 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     refreshControlMarks()
     startPendingApplets()
+    paneArea.focus(created)
     return created
   }
 

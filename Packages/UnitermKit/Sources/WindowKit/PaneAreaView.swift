@@ -140,8 +140,7 @@ final class PaneAreaView: NSView {
   }
 
   /// Splits `pane` for a controller, puts `applet` in the new pane, and makes it a member of the
-  /// controller's group. Throws when the pane is too small. Focus stays where it was, and the
-  /// caller decides whether to move it.
+  /// controller's group. Throws when the pane is too small. The caller moves focus to the new pane.
   @discardableResult
   func split(
     _ pane: NodeID, _ axis: Axis, adding applet: any Applet, for owner: GroupOwner

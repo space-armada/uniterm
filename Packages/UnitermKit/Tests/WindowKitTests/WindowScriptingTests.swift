@@ -447,22 +447,23 @@ final class WindowScriptingTests: XCTestCase {
       "no pane is stacked with the first")
   }
 
-  /// Catches a script-opened pane that takes focus from where the user left it. The focused pane
-  /// and the new applet's keyboard focus are both checked, because the mark follows the responder
-  /// only on a later window update. It cannot prove the first responder of a real window.
-  func testAScriptOpenedPaneTakesNoFocus() async throws {
+  /// Catches a script-opened pane that leaves focus where it was. A program's split is the same
+  /// split the user makes, so the new pane takes focus and its applet the keyboard. It cannot prove
+  /// the first responder of a real window.
+  func testAScriptOpenedPaneTakesFocusLikeTheUsersSplit() async throws {
     let fixture = makeFixture()
     let (controller, pane) = try fixture.openWindow()
-    let focused = controller.focusedPane
+    let before = controller.focusedPane
     let made = fixture.made.count
 
     _ = try await fixture.openPane(kind: "terminal", beside: pane, axis: nil, directory: nil)
 
     XCTAssertEqual(controller.paneIDs.count, 2)
-    XCTAssertEqual(controller.focusedPane, focused)
+    let created = try XCTUnwrap(controller.paneIDs.first { $0 != before })
+    XCTAssertEqual(controller.focusedPane, created)
 
     let opened = try XCTUnwrap(fixture.made.dropFirst(made).first)
-    XCTAssertEqual(opened.focusCount, 0)
+    XCTAssertEqual(opened.focusCount, 1)
   }
 
   /// Catches a pane or tab opened for a caller whose authority ended while its directory was
