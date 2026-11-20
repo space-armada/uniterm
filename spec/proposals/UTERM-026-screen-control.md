@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-17
+**Updated:** 2026-11-20
 
 ## Dependencies
 
@@ -132,49 +132,43 @@ text on the slide, since the sanitizer drops the tag and keeps its content. Conv
 ### Pane zoom
 
 Original question: whether zoom is a user command that every pane has, a controller power, or both. How the other panes
-behave while one is zoomed, per ADR-05's lifecycle events. Where keys go when zoom hides the pane that had focus, per
-ADR-12. A zoom key is a window key uniterm owns, and the user may remap it, per ADR-04.
+behave while one is zoomed, per ADR-05's lifecycle events. Where keys go when zoom hides the pane that had focus. A zoom
+key is a window key uniterm owns, and the user may remap it, per ADR-04.
 
 Decision: zoom is a pane operation. A user command, Zoom Pane, zooms the focused pane, plus a controller zoom under a
-permission kind of its own. A controller zoom is refused while the keyboard sits in a pane it would hide. Amended
-2026-11-17; see Decision Log.
+permission kind of its own. A controller's zoom behaves as the user's zoom, so the zoomed pane takes focus. Amended
+2026-11-20; see Decision Log.
 
 - Zoom is a view state of the window over an unchanged tree. The hidden panes get detach, and reattach when zoom ends.
 - The user's zoom acts on the focused pane, so it never hides focus.
-- `(uniterm/zoom-pane pane)` zooms a remote-controlled member of the caller's group. It is refused while the keyboard
-  sits in a pane the zoom would hide: the window is key, and its focused pane is not the target. In a window that is
-  not key, the zoom applies, and that window's focus mark moves to the zoomed pane. So returning to the window, by a
-  click or by Cmd-`, never lands on a hidden pane. The check reads the pane focus mark, synced at the effect boundary.
-  Amended 2026-11-17; see Decision Log.
-- A mark that a controller's zoom moved is an unchosen move, so the zoomed pane's controller keys stay disarmed until
-  a click in its content. Returning to the window, by Cmd-` or any other window switch, does not arm them, unlike
-  UTERM-024's rule for a focus move from another window. So keys the user meant for the hidden pane never reach the
-  controller, per ADR-12.
+- `(uniterm/zoom-pane pane)` zooms a remote-controlled member of the caller's group. The zoomed pane takes focus, in the
+  key window or any other. In a window that is not key, that window's focus mark moves to the zoomed pane. So returning
+  to the window, by a click or by Cmd-`, never lands on a hidden pane.
 - `(uniterm/unzoom-pane pane)` ends a zoom of a member of the caller's group, whoever made it. Zoom state belongs to the
-  pane. A controller never ends a zoom on a pane it does not own. Amended 2026-11-17; see Decision Log.
+  pane. A controller never ends a zoom on a pane it does not own.
 - A controller's zoom stays after its run ends or is revoked, and the user ends it with Zoom Pane.
-- The refusals are distinct: focus elsewhere, already zoomed, and not a member. The reply and `list-windows` say which
-  pane is zoomed and who made the zoom.
+- The refusals are distinct: already zoomed, and not a member. The reply and `list-windows` say which pane is zoomed and
+  who made the zoom.
 - A window holds one zoom at a time, so a second zoom is refused as already zoomed, whether or not the window is key.
 - The kind is `:pane-zoom`, version 1, in declared files only. A package that names it is refused, and an exec driver
   never gets it. The approval says the controller may hide your other panes in the windows it controls.
 - The user ends zoom with Zoom Pane again, a split, a close, or a focus move to a hidden pane.
-- A program change that touches only hidden panes keeps zoom. A pane a layout request or `open-pane` adds opens hidden
-  and detached. Only removing or replacing the zoomed pane ends zoom by program.
+- A script's `open-pane` is the user's split. So it ends zoom, and its new pane takes focus.
+- Any other program change that touches only hidden panes keeps zoom. A pane a layout request adds opens hidden and
+  detached. Removing or replacing the zoomed pane ends zoom.
 - A zoomed window shows that panes are hidden, so the user never takes them for closed.
 - Zoom Pane is a window key uniterm owns, and the user may remap it, per ADR-04. The presenter's start message names the
   command, not a key.
 
-Rationale: the user chose a controller zoom at the review gate, keeping the Motivation's "for a script". The presenter's
-slide pane opens without focus, per ADR-12, so a zoom that hid the focused pane would drop the keys the user is typing,
-Return included. Refusing it while the keyboard sits in a hidden pane keeps the user's keys where they were. In a
-window that is not key no keystroke is in flight, so the presenter's Zoom Slide works from the notes window. Moving that
-window's focus mark to the zoomed pane keeps a later return from landing on a hidden terminal. The user chose that zoom
-state belongs to the pane, so the presenter's toggle ends a zoom the user made on the slide. A controller still never
-ends a zoom on a pane it does not own. A zoom that waits for the user's click would add a pending effect for a click
-that already serves. Ending zoom on any program change would show the
-audience hidden panes when another script opens a pane mid-talk. Riding on pane control would widen every stored
-pane-control approval with no consent, against ADR-09. Converged in 1 pass, and the user chose it.
+Rationale: the user chose a controller zoom at the review gate, keeping the Motivation's "for a script". The user's
+zoom leaves the keyboard in the zoomed pane, so a controller's zoom does the same. The keyboard then never sits in a
+hidden pane, in the key window or any other. Moving a window's focus mark to the zoomed pane keeps a later return
+from landing on a hidden terminal. The user chose that zoom state belongs to the pane, so the presenter's toggle ends a
+zoom the user made on the slide. A controller still never ends a zoom on a pane it does not own. A zoom that waits for
+the user's click would add a pending effect for a click that already serves. Ending zoom on any program change would
+show the audience hidden panes when another script changes a hidden pane mid-talk. A script's `open-pane` still ends
+zoom, as the user's split does. Riding on pane control would widen every stored pane-control approval with no consent,
+against ADR-09. Converged in 1 pass, and the user chose it.
 
 ### Authority across windows
 
@@ -264,31 +258,23 @@ UTERM-001's rule that persistence restores every window. Converged in 1 pass.
 
 ### Focus
 
-Original question: under ADR-12, a change the user did not choose never moves focus. Which of these changes count as
-chosen, such as one made in response to a command the user invoked. A new macOS window normally becomes key, so a
-window a program opens, makes full screen, or moves must not take the keyboard. When such a window closes, focus must
-not fall to a neighbor.
+Original question: where the keyboard goes after a zoom, and after a window opens, goes full screen, moves, or closes.
+Whether a controller's change differs from the same change made by the user.
 
-Decision: only uniterm's own user commands count as chosen. Every controller effect is unchosen, including one made
-while handling a controller command the user invoked. (autonomous)
+Decision: a controller's zoom, open, full screen, or move behaves as the same action by the user. Amended 2026-11-20;
+see Decision Log.
 
-- Zoom Pane is chosen, and the zoomed pane keeps focus. A controller's zoom is unchosen, so in the key window it
-  applies only to the pane that already holds focus. In a window that is not key, no keystroke is in flight, so the
-  zoom applies and moves that window's focus mark to the zoomed pane. Leaving the mark on a hidden pane would send the
-  keyboard there when the user returns. Pop Out Pane is chosen, and its new window becomes key with the
-  moved pane focused.
-- The notes window opens without becoming key. Its panes take no focus, and its keys go live only after a click, per
-  UTERM-024.
-- Placement keeps the key window and its first responder.
-- The user's close of a window is chosen, and macOS picks the next key window.
-- A window that closes because its last applet ended closes like any window, and macOS picks the next key window.
-  Amended 2026-11-19; see Decision Log.
+- Zoom Pane leaves focus in the zoomed pane. A controller's zoom does the same, per "Pane zoom". In a window that is
+  not key, it moves that window's focus mark to the zoomed pane.
+- Pop Out Pane's new window becomes key with the moved pane focused.
+- The notes window opens as a window the user opens does. It becomes key, and its notes pane takes focus.
+- Placement treats focus as the user's full screen or move of the source window does.
+- A window closes the same way whether the user closed it or its last applet ended, and macOS picks the next key
+  window.
 
-Rationale: this is the only reading that meets every clause of ADR-12. The host cannot tell that a call answers a
-command, since events are read later by cursor. A window that lands after the invocation would take the keys the user
-typed in between. A key notes window would also leave no slide pane focused, so stepping would stop until a click. No
-current caller opens a window in response to a command, since the presenter opens its notes at start. Every close
-takes one path, so a window's close needs no rule of its own. Converged in 1 pass.
+Rationale: a program's operation is the same operation as the user's, and it behaves the same way. So no change needs
+a rule for who made it, and the host never has to tell whether a call answers a command the user invoked. Every close
+takes one path, so a window's close needs no rule of its own.
 
 ### Names and version skew
 
@@ -365,9 +351,6 @@ None.
   presenter that does not read it.
 - **The live-move spike rules out Pop Out** — likelihood: medium, impact: low. Mitigation: the presenter view does not
   depend on it, and M4 is dropped with the user's approval.
-- **A controller gets past the zoom's focus guard** — likelihood: medium, impact: medium. Today a script's `open-pane`
-  gives the new pane focus, so in the key window a controller could open a member and zoom it at once, hiding the
-  terminal the user types in. Mitigation: M1 has a check that needs the fix of the bug `20261116-script-opened-pane-takes-focus`.
 - **An accidental close of the notes window loses the notes for the talk** — likelihood: low, impact: medium. Accepted:
   a run that could reopen a window would override the user's close. The slides keep stepping, and a rerun brings the
   notes back.
@@ -378,20 +361,23 @@ None.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-20; see Decision Log.
+
 - A pane fills its window and returns, and the other panes keep their state
 - Zoom sends detach to each hidden pane and reattach when it ends, and a playing video or audio pauses while hidden
-- A layout request or `open-pane` in a zoomed window keeps zoom, and its new panes open hidden
+- A layout request in a zoomed window keeps zoom, and its new panes open hidden
+- A script's `open-pane` in a zoomed window ends zoom, and its new pane takes focus, as the user's split does
 - A zoomed window shows that other panes are hidden
 - Zoom Pane is remappable
-- `zoom-pane` zooms a remote-controlled member. It is refused, with a distinct reply for each, when the window is key
-  and its focus is elsewhere, when the window is already zoomed, key or not, and when the pane is not a
-  remote-controlled member
+- `zoom-pane` zooms a remote-controlled member. It is refused, with a distinct reply for each, when the window is
+  already zoomed, key or not, and when the pane is not a remote-controlled member
 - The source pane and a disconnected member get the not-a-member reply
+- In the key window, a controller zoom of a member while another pane holds focus applies, and the zoomed pane takes
+  focus
 - In a window that is not key, a controller zoom applies even while another pane holds the focus mark, and the mark
   moves to the zoomed pane
 - Zoom Slide pressed in the notes window zooms the slide in the projector window while the terminal there holds the
-  focus mark. The mark moves to the slide, and returning with Cmd-` puts the keyboard in the slide with its controller
-  keys disarmed. A Space typed then never steps the slide, and a click in the slide arms its keys
+  focus mark. The mark moves to the slide, and returning with Cmd-` puts the keyboard in the slide
 - A controller zoom that lands while a sheet is up on its window applies. The sheet's answer still acts on the pane it
   asked about, and after the sheet closes the keyboard lands in the zoomed pane
 - `list-windows` reports the zoomed pane and who made the zoom: the user, this run, or another controller, unnamed. A
@@ -399,12 +385,9 @@ None.
 - A run that owns the zoomed pane, including a rerun given the group, can end any zoom on it. A run that does not own
   the pane gets the not-a-member reply
 - The `:pane-zoom` approval says the controller may hide your other panes in the windows it controls
-- In the key window, a controller zoom right after its own `open-pane` is refused, since the new pane takes no focus.
-  This needs the fix of the bug `20261116-script-opened-pane-takes-focus`
 - `unzoom-pane` ends a zoom of the caller's member that the user made with Zoom Pane, and is refused for a zoom on a
   pane the caller does not own
 - A controller's zoom stays after Revoke or the run's end, and Zoom Pane ends it
-- A zoom fired from a palette row reads the pane focus mark, not the palette's first responder
 - A `controller.json` that names `:pane-zoom` is refused, and a declared file that names it runs
 - When the zoomed pane's applet ends on its own, zoom ends, and focus follows UTERM-001's rule for that close
 - A split, and a focus move to a hidden pane, each end zoom
@@ -414,11 +397,11 @@ None.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-20; see Decision Log.
+
 - The presenter shows its slide on one display and the speaker notes in a second window on the other
 - The presenter declares a Zoom Slide command, in the palette and on a key, live in the slide pane and the notes pane.
   It toggles the slide's zoom, whoever made it. Nothing zooms until the user invokes it, and a step never zooms
-- When the projector window is key and its keyboard sits in the terminal, Zoom Slide is refused, and the presenter
-  says to click the slide, then use Zoom Slide or Zoom Pane
 - When the user has zoomed another pane in the projector window, Zoom Slide gets the already-zoomed reply, and the
   presenter says that Zoom Pane in the zoomed pane ends it
 - Run from a window on the laptop's built-in display with one projector attached, the presenter moves the window to the
@@ -444,7 +427,7 @@ None.
 - With mirrored displays or one display, the notes window does not open, the presenter says why, and the slides work
 - With "Displays have separate Spaces" off, the source window fills the projector without full screen, and the notes
   window stays visible
-- Making the source window full screen or moving it leaves the key window as it was
+- Making the source window full screen or moving it treats focus as the user's full screen or move of that window does
 - The approval for the placement kind says the controller moves a window that holds the user's own panes
 - Closing the notes window leaves the presenter stepping in the source window, and the run cannot open another window
 - Closing the source window clears ownership in the notes window
@@ -452,7 +435,7 @@ None.
   report, then the one window the
   run opened. The opened window's record carries its reference, its title, and the opened mark, with no `:pane` or
   `:control`
-- Opening the notes window keeps the key window and its first responder
+- The notes window opens as a window the user opens does: it becomes key, and its notes pane takes focus
 - `place-window` and `open-window` reply with a distinct outcome for full screen, shared Spaces, mirrored displays, one
   display, and no audience display
 - A command event from a pane in the notes window carries that window's reference, and `:pane` still holds the node ID
@@ -624,6 +607,34 @@ None.
   covers a window's close as well as a pane's. This proposal does not change that rule." Dropped the risk that the
   ended-applet focus bug stays open. M4's check changed from "hands the keyboard to no other window's pane, per the fix
   of the bug" to closing like any window.
+- 2026-11-20: ADR-12 was retracted. The user retracted it and set that a program's operation behaves as the user's.
+  The decisions below rested on ADR-12, so each now follows that rule. Removed ADR-12 from References.
+  - Amended "Pane zoom". It said a controller zoom is refused while the keyboard sits in a pane it would hide, in the
+    key window, with "focus elsewhere" among the refusals. It also said a mark a controller's zoom moved leaves the
+    zoomed pane's keys disarmed until a click, even after Cmd-`. The user chose the refusal on 2026-11-16 and
+    2026-11-17 under ADR-12, and this replaces it. A controller's zoom now applies in any window, and the zoomed pane
+    takes focus, as it does after the user's Zoom Pane (best guess). The user's Zoom Pane never targets a pane without
+    focus, so the direction does not settle that case. The disarm rule is gone. The original question no longer cites
+    ADR-12, and the rationale no longer rests on it. The decision's three markers became one.
+  - Amended "Pane zoom" on `open-pane` in a zoomed window. It said a pane `open-pane` adds opens hidden and detached,
+    and zoom stays. A script's `open-pane` now takes focus as the user's split does, and the user's split ends zoom, so
+    a script's `open-pane` ends zoom. Another script's `open-pane` mid-talk therefore shows the audience the hidden
+    panes. A layout request keeps its old text.
+  - Rewrote "Focus". It said only uniterm's own user commands count as chosen, and every controller effect is unchosen.
+    So a controller's zoom applied in the key window only to the focused pane, the notes window opened without becoming
+    key with keys live only after a click, and placement kept the key window and its first responder. Now a
+    controller's zoom, open, full screen, or move behaves as the same action by the user. The notes window becomes key
+    with its notes pane focused, as a window the user opens does (best guess). Placement treats focus as the user's
+    full screen or move does. Which window is key after it is not settled here. The original question and rationale
+    were rewritten to match. The decision's 2026-11-19 marker became this one.
+  - Dropped the risk "A controller gets past the zoom's focus guard", whose mitigation needed the fix of the bug
+    `20261116-script-opened-pane-takes-focus`. That bug was removed, and the guard is gone.
+  - Amended M1. Removed the focus-elsewhere refusal, the check that a zoom right after `open-pane` is refused, the
+    check that a palette row's zoom reads the focus mark, and the disarmed keys after Cmd-`. Added checks that a
+    controller zoom in the key window takes focus and that `open-pane` ends zoom.
+  - Amended M2. Removed the check that Zoom Slide is refused while the projector window's keyboard sits in the
+    terminal. The checks that opening the notes window and placing the source window keep the key window became checks
+    that each behaves as the user's action.
 
 ## References
 
@@ -631,5 +642,4 @@ None.
 - ADR-05: applet lifecycle
 - ADR-06: layout file versioning
 - ADR-09: control authority requires authenticated identity and explicit scope, superseded by ADR-14
-- ADR-12: unchosen changes never move focus or arm input
 - ADR-14: a controller controls what it opened, within authenticated identity and explicit scope
