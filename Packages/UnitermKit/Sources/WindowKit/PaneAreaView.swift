@@ -140,8 +140,7 @@ final class PaneAreaView: NSView {
   }
 
   /// Splits `pane` for a controller, puts `applet` in the new pane, and makes it a member of the
-  /// controller's group. Throws when the pane is too small. Focus stays where it was, and the
-  /// caller decides whether to move it.
+  /// controller's group. Throws when the pane is too small. The caller moves focus to the new pane.
   @discardableResult
   func split(
     _ pane: NodeID, _ axis: Axis, adding applet: any Applet, for owner: GroupOwner
@@ -172,7 +171,7 @@ final class PaneAreaView: NSView {
 
   /// Lays out a controller's subtree as `plan` says, and puts each applet in the new pane of its
   /// slot. Every pane already open keeps its view and its applet. Throws, and changes nothing,
-  /// when the tree refuses the layout. Focus stays where it was.
+  /// when the tree refuses the layout. The caller moves focus.
   func layOut(
     _ plan: PaneLayoutPlan, anchoredAt anchor: NodeID, for owner: GroupOwner,
     adding applets: [any Applet]

@@ -392,6 +392,7 @@ final class ConsentWindowTests: XCTestCase {
 
     controller.controllerAuthority = authority
 
+    let outside = controller.focusedPane
     let member = try await ownedExecPane(fixture, controller)
     let declaration = try XCTUnwrap(controller.execAttachments[member]?.declaration)
     let home = try XCTUnwrap(controller.execEnvironment?.home)
@@ -429,8 +430,6 @@ final class ConsentWindowTests: XCTestCase {
       SavedLayout(windows: [try XCTUnwrap(controller.savedWindow())]))
 
     XCTAssertFalse(String(decoding: saved, as: UTF8.self).contains("synthetic-value"))
-
-    let outside = controller.focusedPane
 
     try controller.declareExecDriver(declaration, for: outside)
     controller.runExecDriver(outside)

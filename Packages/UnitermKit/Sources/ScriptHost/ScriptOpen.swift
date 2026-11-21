@@ -9,9 +9,10 @@ import StatusKit
 /// reaches this protocol and no window code can touch it.
 @MainActor
 public protocol ScriptFileOpening: AnyObject {
-  /// Routes each path to a pane, with no focus change. The caller is the pane the command ran in,
-  /// or nil when it ran in no terminal session. It returns at once and reports nothing about the
-  /// files to the host. The window layer posts what failed in its own status message.
+  /// Routes each path to a pane, which takes focus as the user's own open does. The caller is the
+  /// pane the command ran in, or nil when it ran in no terminal session. It returns at once and
+  /// reports nothing about the files to the host. The window layer posts what failed in its own
+  /// status message.
   func open(_ paths: [String], from caller: ScriptCaller?)
 
   /// The name the approval gives the caller's pane, or nil when the pane is gone.

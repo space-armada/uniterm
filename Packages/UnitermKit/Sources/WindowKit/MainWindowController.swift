@@ -361,15 +361,6 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     paneArea.focus(paneArea.focusedPane)
   }
 
-  /// Shows the window the way `showWindow` does, with no keyboard change. The window is ordered in
-  /// front and never made key, and no pane takes focus, so the user keeps typing where they were.
-  func showWindowWithoutFocus() {
-    window?.orderFront(nil)
-
-    contentController.view.layoutSubtreeIfNeeded()
-    startPendingApplets()
-  }
-
   private func apply(_ palette: ThemePalette) {
     window?.backgroundColor = palette[.base].nsColor
     contentController.apply(palette)
@@ -677,9 +668,7 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// Returns nil, and leaves the applet untouched for the caller, when the window has a sheet, the
   /// pane is not here, or there is no room in either direction.
   @discardableResult
-  public func placeRouted(
-    _ applet: any Applet, beside pane: NodeID, takesFocus: Bool = true
-  ) -> NodeID? {
+  public func placeRouted(_ applet: any Applet, beside pane: NodeID) -> NodeID? {
     guard paneActionsEnabled, contains(pane: pane) else { return nil }
 
     contentController.view.layoutSubtreeIfNeeded()
@@ -703,7 +692,7 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     startPendingApplets()
 
-    if takesFocus { paneArea.focus(created) }
+    paneArea.focus(created)
 
     return created
   }
@@ -712,10 +701,10 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// new pane. A nil return means the window refused: it has a sheet, or the largest pane has no
   /// room to split. The applet is untouched then, and the caller keeps it.
   @discardableResult
-  public func placeRoutedInLargestPane(_ applet: any Applet, takesFocus: Bool = true) -> NodeID? {
+  public func placeRoutedInLargestPane(_ applet: any Applet) -> NodeID? {
     guard let pane = largestPane() else { return nil }
 
-    return placeRouted(applet, beside: pane, takesFocus: takesFocus)
+    return placeRouted(applet, beside: pane)
   }
 
   /// Splits `pane` and puts a launcher in the new one, which takes the keyboard. The launcher
@@ -749,8 +738,6 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// and its applet learns that before it starts. Returns nil when the type does not support the
   /// access, the pane is too small, or the applet could not start. A refusal of the access
   /// builds nothing.
-  ///
-  /// The new pane takes no focus. A pane a program opens leaves the keyboard where the user left it.
   @discardableResult
   func openPane(
     _ choice: AppletChoice, typeID: String, axis: Axis, from pane: NodeID, directory: String?,
@@ -791,6 +778,7 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     refreshControlMarks()
     startPendingApplets()
+    paneArea.focus(created)
     return created
   }
 
@@ -848,9 +836,10 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   }
 
   /// Publishes a staged layout: the tree changes, each new pane takes its applet and its control,
-  /// a declared driver attaches inert, and the new applets start. The tree checks the layout
-  /// again against the tree as it is now, so a change while the layout was staged refuses it.
-  /// Returns the pane at each leaf of the layout, in order.
+  /// a declared driver attaches inert, the new applets start, and the last new pane takes focus,
+  /// as the last of the user's splits would. The tree checks the layout again against the tree as
+  /// it is now, so a change while the layout was staged refuses it. Returns the pane at each leaf
+  /// of the layout, in order.
   ///
   /// The caller checks the controller's authority right before it calls this, with nothing
   /// suspended between. A driver runs only once the user chooses Run, so no program starts here.
@@ -895,6 +884,9 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     refreshControlMarks()
     startPendingApplets()
+
+    if let last = outcome.created.last { paneArea.focus(last) }
+
     return outcome.panes(of: request.plan)
   }
 

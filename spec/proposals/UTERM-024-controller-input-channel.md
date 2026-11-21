@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-16
+**Updated:** 2026-11-20
 
 ## Dependencies
 
@@ -19,8 +19,6 @@
 - UTERM-026 — "The event model" and "Powers and lifecycle": a controller's groups may span its source window and one
   window it opened, per ADR-14. An event gains `:window` beside `:pane` on ScriptWire. The cleanup "when the window
   closes" runs when the source window closes. Closing the opened window ends neither the commands nor the pending reads.
-  "A body that changes while the pane has focus": a focus mark that a controller's zoom moved leaves the zoomed pane
-  disarmed, and only a click in its content arms it, not a focus move from another window.
 - UTERM-025 — the whole proposal: this is a required prerequisite of the presentation controller. Its Next Slide and
   Previous Slide are commands declared here, bound to the arrow keys and Page Up and Page Down.
 - UTERM-028 — "Any key" and "When commands are live": exec drivers gain the same commands and events. Under UTERM-028,
@@ -119,8 +117,9 @@ Decision: a controller's keys reach it only in a pane body that opts in, and onl
 
 Rationale: uniterm cannot tell in general when a pane is taking text input. A browser cannot see focus inside a web
 page without page script. Opting in body kinds that are known safe means a controller never takes keys from a body nobody
-vetted. Because a key reaches a controller only where nothing is typed, any key may be bound without the
-controller learning typed text.
+vetted. A key reaches a controller only from a body that takes no typed text. Keys typed for one body still reach the
+controller once the body becomes one that opts in, whoever swapped it, per "A body that changes while the pane has
+focus". Amended 2026-11-20; see Decision Log.
 
 ### Any key
 
@@ -131,18 +130,18 @@ as UTERM-025's arrows and Page Up and Page Down.
   "Against the applet's own keys" and "How keys reach the controller". M2 proves a remap onto a plain arrow still
   wins. A key that loses is dropped, and the user is told.
 
-Rationale: the input channel is general. The opt-in rule, not a key list, keeps typed text from a controller, so a
-list would only limit controllers with no safety gain. The user chose this.
+Rationale: the input channel is general. The opt-in rule, not a key list, decides which body's keys reach a
+controller, so a list would only limit controllers with no safety gain. Keys typed for a body that swapped to one that
+opts in reach the controller, whatever it binds. The user chose this. Amended 2026-11-20; see Decision Log.
 
 ### When commands are live
 
 Decision: a controller's palette entries and its keys go live on the same rule. They are live while keyboard focus is
 in the content of a member pane that is not disconnected. A key is live only in an opted-in body kind.
 
-- A command goes live when the user moves keyboard focus into such a pane, or clicks in its content. A change the user
-  did not make never makes it live. A layout request that makes an open pane a member, or a declaration that arrives
-  while the user is typing, waits for the user's next focus change or click, per ADR-12. See "A body that changes while
-  the pane has focus". Amended 2026-11-16; see Decision Log.
+- A command is live whenever that state holds, whatever caused it. A layout request that makes the focused pane a
+  member, or a declaration that arrives while focus is already there, makes it live at once. A program's change and the
+  user's are the same change. See "A body that changes while the pane has focus". Amended 2026-11-20; see Decision Log.
 - A command that is not live is not listed in the palette. Its keys reach the pane as if it did not exist.
 - The palette judges liveness by the pane whose content had keyboard focus when the palette opened, since opening the
   palette moves focus out of the pane.
@@ -233,7 +232,7 @@ Original question: how controller commands are added and removed at runtime, how
 membership, and how the controller's name looks in a palette row and in search.
 
 Decision: `CommandRegistry` stays fixed after launch. Controller commands live in one store the whole app shares, keyed
-by run. (autonomous)
+by run. (autonomous) Amended 2026-11-20; see Decision Log.
 
 - The host owns which commands each run declared and whether its authority holds. Each window owns membership, through
   its own tree's group owners. A window queries the store when its palette opens and when a key arrives. Nothing is
@@ -247,7 +246,7 @@ by run. (autonomous)
   matches that name at the detail tier, so it never outranks a title match.
 
 Rationale: controller commands share none of the registry's machinery. They have no menu item, a different owner and
-lifetime, and liveness that latches when focus moves. A mutable registry would need runtime special cases in code built
+lifetime, and liveness that follows focus. A mutable registry would need runtime special cases in code built
 for a fixed set. It traps on a duplicate ID and lists unavailable commands dimmed, where controller commands must not be
 listed at all. Per-window mirrors would add a sync step that must finish at once on revocation. The kind word keeps a
 program-set name from passing for a uniterm label, which is the reason the label slot exists. Converged in 1 pass.
@@ -395,14 +394,14 @@ controller keys and leaves ADR-04's text in force for the other two.
 
 Decision: ADR-04 stays in force unchanged. If the controller-key rule ever becomes an ADR, it is a narrower new one
 beside ADR-04, never a replacement. At acceptance the user chose no ADR, so the rule lives in this proposal.
-(autonomous) Amended 2026-11-16; see Decision Log.
+(autonomous) Amended 2026-11-20; see Decision Log.
 
 - No ADR-04 Decision bullet becomes false. A controller comes after uniterm's keys and the user's remaps, and ADR-04's
   applet rule constrains only applets. Only its Context line that keys have two owners goes stale.
 - Such an ADR would name the invariants, not the mechanisms. A program that is neither uniterm nor an applet may take keys
   only in panes it controls, after uniterm's keys, the user's remaps, and the applet's keys. It never receives a key
   from content that takes typed text.
-- It cites ADR-09 for the separate power and ADR-12 for the focus-change rule, rather than restating them.
+- It cites ADR-09 for the separate power, rather than restating it.
 - It says what the user can do about a controller key, since a controller command has no menu item to remap. The user
   can remap another command onto the key, which then wins, or revoke the controller.
 
@@ -417,29 +416,23 @@ opted-in body. A user typing into a PDF form field in a live member pane, follow
 swaps the body to Markdown with no new focus change. If the first responder lands in the Markdown view, the next typed
 letters go to the controller.
 
-Decision: liveness latches per body kind. A program-driven change into an opted-in body from a body that does not opt
-in disarms the controller's keys and palette rows until the user arms them again. (autonomous)
+Decision: no latch. A key is judged when it arrives, per "How keys reach the controller". It reaches the controller only
+when the first responder then sits in an opted-in body's content of a live member pane. A body change neither arms nor
+disarms anything, whether a program or the user made it. (autonomous) Amended 2026-11-20; see Decision Log.
 
-- A message body, such as "Opening…" or the notice that the page's process ended, is transparent. A change is judged
-  from the last body that was not a message to the next one, so PDF, then "Opening…", then Markdown is a change from PDF.
-- A pane whose first body is program-driven counts as changing from a body that does not opt in.
-- A change between opted-in bodies keeps the keys live, through any message bodies between them. So the presenter's
-  steps keep working, and so does a Markdown page that ends its process and reloads.
-- A change between bodies that do not opt in, such as one PDF to the next, keeps the palette rows. No key is live there
-  in any case.
-- A first-responder move the user did not make, into an opted-in body, disarms the keys. A move inside a change
-  between opted-in bodies does not.
-- After a disarm, only a click in the content, or a user move of focus from another pane or window, arms the keys
-  again. Focus that comes back from a surface over the pane, such as the palette or a sheet, does not arm them. A key
-  never arms them, Tab and Escape included, since a key the user meant for the body that just closed would then arm
-  the one that replaced it, per ADR-12. A click counts even when focus is already in the pane.
-- Palette rows disarm and arm on the same rule as keys. A disarm while the palette is open removes the controller's
-  rows from it.
+- A change into an opted-in body takes the controller's keys at once while focus is in its content. A change out of one
+  ends them at once.
+- A message body, such as "Opening…" or the notice that the page's process ended, does not opt in. No key reaches the
+  controller while one shows. Keys reach it again once Markdown returns with focus in its content.
+- Where the first responder lands after a body change is the applet's own behavior for that change. It is the same
+  whoever asked for the change.
+- Palette rows do not depend on the body kind, so a body change never adds or removes them.
+- So a letter the user types for a PDF form field reaches the controller, when it is bound, once a program swaps the PDF
+  for Markdown. The same swap by the user has the same result.
 
-Rationale: ADR-12 makes new content inert after a program-driven change until a deliberate choice, and lets a
-multi-step flow stay fast within one requester. Checking only at key time would leave that rule to where AppKit happens
-to put the first responder when a focused view is hidden. Clearing the latch on every change would send the second
-arrow press of a talk to WebKit. Converged in 1 pass.
+Rationale: a program's operation behaves as the user's. A Markdown body the user brings up takes the controller's keys
+at once, so one a controller brings up does too. A latch per body kind treated one change two ways by its cause. The
+check at key time already keeps every key to an opted-in body's content.
 
 ### Stores that older builds read
 
@@ -549,6 +542,8 @@ None.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-20; see Decision Log.
+
 - A controller's plain keys and keys with modifiers invoke its commands while a text viewer member's page has focus
 - The same keys reach the pane as before in a pane that is not a member, including one split off inside the group's
   area and the source terminal
@@ -558,22 +553,16 @@ None.
 - A test fails if the Markdown sanitizer allows an element or attribute that takes text
 - A remap that appears after declaration drops the controller's key, and the user is told then
 - A dropped controller key is reported once per run, not on every press
-- A user typing in a PDF form field of a live member, followed by the controller's `show-markdown`, sends no key to the
-  controller until the user clicks the page or moves focus back in
+- After the controller's `show-markdown` replaces a PDF in a focused member, a bound key reaches the controller at once
+  when focus is in the Markdown content, with no click or focus move first
 - A member whose last body before a message body was Markdown keeps its keys live when Markdown returns. The bound key
   reaches the controller after the message. Focus never falls to a neighbor pane during the message, and is not pulled
   back if the user moved it elsewhere. An inline Markdown-to-Markdown step never hides the web view
-- A click made while a message body shows does not arm the body that follows it
-- A program-driven first Markdown body in a focused pane has its keys disarmed
-- A controller's `show-markdown` that lands while the palette is open removes the controller's rows. Dismissing the
-  palette with Escape leaves the keys disarmed, and no controller key fires afterwards
+- A program-driven first Markdown body in a focused member takes the controller's keys at once
+- A controller's `show-markdown` that lands while the palette is open leaves the controller's rows listed
 - A palette-driven step from one PDF member document to the next keeps the controller's rows
-- After a disarm, a click in the content or a focus move into the pane from outside it arms the keys. Tab, Escape, and
-  every other key do not
 - A Markdown member that reopens its file, or reloads after its page's process ended, keeps its keys live through the
   "Opening…" or ended-process message
-- The repeats of a key pressed before the controller's keys went live reach the pane as before, per ADR-12's rule that
-  repeated input is not a choice
 - The text viewer's Markdown body adopts the opt-in protocol, and its PDF and text bodies do not
 - A Command key and a Control chord bound by a controller each reach it, or lose to the applet's key on the same
   chord, by the order "Against the applet's own keys" sets, never by AppKit's delivery order
@@ -582,12 +571,13 @@ None.
 - The badge's menu lists the controller's commands with the "Controller" kind word, bounded with a count of the rest,
   and its accessibility value says the controller is taking keys
 - A letter key bound by a controller never reaches it from a terminal, REPL, or browser member, or a find field
-- With keyboard focus already in the pane, only a click in its content makes a command live
+- With keyboard focus already in a pane that becomes a member, the controller's commands are live at once, with no click
+  or focus move first
 - A reserved uniterm key and a user's remap win over a controller key, including a remap onto a plain arrow. The
   dropped key is reported to the user
 - The key indicator shows on each pane where the controller's keys are live
 - A controller key reaches it only after uniterm's keys, the user's remaps, and the applet's keys, and never from
-  content that takes typed text. Amended 2026-11-16; see Decision Log.
+  content that takes typed text
 
 ## Decision Log
 
@@ -687,6 +677,32 @@ None.
 - 2026-11-16: UTERM-028 is accepted. Its Impacts line here now says what it narrows. A driver's own pane lists its rows
   and takes its keys even when disconnected. At a pane that is both a controller's member and a driver's own pane, keys
   go to the driver alone, so a Janet controller's keys leave that member while the driver holds its grant.
+- 2026-11-20: ADR-12 was retracted. The user set that a program's operation behaves as the user's. So a program's change
+  neither arms nor disarms a controller's keys, and keys are live as soon as they are declared. Every line that rested
+  on ADR-12 now follows that rule:
+  - Impacts said a focus mark that a controller's zoom moved leaves the zoomed pane disarmed until a click in its
+    content. That sentence is removed.
+  - "When commands are live" said a command goes live only when the user moves focus in or clicks the content. A layout
+    request or a declaration that arrived while the user typed waited for that, per ADR-12. It now says a command is
+    live whenever its state holds, whatever caused it.
+  - "Registry mechanism" said liveness "latches when focus moves". It now says liveness follows focus.
+  - "How ADR-04 changes" said a later ADR would cite ADR-12 for the focus-change rule. That clause is removed.
+  - "A body that changes while the pane has focus" said a program-driven change into an opted-in body disarms the keys
+    and palette rows. Only a click in the content or a focus move from outside the pane armed them again, and no key
+    did. Message bodies were transparent to that latch. It now has no latch. A key is judged when it arrives, and the
+    rows never depend on the body kind. It also states the result: a letter typed for a PDF form field can reach the
+    controller once a program swaps in Markdown, as after the user's own swap.
+  - M2 checked that keys stay off after such a change until a click or focus move. It also checked that a click during
+    a message does not arm, that a program-driven first body is disarmed, and that a `show-markdown` under the open
+    palette removes the rows. Tab and Escape did not arm, and repeats of a key pressed earlier reached the pane. It now
+    checks that keys and commands are live at once and that the rows stay listed. The arming and repeat checks are
+    removed. Its marker moved from its last check to the milestone head.
+  - References listed ADR-12.
+- 2026-11-20: Reworded the rationales of "Which panes take a controller's keys" and "Any key". With no latch, a key
+  the user types for a body that swaps to one that opts in reaches the controller. The first rationale said "Because a
+  key reaches a controller only where nothing is typed, any key may be bound without the controller learning typed
+  text." The second said "The opt-in rule, not a key list, keeps typed text from a controller". Both now say plainly
+  that typed keys reach the controller after such a swap, whoever made it. No mechanism was added.
 
 ## References
 
@@ -697,4 +713,3 @@ None.
 - ADR-08: UI responsiveness
 - ADR-09: control authority requires authenticated identity and explicit scope
 - ADR-11: deferred applet replies never hide effects
-- ADR-12: unchosen changes never move focus or arm input

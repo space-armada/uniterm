@@ -240,9 +240,9 @@ and why a group cannot be adopted.
 Rationale: one place to decide keeps the full member list in front of the user, which the forged-layout mitigation
 relies on. A badge Allow would approve from one member's view. Give Group for the same run, picked instead of the row,
 would leave every member disconnected, which "What Allow enables" exists to prevent, and leave the request with no
-outcome. A sheet would open a dialog a program asked for, and take the keyboard, against ADR-12. A badge-only request
-would have no home for Ask Again. A reason shown as a panel row would have no lifetime and would go stale, while the
-badge rebuilds from live state. Converged in one pass.
+outcome. A sheet would open a dialog a program asked for, which no other approval does. A badge-only request would
+have no home for Ask Again. A reason shown as a panel row would have no lifetime and would go stale, while the badge
+rebuilds from live state. Converged in one pass. Amended 2026-11-20; see Decision Log.
 
 ### Restored groups only
 
@@ -290,6 +290,8 @@ None.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-20; see Decision Log.
+
 - After a relaunch, a run from the source pane asks to adopt the restored group, the user approves, and its layout
   request places the restored panes with no new pane
 - A denied request leaves the group ownerless, and the run's layout opens new panes as today
@@ -311,7 +313,6 @@ None.
 - After Allow, the run's later layout that places every member succeeds with no further user step
 - For an unsigned file, the row names the controller by its file version, and labels any declared name or ID as claimed
 - Member titles in the row are escaped as review names are, so only host-written fields start a line
-- The request takes no focus when it is filed, per ADR-12
 - The record is taken when the group is created, and survives the run ending before the layout is saved
 - A record that cannot be read leaves the layout readable and the group never offered, and a group an exec driver made
   records nothing
@@ -384,6 +385,10 @@ None.
   latest owner, that Give Group hides the waiting run, and the mismatch badge line.
 - 2026-11-16: UTERM-031 is retracted, so the risk "In-flight proposals widen what Allow turns on" no longer names it.
   It said "UTERM-024 and UTERM-031 send the user's keys from opted-in remote-controlled panes".
+- 2026-11-20: ADR-12 was retracted. The user set that a program's operation behaves as the user's. The rationale of
+  "What the user sees" said "A sheet would open a dialog a program asked for, and take the keyboard, against ADR-12."
+  It now says only that no other approval opens a dialog. The decision stands on that and on its other reasons. M1
+  lost the check "The request takes no focus when it is filed, per ADR-12". No check replaces it.
 
 ## References
 

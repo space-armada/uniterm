@@ -1,7 +1,11 @@
 # ADR-12: Unchosen Changes Never Move Focus or Arm Input
 
-**Status:** accepted
+**Status:** retracted
 **Date:** 2026-11-14
+
+Retracted 2026-11-20. A program's operation is the same operation as the user's, and it behaves the same way. A pane
+or tab a program opens takes focus exactly as one the user opens does. Every rule here treated a program's change
+differently from the same change made by the user, so none of them stands.
 
 ## Context
 

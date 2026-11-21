@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-10-31
-**Updated:** 2026-11-12
+**Updated:** 2026-11-20
 
 ## Dependencies
 
@@ -898,6 +898,8 @@ None.
 
 ### M4: Layout requests
 
+Superseded in part by UTERM-036; see Decision Log.
+
 **Status:** DONE
 
 - Layout requests build on the group node kind from M2 and the layout envelope, which M3 left at version 3. Amended
@@ -1633,6 +1635,9 @@ None.
   run opened, which holds only panes that run opened, per ADR-14. That window's layout has no anchor and holds only new
   panes. Closing such a window ends the owner's authority there only. Closing the source window still ends it
   everywhere.
+- 2026-11-20: Superseded in part by UTERM-036. A layout request's new panes behave as the user's splits, and the last
+  new pane takes focus. A layout that makes no new pane moves no focus. This replaces M4's line that a published layout
+  leaves focus where it was.
 
 ## References
 

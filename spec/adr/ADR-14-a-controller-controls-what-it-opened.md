@@ -109,4 +109,3 @@ particular package format, signature representation, or pane-tree implementation
   ownership, and saved layouts
 - [ADR-02](ADR-02-pane-tree-nodes-have-stable-ids.md): stable node identity
 - [ADR-03](ADR-03-restored-state-never-runs-a-program.md): inert restored state
-- [ADR-12](ADR-12-unchosen-changes-never-move-focus-or-arm-input.md): a window a program opens takes no focus

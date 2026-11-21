@@ -80,7 +80,8 @@ final class LayoutRequestTests: XCTestCase {
 
   /// Catches a first layout that leaves a pane outside the caller's group, replaces the source's
   /// applet, gives a new pane the wrong control, or starts an applet before it learns its control.
-  /// Focus stays on the pane that had it.
+  /// A layout is the user's splits made at once, so its last new pane takes focus, as the last of
+  /// those splits would.
   func testAFirstLayoutWrapsTheSourceAndItsNewPanesInTheCallersGroup() async throws {
     let fixture = makeFixture()
     let (controller, pane) = try fixture.openWindow()
@@ -92,7 +93,7 @@ final class LayoutRequestTests: XCTestCase {
     XCTAssertEqual(panes.first, source)
     XCTAssertEqual(controller.paneIDs, panes)
     XCTAssertTrue(controller.paneArea.applet(for: source) === sourceApplet)
-    XCTAssertEqual(controller.focusedPane, source)
+    XCTAssertEqual(controller.focusedPane, panes.last)
 
     let group = try XCTUnwrap(controller.paneArea.tree.groups.first)
 
@@ -362,7 +363,7 @@ final class LayoutRequestTests: XCTestCase {
   }
 
   /// Catches a later layout that replaces a member's applet, or that sweeps up a pane the user
-  /// split off. The members move and keep their applets.
+  /// split off. The members move and keep their applets. A layout that makes no pane moves no focus.
   func testALaterLayoutMovesOnlyOwnedMembersAndKeepsTheirApplets() async throws {
     let fixture = makeFixture()
     let (controller, pane) = try fixture.openWindow()
@@ -375,10 +376,12 @@ final class LayoutRequestTests: XCTestCase {
       + #"{"pane":\#(source.rawValue)},{"pane":\#(panes[1].rawValue)}]}"#
 
     controller.enableRemoteControl(panes[1])
+    controller.paneArea.focus(source)
 
     let moved = try await layOut(fixture, swapped)
 
     XCTAssertEqual(moved, [panes[2], source, panes[1]])
+    XCTAssertEqual(controller.focusedPane, source)
     XCTAssertEqual(controller.paneIDs, moved)
 
     for (index, id) in panes.enumerated() {
