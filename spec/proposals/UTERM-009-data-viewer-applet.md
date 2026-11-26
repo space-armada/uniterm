@@ -522,6 +522,12 @@ None.
   the picker's place above the filter, "not computed" cells, and a workbook with a date column.
 - On 2026-11-26 the user ran the visual check on a three-sheet workbook and a 1904-date workbook. The sheet picker,
   "not computed" cells, cached formula results, and every date, serial 60 and the 1904 shift included, looked right.
+- On 2026-11-26, after the review's fixes, `DataViewerUITests` and `CommandPaletteUITests` ran. The first run hung both
+  open-panel tests past their minute and beachballed the app. The filter count was listed under a parent it did not
+  name, and the UI tests' accessibility snapshot looped on it. "Hang the data viewer's filter count from the search
+  field's cell" fixed it. The rerun passed all 27 tests in their original order, with no restarts and no crash reports.
+  One run in between failed the Cmd-Shift-G step of `testCommandFHighlightsMatchesAndCommandGStepsBetweenThem` once. The
+  test passed three times alone and in the full rerun, so the cause stays unknown.
 
 ## Decision Log
 
