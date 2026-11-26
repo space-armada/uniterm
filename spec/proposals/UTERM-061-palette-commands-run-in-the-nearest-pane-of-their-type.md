@@ -505,6 +505,7 @@ None.
   controller owns. Declined: it applies ADR-14's premise that what a controller opened holds nothing the user placed
   there, and only two places, this walk and UTERM-018's, follow it.
 - 2026-11-26: Accepted after its review.
+- 2026-11-26: Scheduled as M1-M2 in queue.md, after UTERM-018 M1-M5.
 
 ## References
 

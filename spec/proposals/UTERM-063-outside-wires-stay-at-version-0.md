@@ -409,6 +409,7 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 - 2026-11-26: Risk review added five risks: a pre-reset program naming version 1, additions to the declared-stable list,
   declaration as a one-way door, re-approving rebuilt native controllers, and an outside program relying on a wire at 0.
   Raised the stale-program risk's likelihood to high for the user's own rebuilds. (autonomous)
+- 2026-11-26: Scheduled as M1-M2 in queue.md, before UTERM-043 M1.
 
 ## References
 

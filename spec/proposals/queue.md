@@ -8,6 +8,7 @@
 | UTERM-046 M3 | UTERM-046 M2, UTERM-046 M4 | Split from M1-M2 and M4: moves test sites onto M2's fixture handle and M4's guarded call |
 | UTERM-045 M3 | UTERM-045 M1 | Split from M1: the count gates M2. It advances only as pushed CI runs accumulate. A later run recounts |
 | UTERM-045 M2 | UTERM-045 M3, UTERM-044 M1 | Split from M1: starts once M3's clean count is met. After UTERM-044 M1, so its own count runs on shards and never spans that landing |
+| UTERM-063 M1-M2 | None | Placed before UTERM-043 M1, the first row that changes an external wire. In-place wire changes below it land after M2 |
 | UTERM-043 M1 | None | Split from M2: M1 builds only on today's control code. M2 checks it against newer features |
 | UTERM-041 M1-M2 | None | |
 | UTERM-042 M1-M3 | UTERM-041 M2 | M2 builds on UTERM-041 M1's tab bar and markers. M3 builds on its chip. M1 needs neither |
@@ -31,6 +32,7 @@
 | UTERM-029 M1-M3 | UTERM-024 M2, UTERM-025, UTERM-026, UTERM-030 M2, UTERM-032 M1 | Extends the presenter with UTERM-026's notes window, UTERM-030 M2's slide images, and UTERM-032 M1's input file |
 | UTERM-043 M2 | UTERM-019 M6, UTERM-024, UTERM-028, UTERM-041, UTERM-042 | Split from M1: each check runs when the feature it names has landed. UTERM-019 M3 precedes M6 in its rows |
 | UTERM-018 M1-M5 | None | |
+| UTERM-061 M1-M2 | None | Reuses the shared nearest-pane metric and tie rule that UTERM-018 M1 builds |
 | UTERM-040 M1-M3 | None | |
 | UTERM-039 M1 | None | |
 | UTERM-033 M1 | None | |
@@ -43,3 +45,4 @@
 | UTERM-053 M1 | UTERM-041 M1, UTERM-052 M2 | Needs UTERM-041 M1's scrolling tab bar and UTERM-052 M2's record choke point |
 | UTERM-059 M1 | UTERM-052 M2 | Needs UTERM-052 M2's saved-state revision. Placed after UTERM-053 M1, so every write to the terminal's tabs reaches the one place the revision observers watch |
 | UTERM-058 M1-M3 | UTERM-053 M1 | M1 measures after UTERM-053 M1's read-through view. Placed after UTERM-059 M1, so M2's terminal ID map joins a terminal whose writes already move the revision |
+| UTERM-062 M1-M6 | UTERM-063, UTERM-064 | Blocked until UTERM-064 is accepted and queued. Amend UTERM-018 M3 and UTERM-006 M5 first, per its Impacts |

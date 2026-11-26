@@ -631,6 +631,7 @@ None. Every question is settled.
 - 2026-11-26: ADR candidate: whether an open into an occupied pane adds or replaces, across applets. Outcome,
   2026-11-26: Declined: it fails Architecture. The rule governs where an open lands, which UTERM-018 decides for every
   open, and only the viewers change here. The browser already adds a tab.
+- 2026-11-26: Scheduled as M1-M6 in queue.md, at the end. The row waits on UTERM-063 and UTERM-064.
 
 ## References
 
