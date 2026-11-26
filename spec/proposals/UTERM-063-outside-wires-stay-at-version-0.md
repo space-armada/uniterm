@@ -28,9 +28,9 @@
 
 Every external version in uniterm resets to 0 and stays there through breaking changes. An external version is one that
 a program or file uniterm does not build must name or check. Version 0 says the interface is not stable and makes no
-compatibility promise. An older program is refused, never reinterpreted. An external version leaves 0 only when the
-user declares it version 1, separately from uniterm's own release. A check fails the build when one moves without that
-declaration. Internal versions, which only uniterm reads, keep their own rules.
+compatibility promise. An older program is refused, never reinterpreted. An external version leaves 0 only when
+uniterm's maintainers declare it version 1, separately from uniterm's own release. A check fails the build when one
+moves without that declaration. Internal versions, which only uniterm reads, keep their own rules.
 
 ## Motivation
 
@@ -67,12 +67,12 @@ Rationale: a bump at 0 promises nothing, so it only adds noise and the temptatio
 is that a frozen number cannot tell an old program from a new one at the handshake. See "Errors name the mismatch",
 "A changed meaning is refused, never reinterpreted", and "A replaced bundle is refused before any call".
 
-### An external version reaches 1 only when the user declares it
+### An external version reaches 1 only when uniterm's maintainers declare it
 
-Decision: each external version leaves 0 only when the user declares it version 1. No version moves automatically, and
-none moves because a proposal changes something. Each is declared on its own, and none is tied to uniterm's own
-release. From version 1 on, ADR-13 applies to a wire in full, and every other external version follows its own rule.
-The user chose this on 2026-11-26.
+Decision: each external version leaves 0 only when uniterm's maintainers declare it version 1. No version moves
+automatically, and none moves because a proposal changes something. Each is declared on its own, and none is tied to
+uniterm's own release. From version 1 on, ADR-13 applies to a wire in full, and every other external version follows its
+own rule. The user chose this on 2026-11-26.
 
 Rationale: a protocol is ready to promise compatibility when its shape has settled, which can come before or after the
 app's 1.0. The user asked that no version move again unless they say so.
@@ -204,23 +204,24 @@ it, which would let a swapped command pass, so that path goes.
 ### The build enforces the freeze
 
 Decision: a check, run by `make check` and CI, fails when any version the freeze covers differs from 0, unless that
-external version is listed as declared stable. The list lives in the repository and starts empty. Only the user adds to
-it, as the declaration. The project's instructions point at the check.
+external version is listed as declared stable. The list lives in the repository and starts empty. Only uniterm's
+maintainers add to it, as the declaration. The project's instructions point at the check.
 
 Rationale: an instruction alone is forgotten by the next session that bumps a version out of habit. A failing check
 cannot be.
 
 ### ADR-13 at version 0
 
-Decision: this proposal asks the user to amend ADR-13 with the following text. The amendment applies once the user
-approves it. Amended 2026-11-26; see Decision Log.
+Decision: ADR-13 is amended with the following text. The user approved C1 and the rename to "external wire" on
+2026-11-26, and gave P5's wording. M1 applies it. Amended 2026-11-26; see Decision Log.
 
 > **C1** (relaxes P1, P2, P3, and P5): a wire whose protocol is at version 0 carries no compatibility promise. A change
 > may land in place, without a new version, and an older program may stop working. An older program's message is still
 > read with its old meaning or refused, never reinterpreted, which keeps P1's reason. Version 0 marks a wire whose shape
 > has not settled, offered to no program outside the project. A contract the wire carries keeps its own rule, per P4.
 
-> **P5** (amended): the rule holds from version 1 of each wire, which the user declares.
+> **P5** (amended): the rule holds for each wire from version 1. A wire reaches version 1 only when uniterm's
+> maintainers declare it stable. Until then it is at version 0, under C1.
 
 > Amendments line: "2026-11-26: Added C1. A wire whose shape has not settled carries no compatibility promise, since no
 > outside program relies on it. C1 keeps P1's reason: an older program is refused, never reinterpreted. P5 names version
@@ -255,16 +256,16 @@ None. Every question is settled.
   permissions name no version, and each package is signed again.
   Accepted: the only packages are the user's own and the repository's fixtures, and M1 rewrites the fixtures.
 - **A session adds to the declared-stable list to make the check pass** — likelihood: medium, impact: medium.
-  Mitigation: the project's instructions say only the user adds to the list, and an addition shows in the diff the user
-  reviews.
-- **A program built before the reset names version 1** — likelihood: low, impact: medium. After the user declares an
-  external version 1, a program or script from before the reset that still names 1 or 1.0 passes the version
-  check under the new meaning. A script that checks `(uniterm/api-version)` against 1 does the same.
-  Accepted: the user chose version 1, and such programs are the user's own.
-- **Declaring a wire stable is a one-way door** — likelihood: medium, impact: medium. From version 1, ADR-13
-  holds the wire to P1 through P3, so its next change needs the negotiation UTERM-028 or UTERM-056 builds.
-  Mitigation: only the user declares, and UTERM-028 and UTERM-056 wait on that declaration, so the cost is in front of
-  the user when they declare.
+  Mitigation: the project's instructions say only uniterm's maintainers add to the list, and an addition shows in the
+  diff they review.
+- **A program built before the reset names version 1** — likelihood: low, impact: medium. After uniterm's maintainers
+  declare an external version 1, a program or script from before the reset that still names 1 or 1.0 passes the version
+  check under the new meaning. A script that checks `(uniterm/api-version)` against 1 does the same. Accepted: the user
+  chose version 1, and such programs are the user's own.
+- **Declaring a wire stable is a one-way door** — likelihood: medium, impact: medium. From version 1, ADR-13 holds the
+  wire to P1 through P3, so its next change needs the negotiation UTERM-028 or UTERM-056 builds. Mitigation: only
+  uniterm's maintainers declare, and UTERM-028 and UTERM-056 wait on that declaration, so the cost is in front of the
+  user when they declare.
 - **Every in-place change makes the user re-approve rebuilt native controllers** — likelihood: high, impact: low. A
   stale native controller must be rebuilt, which changes its version digest, and ADR-14 P9 ties a remembered approval
   to that digest. Accepted: the only native controllers are the user's own, and a rebuild already asks today.
@@ -289,7 +290,7 @@ agree on every message.
 - uniterm keeps an edition for each permission kind and records it with each approval. A test grows a kind's edition
   and checks that an approval made at the older edition no longer covers it, and the user is asked again
 - A protocol-mismatched exec hello is never admitted on its placeholder schema of 0.0
-- `uniterm/api-version` reports 0, and its doc says it stays at 0 until the user declares it
+- `uniterm/api-version` reports 0, and its doc says it stays at 0 until uniterm's maintainers declare it
 - A policy file written before the reset is set aside with a notice, and the next approval is saved
 - The bundled `uniterm` command, the Janet helper, every test fixture, and every example driver and controller in the
   repository speak version 0, `Tests/ExecTestSupport/Fixtures/driver.pl` and the controller package fixtures included.
@@ -301,7 +302,7 @@ agree on every message.
 - The check leaves every internal version alone: DocumentWire, ImageWire, the layout and payload versions, the
   command-pin snapshot, the HSTS store, and the policy file format
 - The version docs on ScriptWire, the exec wire, and the command schema version describe version 0 and 0.0
-- ADR-13 carries the amendment the user approved, or the milestone waits for it
+- ADR-13 carries the amendment the user approved
 - ADR-13 says "external wire" where it said "outside wire", its title included, as a change of wording with no change of
   meaning. Its filename and the quoted text in its Amendments stay as they are
 - `docs/glossary.md`'s "Wires" section is titled "Wires and versions", and carries these entries:
@@ -312,11 +313,11 @@ agree on every message.
     internal version, and it refuses any version but its own
   - **External version**: a version that a program or file uniterm does not build names or checks. These are
     ScriptWire's, the exec wire's, each applet command schema's, `uniterm/api-version`, the controller descriptor
-    format. It stays at 0 until the user declares it version 1, per UTERM-063
+    format. It stays at 0 until uniterm's maintainers declare it version 1, per UTERM-063
   - **Internal version**: a version only uniterm reads, such as an internal wire's, the layout file's, and a
     permission kind's edition. It keeps its own rules
-  - **Declared stable**: an external version the user has declared version 1. Its compatibility promise holds from then
-    on
+  - **Declared stable**: an external version uniterm's maintainers have declared version 1. Its compatibility promise
+    holds from then on
 - ADR-16's consequence line says a changed answer lands in place while its wire is at 0
 - UTERM-028 and UTERM-056 say each waits on its wire's declaration
 - The impacted proposals that plan a version bump say the change lands in place while the wire is at 0, after M2
@@ -389,6 +390,11 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 - 2026-11-26: Permissions carry no version in descriptors. uniterm tracks an internal edition per kind, and an approval
   made at an older edition is asked again. The user chose this over two other options: a new kind name for a changed
   meaning, and leaving permission versions out of the freeze.
+- 2026-11-26: The user approved the ADR-13 amendment's C1 and the rename from "outside wire" to "external wire". The
+  user corrected P5's draft, "the rule holds from version 1 of each wire, which the user declares": no wire is declared
+  yet, and uniterm's maintainers declare, not its users. P5 now says a wire reaches version 1 only when uniterm's
+  maintainers declare it stable, and is at version 0 under C1 until then. Every forward-looking "the user declares" in
+  this proposal now says "uniterm's maintainers declare".
 - 2026-11-26: Rewrote the drafted ADR-13 amendment. C1 had said "a wire, or a contract a wire carries, at version 0
   carries no compatibility promise. Its meaning may change in place". It now covers wire protocols only, leaves every
   carried contract to P4, and keeps P1's reason. Command schemas get their version-0 rule in their own contract in
