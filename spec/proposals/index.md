@@ -64,7 +64,7 @@
 | [UTERM-060](UTERM-060-keep-the-evidence-of-where-ui-test-input-went.md) | A failed UI run keeps XCTest's per-event confirmations and which app was frontmost, and a debug build records the input it receives | accepted |
 | [UTERM-061](UTERM-061-palette-commands-run-in-the-nearest-pane-of-their-type.md) | A palette command of another applet type runs in the nearest pane of its type | draft |
 | [UTERM-062](UTERM-062-viewer-tabs.md) | The data, text, image, and map viewers hold several files as tabs | accepted |
-| [UTERM-063](UTERM-063-outside-wires-stay-at-version-0.md) | Every outside wire and applet command schema stays at version 0 until the user declares it stable | designing |
+| [UTERM-063](UTERM-063-outside-wires-stay-at-version-0.md) | Every external version stays at 0 until the user declares it stable | designing |
 | [UTERM-064](UTERM-064-programs-name-what-they-act-on.md) | Every program command names its target, and opens answer with the identity of what they made | draft |
 
 ## Dependency Graph

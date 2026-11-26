@@ -1,4 +1,4 @@
-# UTERM-063: Outside Wires Stay at Version 0 Until Declared Stable
+# UTERM-063: External Versions Stay at 0 Until Declared Stable
 
 **Status:** designing
 **Created:** 2026-11-26
@@ -19,75 +19,95 @@
 - UTERM-062, UTERM-064 — their commands change in place at 0. Each change follows "A changed meaning is refused, never
   reinterpreted": an older program's message is read with its old meaning or refused.
 - UTERM-006, UTERM-019, UTERM-024, UTERM-026, UTERM-029, UTERM-030, UTERM-032, UTERM-040, UTERM-048, UTERM-054,
-  UTERM-055, UTERM-057 — each plans a new version of a wire or an applet command schema. While that wire or schema is
-  at 0, the change lands in place instead.
-- Every impacted proposal above — an in-place change to a wire or schema at 0 lands only after M2, which builds the
-  guards against stale programs.
+  UTERM-055, UTERM-057 — each plans a new version of an external interface. While that version is at 0, the change
+  lands in place instead.
+- Every impacted proposal above — an in-place change to an external interface at 0 lands only after M2, which builds
+  the guards against stale programs.
 
 ## Summary
 
-Every wire, every applet command schema, and the Janet scripting API's version reset to version 0, and stay there
-through breaking changes. Version 0 carries no compatibility promise. An older program is refused, never
-reinterpreted. A wire leaves 0 only when the user declares it version 1, separately from uniterm's own release. A check
-fails the build when a version moves without that declaration.
+Every external version in uniterm resets to 0 and stays there through breaking changes. An external version is one that
+a program or file uniterm does not build must name or check. Version 0 says the interface is not stable and makes no
+compatibility promise. An older program is refused, never reinterpreted. An external version leaves 0 only when the
+user declares it version 1, separately from uniterm's own release. A check fails the build when one moves without that
+declaration. Internal versions, which only uniterm reads, keep their own rules.
 
 ## Motivation
 
-uniterm is at 0.1.0, and nobody outside the user depends on its wires. Yet ScriptWire is at version 14, the exec wire at
-4, and the viewers' command schemas at 1.0. Each number counts breaking revisions made before anyone needed them kept.
-ADR-13 then promises compatibility from those numbers on, so every later change to a wire pays for version splits and
-negotiation that serve no deployed program. UTERM-062 showed the cost: requiring programs to name a tab needed a
-compatibility rule for programs that do not exist outside the user's own.
+The user's goals, in their words on 2026-11-26:
+
+- Version 0 shows that the external interface is not stable, and provides no backwards-compatibility guarantee yet
+- uniterm is in active development, with many breaking changes. Bumping a version is almost meaningless, because even
+  early adopters may not see every version
+- It is awkward for uniterm 1.0 to require ScriptWire version 14, when none of the earlier versions were really
+  published or available
+
+Today ScriptWire is at version 14, the exec wire at 4, and the viewers' command schemas at 1.0. Each number counts
+breaking revisions made before anyone needed them kept. ADR-13 then promises compatibility from those numbers on, so
+every later change to a wire pays for version splits and negotiation that serve no deployed program. UTERM-062 showed
+the cost: requiring programs to name a tab needed a compatibility rule for programs that do not exist outside the
+user's own.
 
 ## Design Decisions (Settled)
 
-### Every wire and schema is at version 0
+### Every external version is at 0
 
-Decision: ScriptWire, the exec wire, and every applet command schema reset to version 0. A schema's version is 0.0.
-Every program built against an earlier build must be rebuilt or rewritten against this one. The user chose this on
-2026-11-26.
+Decision: every external version resets to 0. A schema's version is 0.0. Every program built against an earlier build
+must be rebuilt or rewritten against this one. The user chose this on 2026-11-26. Amended 2026-11-26; see Decision Log.
 
 Rationale: version 0 means "no compatibility promise", as in semantic versioning. Resetting now, before any other
 proposal bumps a version, makes one break instead of many.
 
 ### Version 0 never bumps
 
-Decision: while a wire or schema is at 0, a breaking change lands in place, and the version stays 0. The user chose
+Decision: while an external version is at 0, a breaking change lands in place, and the version stays 0. The user chose
 this on 2026-11-26, over semantic versioning's 0.y, where the minor still moves.
 
 Rationale: a bump at 0 promises nothing, so it only adds noise and the temptation to keep old versions alive. The cost
 is that a frozen number cannot tell an old program from a new one at the handshake. See "Errors name the mismatch",
 "A changed meaning is refused, never reinterpreted", and "A replaced bundle is refused before any call".
 
-### A wire reaches version 1 only when the user declares it
+### An external version reaches 1 only when the user declares it
 
-Decision: each wire and each applet command schema leaves 0 only when the user declares it version 1. Each is
-declared on its own, and none is tied to uniterm's own release. From version 1 on, ADR-13 applies to a wire in full,
-and a schema follows its own rule, per ADR-13 P4.
+Decision: each external version leaves 0 only when the user declares it version 1. No version moves automatically, and
+none moves because a proposal changes something. Each is declared on its own, and none is tied to uniterm's own
+release. From version 1 on, ADR-13 applies to a wire in full, and every other external version follows its own rule.
+The user chose this on 2026-11-26.
 
 Rationale: a protocol is ready to promise compatibility when its shape has settled, which can come before or after the
 app's 1.0. The user asked that no version move again unless they say so.
 
 ### What the freeze covers
 
-Decision: the freeze covers every wire's protocol version, each applet's command schema version, and
-`uniterm/api-version`, the Janet scripting API's version. The wires are ScriptWire, the exec wire, DocumentWire, and
-ImageWire. Each resets to 0 and stays there. No
-version moves automatically, and none moves because a proposal changes something. A version leaves 0 only when the user
-says so. The user chose this on 2026-11-26.
+Decision: the freeze covers every external version, and only those. The user chose this on 2026-11-26.
 
-These keep their own rules and stay out of the freeze and the check:
+External: a program or file that uniterm does not build names or checks the version.
 
-- The layout envelope's version and each applet's payload version, under ADR-06
-- The controller descriptor format, each permission's (kind, version) pair, and the controller policy file's format.
-  ADR-14 P10 relies on permission versions to stop a changed meaning from widening a stored approval
+- ScriptWire's protocol version. Native controllers ship on their own and speak it. The bundled `uniterm` command
+  speaks it too, but one number serves both
+- The exec wire's protocol version, spoken by exec drivers in any language
+- Each applet's command schema version, named by scripts, exec drivers, and controllers
+- `uniterm/api-version`, the Janet scripting API's version, checked by the user's scripts
+- The controller descriptor format, written by controller authors
+- Each controller permission's version, named in those descriptors
 
-The check reads a named list of constants: each wire's version, each registered applet command schema's version, and
-`uniterm/api-version`. It never greps for the word "version".
+Internal: only uniterm reads the version. These keep their own rules, and stay out of the freeze and the check.
 
-Rationale: each excluded version guards stored data or a security rule that a frozen number would lose. A layout
-envelope reset to 0 would set every saved layout aside, per ADR-06. A frozen permission version would let a changed
-meaning reuse a stored approval. (autonomous for the exclusions)
+- DocumentWire and ImageWire. The app and its document and image helpers ship in one bundle, so they keep exact-match
+  bumps
+- The layout file's envelope version, and each applet's saved state inside it, under ADR-06
+- The map's command-pin snapshot and the browser's HSTS store
+- The controller policy file's format. uniterm writes it when the user approves a controller, and reads it back
+
+The check reads a named list of constants: ScriptWire's and the exec wire's versions, each registered applet command
+schema's version, `uniterm/api-version`, the descriptor format, and each permission's version. It never greps for the
+word "version".
+
+Rationale: the user's goals are about what outside programs see. Version 0 tells an author the interface is unstable.
+Their programs would otherwise depend on numbers that count unpublished revisions. An internal version is internal in
+the sense that only uniterm needs to know it. Nobody outside reads its number, so it says nothing about stability to
+anyone, and its bumps cost no author anything. DocumentWire and ImageWire keep their exact match, which tells two builds
+apart when the bundle is replaced under a running app.
 
 ### Errors name the mismatch
 
@@ -101,7 +121,7 @@ names the field and the fix is the only signal left.
 
 ### A changed meaning is refused, never reinterpreted
 
-Decision: while a wire or schema is at 0, a message an older program sends is either read with its old meaning or
+Decision: while an external version is at 0, a message an older program sends is either read with its old meaning or
 refused. It never acts under a new meaning. Three rules keep this:
 
 - A change of meaning never reuses a field name, message type, tag, or enumerated value. The changed thing takes a new
@@ -152,7 +172,7 @@ it, which would let a swapped command pass, so that path goes.
 ### The build enforces the freeze
 
 Decision: a check, run by `make check` and CI, fails when any version the freeze covers differs from 0, unless that
-wire or schema is listed as declared stable. The list lives in the repository and starts empty. Only the user adds to
+external version is listed as declared stable. The list lives in the repository and starts empty. Only the user adds to
 it, as the declaration. The project's instructions point at the check.
 
 Rationale: an instruction alone is forgotten by the next session that bumps a version out of habit. A failing check
@@ -186,7 +206,25 @@ would give two answers for one schema. Permission versions keep the rule ADR-14 
 
 ## Design Decisions (Open)
 
-None. Every question is settled.
+### A permission whose meaning changes at 0
+
+ADR-14 P10 says a change in a permission's meaning cannot widen an existing approval without the user's consent. Today a
+changed meaning is a new permission version, and a stored approval names the old one, so it does not cover the change.
+At a frozen 0 the version cannot carry that.
+
+- Apply "A changed meaning is refused, never reinterpreted": a permission whose meaning changes takes a new kind name.
+  An approval stored under the old kind never covers the new meaning, so ADR-14 P10 holds with no version moving
+- Leave permission versions out of the freeze, against the user's rule that every external version freezes
+
+### The controller policy file at the reset
+
+The policy file stores each approval as a permission kind and version, all at 1 today. After the reset this build knows
+only version 0. It reads a pre-reset file as written by a newer uniterm, then remembers no trust and saves none, and
+leaves the file as it is. Every controller approval would stop being saved until the user deletes the file by hand.
+
+- Read a pre-reset file's version-1 permissions as version 0, since the reset changes no meaning. Remembered approvals
+  survive the reset
+- Set a pre-reset file aside, as a broken file is today, with a notice. The user approves each controller again
 
 ## Risks
 
@@ -198,11 +236,14 @@ None. Every question is settled.
   high because the user's own rebuilds produce stale programs.
 - **A later proposal bumps a version out of habit** — likelihood: high, impact: low.
   Mitigation: the build check fails, and names the declared-stable list.
+- **Controller packages must be rewritten at the reset** — likelihood: high, impact: low. Every package's descriptor
+  names format 1 or 2, and every permission names version 1. After the reset each must name 0 and be signed again.
+  Accepted: the only packages are the user's own and the repository's fixtures, and M1 rewrites the fixtures.
 - **A session adds to the declared-stable list to make the check pass** — likelihood: medium, impact: medium.
   Mitigation: the project's instructions say only the user adds to the list, and an addition shows in the diff the user
   reviews.
-- **A program built before the reset names version 1** — likelihood: low, impact: medium. After the user declares a
-  wire or schema version 1, a program or script from before the reset that still names 1 or 1.0 passes the version
+- **A program built before the reset names version 1** — likelihood: low, impact: medium. After the user declares an
+  external version 1, a program or script from before the reset that still names 1 or 1.0 passes the version
   check under the new meaning. A script that checks `(uniterm/api-version)` against 1 does the same.
   Accepted: the user chose version 1, and such programs are the user's own.
 - **Declaring a wire stable is a one-way door** — likelihood: medium, impact: medium. From version 1, ADR-13
@@ -222,22 +263,23 @@ None. Every question is settled.
 
 **Status:** NOT STARTED
 
-No wire or schema changes shape in this milestone, so a pre-reset program is refused at the hello, and two builds at 0
+No external interface changes shape in this milestone, so a pre-reset program is refused at the hello, and two builds at
+0
 agree on every message.
 
-- ScriptWire, the exec wire, DocumentWire, ImageWire, and every applet command schema report version 0, and a schema
-  reports 0.0
+- ScriptWire, the exec wire, every applet command schema, the controller descriptor format, and every controller
+  permission report version 0, and a schema reports 0.0. DocumentWire and ImageWire keep their versions
 - A protocol-mismatched exec hello is never admitted on its placeholder schema of 0.0
 - `uniterm/api-version` reports 0, and its doc says it stays at 0 until the user declares it
 - The bundled `uniterm` command, the Janet helper, every test fixture, and every example driver and controller in the
-  repository speak version 0, `Tests/ExecTestSupport/Fixtures/driver.pl` included. Tests that compute an older version
-  as the current one minus 1 still work at 0
-- `make check` and CI fail when any version the freeze covers differs from 0 and its wire or schema is not on the
-  declared-stable list. The check reads the named constants, and covers every registered applet command schema and
-  `uniterm/api-version`
+  repository speak version 0, `Tests/ExecTestSupport/Fixtures/driver.pl` and the controller package fixtures included.
+  Tests that compute an older version as the current one minus 1 still work at 0
+- `make check` and CI fail when any version the freeze covers differs from 0 and is not on the
+  declared-stable list. The check reads the named constants, and covers every registered applet command schema,
+  `uniterm/api-version`, the descriptor format, and every permission version
 - The declared-stable list exists, empty, and the project's instructions name it
-- The check leaves layout and payload versions, the controller descriptor format, permission versions, and the policy
-  file format alone
+- The check leaves every internal version alone: DocumentWire, ImageWire, the layout and payload versions, the
+  command-pin snapshot, the HSTS store, and the policy file format
 - The version docs on ScriptWire, the exec wire, and the command schema version describe version 0 and 0.0
 - ADR-13 carries the amendment the user approved, or the milestone waits for it
 - ADR-16's consequence line says a changed answer lands in place while its wire is at 0
@@ -268,8 +310,6 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   it finds on disk later
 - The ScriptWire library that native controllers link never sends an identity on its own. A native controller built
   against it is admitted as before. The app never sends its own identity first
-- DocumentWire's and ImageWire's decoders refuse what they do not know, by name. The app checks that each document and
-  image helper it launches comes from its own build, and refuses a mismatch before any request
 
 ## Decision Log
 
@@ -299,6 +339,13 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   took a number no earlier build used. That overrode the user's settled decision, and the user rejected it at the
   review gate. The decision stands as the user chose it: version 1. The reuse of 1 by pre-reset programs is a recorded,
   accepted risk.
+- 2026-11-26: Re-scoped the freeze to external versions, at the user's direction. The user wrote out the goals now in
+  Motivation, and drew the line: an external version is one a program or file uniterm does not build names, and an
+  internal one is one only uniterm needs to know. The freeze gains the controller descriptor format and the permission
+  versions. DocumentWire and ImageWire leave it, which reverses the earlier gate entry that froze them. The title
+  changed from "Outside Wires Stay at Version 0 Until Declared Stable", since a wire is only one kind of external
+  interface. "Every wire and schema is at version 0" now reads "every external version". Two open questions follow:
+  how a permission's meaning changes at 0, and what the reset does to the controller policy file.
 - 2026-11-26: Rewrote the drafted ADR-13 amendment. C1 had said "a wire, or a contract a wire carries, at version 0
   carries no compatibility promise. Its meaning may change in place". It now covers wire protocols only, leaves every
   carried contract to P4, and keeps P1's reason. Command schemas get their version-0 rule in their own contract in
@@ -315,6 +362,6 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 ## References
 
 - ADR-13: outside wires stay compatible across versions
-- ADR-14: P10, why permission versions stay out of the freeze
+- ADR-14: P10, which "A permission whose meaning changes at 0" must keep
 - ADR-06: layout file versioning, outside the freeze
 - UTERM-062: "Callers that cannot name a tab"
