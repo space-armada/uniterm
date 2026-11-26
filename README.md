@@ -4,7 +4,8 @@ uniterm is a unified terminal emulator for macOS. It goes beyond a plain termina
 
 A window holds a tree of resizable split panes. Each pane runs one applet. Planned applets include a terminal, a
 browser, a data viewer, an image viewer, a text viewer, a map viewer, and a REPL. The REPL scripts uniterm itself in
-Janet, a Lisp. See [docs/repl.md](docs/repl.md) for using it.
+Janet, a Lisp. See [docs/repl.md](docs/repl.md) for using it. [docs/glossary.md](docs/glossary.md) defines the terms
+the docs and specs use.
 
 Each window also has a status bar and a command palette. Both can be docked in different places.
 
