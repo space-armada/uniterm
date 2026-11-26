@@ -6,7 +6,8 @@
 ## Observed
 
 Found by a design critique of UTERM-062 on 2026-11-26. After the system sends one memory-pressure warning, every data
-viewer pane that was already open skips every sort, silently, until it loads another file.
+viewer pane that was already open skips every sort until it loads another file. The notice it posts blames the row
+count, "There is not enough memory to sort this many rows", not the memory warning.
 
 ## Cause
 
