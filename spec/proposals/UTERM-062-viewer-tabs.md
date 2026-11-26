@@ -34,16 +34,19 @@
   Its single close for a set of tabs asks one question for the set, which bears on "The map's unsaved edits across
   tabs".
 - UTERM-054, UTERM-055 — "For an applet with one tab or no per-tab owners, a pane among the program's targets counts as
-  wholly its own", and a pane capture shows every title in the tab bar. A viewer pane with tabs is no longer a one-tab
-  applet, so that rule needs amending. Its open question "What a program's capture shows of a file the program may not
-  read" decides what a capture of a viewer tab shows. The open bug `20261122-capture-bypasses-image-viewer-read-scope`
+  wholly its own", and a pane capture shows every title in the tab bar. Under "What a program may reach" option A,
+  viewer tabs have no per-tab owners and the rule applies unchanged. Under option B, it needs amending. Either way, its
+  open question "What a program's capture shows of a file the program may not read" decides whether a capture shows
+  the titles of tabs outside the program's scope. The open bug `20261122-capture-bypasses-image-viewer-read-scope`
   is related.
 - UTERM-041 — accepted, not started. It exempts a driver's pane from the per-tab authority marker because "Only the
   image and map viewers accept a driver ... and each has one tab", and says the exclusion "needs another look" if a
   multi-tab applet accepts a driver. It also puts the marker on a viewer's one tab. Both premises end here. Which tabs
   carry the marker depends on "What a program may reach".
 - UTERM-028 — accepted, not started. Its version negotiation is what would let the exec wire take a new version. Until
-  it lands, the exec wire gains no tab field.
+  it lands, the exec wire does not change.
+- UTERM-056 — accepted, not started. Its negotiation is what would let ScriptWire take a new version. Until it lands,
+  ScriptWire does not change, and native controllers keep today's meaning of `send`.
 - UTERM-006 — M5, exec driver reads, assumes one source per image pane.
 - UTERM-061 — the viewers' tab commands join the titles shared across applet types.
 
@@ -148,7 +151,8 @@ keeps a bounded set of sources.
 - A. Hidden image tabs keep their bitmaps, in the pane's one lease. A full lease drops a hidden tab's cache first, so a
   hidden tab redraws from the helper when selected.
 - B. Each tab gets its own lease and floor. A lease is granted anything inside its 256 MiB floor even past the app's
-  limit, so each tab raises the app's bitmap bound by its floor: twenty tabs add 5 GiB beyond the 1 GiB limit. The same
+  limit, so the app's bitmap bound becomes the limit plus one floor per lease beyond the first: twenty tabs can hold
+  nearly 5 GiB beyond the 1 GiB limit. The same
   ADR-07 bound question applies as for data files.
 - C. A hidden image tab keeps its place and zoom, and releases its bitmaps. Its first frame on selection comes from the
   helper.
@@ -181,9 +185,9 @@ a tab per call if it added tabs.
 
 Routed opens also come from programs: approved Launch Services senders and `uniterm open`. UTERM-015 does not count
 them as the user's act. A tool that runs `uniterm open` on every save floods tabs the same way. This question must say
-which side of the line those opens fall on. A script's `send` names no version, and ScriptWire matches its version
-exactly inside the app bundle, so a script has no older `send` to stay on. Whether ADR-13 treats the Janet API as an
-outside wire is not settled.
+which side of the line those opens fall on. A Janet script's `send` names no version and runs inside the app bundle, so
+it has no older `send` to stay on. A native controller does: under UTERM-056, ScriptWire's request subset is an outside
+wire, and a controller built at today's version keeps today's meaning of `send`, which is replacement.
 
 - A. On new schema versions, a program's open adds a tab, as the user's does. Today's versions keep replacing the
   selected tab.
@@ -203,11 +207,18 @@ which tab its send made. The data viewer has no remote command schema.
 - C. A command with no tab acts on the tab this caller last opened in the pane, or else on the selected tab. This brings
   in tracking each caller's tabs in four viewers.
 
-Versions constrain every option. Each viewer's command schema carries its own major and minor version under ADR-13 P4,
-and its events, such as the image viewer's `shown` and the map's `pin-selected`, follow it. A tab field there is a new
-minor version. ScriptWire and the exec wire each have one whole-number version and refuse any other at hello, so a tab
-field on either would refuse every deployed caller. The exec wire can take a new version only through UTERM-028's
-negotiation. Until then, tab fields stay in the viewers' command schemas.
+Versions constrain every option, wire by wire:
+
+- Each viewer's command schema carries its own major and minor version under ADR-13 P4, and its events, such as the
+  image viewer's `shown` and the map's `pin-selected`, follow it. A tab field there is a new minor version. A caller on
+  today's minor still receives events from every tab, with no tab field, so the events' meaning for it must stay what it
+  is today.
+- ScriptWire already carries an optional tab on every pane target, so addressing a tab needs no ScriptWire change. Any
+  other ScriptWire change, such as `send` returning the tab it made, needs a new ScriptWire version. ScriptWire matches
+  its version exactly at hello, and its negotiation is UTERM-056's. Native controllers built at today's version keep its
+  meaning of `send` under UTERM-056.
+- The exec wire has one whole-number version, refused on mismatch, and its negotiation is UTERM-028's. Drivers keep
+  today's meaning under UTERM-028.
 
 ### What a program may reach in a viewer pane with tabs
 
@@ -217,6 +228,7 @@ opened beside tabs a program opened.
 - A. A program reaches every tab in a pane it may control.
 - B. A program reaches only the tabs it opened, as the browser's per-controller tab ownership does. UTERM-039 keeps that
   ownership. This brings in per-tab caller ownership in four viewers.
+
 Read scope per tab is settled, so reaching every tab already means each tab's title, directory, and content are gated
 by scope. Viewers differ in how they gate content today: the text and image viewers check read scope, the map
 withholds file-pin values from every program whatever its scope, and the data viewer has no remote schema.
@@ -327,8 +339,9 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
   tab's notices
 - Program commands, events, and opens on a viewer pane follow "What a program addresses", "What a program's open
   does", and "What a program may reach" as settled. Tab fields arrive as new minor versions of the viewers' command
-  schemas. ScriptWire and the exec wire gain no tab field unless UTERM-028's negotiation has landed
-- A caller on today's versions keeps today's meaning, per ADR-13, and no deployed driver is refused at hello
+  schemas. A ScriptWire change waits for UTERM-056's negotiation, and an exec wire change waits for UTERM-028's
+- A caller on today's versions keeps today's meaning, per ADR-13. That includes the events a caller on today's minor
+  receives from every tab. No deployed driver or native controller is refused at hello
 - Each open decision above is settled
 
 ### M2: Data viewer tabs
@@ -407,6 +420,10 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
   question open. Corrected the version facts: ScriptWire and the exec wire have one whole-number version each, and the
   viewers' events belong to their command schemas. Added impacts on UTERM-041 and UTERM-028, the routed opens that
   programs send, labels on options that add scope, and checks for waits, drops, and helper crashes.
+- 2026-11-26: Third critique pass. Corrected ScriptWire: it already carries a tab on pane targets, and its version
+  negotiation is UTERM-056's, not UTERM-028's. Native controllers keep today's meaning of `send`. Added the impact on
+  UTERM-056, made the UTERM-054 impact depend on "What a program may reach", and added a check that events keep their
+  meaning for callers on today's minor.
 - 2026-11-26: ADR candidate: stable tab identity across the program boundary. `adr-impact` found that no ADR covers tab
   identity for any applet. Outcome: undecided, held by "Tab identity".
 - 2026-11-26: ADR candidate: whether an open into an occupied pane adds or replaces, across applets. Outcome: undecided.
