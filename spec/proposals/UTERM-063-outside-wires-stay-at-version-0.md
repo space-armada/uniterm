@@ -26,8 +26,8 @@
 
 ## Summary
 
-ScriptWire, the exec wire, every applet command schema, and the Janet scripting API's version reset to version 0, and
-stay there through breaking changes. Version 0 carries no compatibility promise. An older program is refused, never
+Every wire, every applet command schema, and the Janet scripting API's version reset to version 0, and stay there
+through breaking changes. Version 0 carries no compatibility promise. An older program is refused, never
 reinterpreted. A wire leaves 0 only when the user declares it version 1, separately from uniterm's own release. A check
 fails the build when a version moves without that declaration.
 
@@ -70,20 +70,20 @@ app's 1.0. The user asked that no version move again unless they say so.
 
 ### What the freeze covers
 
-Decision: the freeze covers ScriptWire's protocol version, the exec wire's protocol version, each applet's command
-schema version, and `uniterm/api-version`, the Janet scripting API's version. Each resets to 0 and stays there. No
+Decision: the freeze covers every wire's protocol version, each applet's command schema version, and
+`uniterm/api-version`, the Janet scripting API's version. The wires are ScriptWire, the exec wire, DocumentWire, and
+ImageWire. Each resets to 0 and stays there. No
 version moves automatically, and none moves because a proposal changes something. A version leaves 0 only when the user
 says so. The user chose this on 2026-11-26.
 
 These keep their own rules and stay out of the freeze and the check:
 
-- DocumentWire and ImageWire, which run between the app and helpers in the same bundle, and keep exact-match bumps
 - The layout envelope's version and each applet's payload version, under ADR-06
 - The controller descriptor format, each permission's (kind, version) pair, and the controller policy file's format.
   ADR-14 P10 relies on permission versions to stop a changed meaning from widening a stored approval
 
-The check reads a named list of constants: ScriptWire's version, the exec wire's version, each registered applet
-command schema's version, and `uniterm/api-version`. It never greps for the word "version".
+The check reads a named list of constants: each wire's version, each registered applet command schema's version, and
+`uniterm/api-version`. It never greps for the word "version".
 
 Rationale: each excluded version guards stored data or a security rule that a frozen number would lose. A layout
 envelope reset to 0 would set every saved layout aside, per ADR-06. A frozen permission version would let a changed
@@ -225,7 +225,8 @@ None. Every question is settled.
 No wire or schema changes shape in this milestone, so a pre-reset program is refused at the hello, and two builds at 0
 agree on every message.
 
-- ScriptWire, the exec wire, and every applet command schema report version 0, and a schema reports 0.0
+- ScriptWire, the exec wire, DocumentWire, ImageWire, and every applet command schema report version 0, and a schema
+  reports 0.0
 - A protocol-mismatched exec hello is never admitted on its placeholder schema of 0.0
 - `uniterm/api-version` reports 0, and its doc says it stays at 0 until the user declares it
 - The bundled `uniterm` command, the Janet helper, every test fixture, and every example driver and controller in the
@@ -235,8 +236,8 @@ agree on every message.
   declared-stable list. The check reads the named constants, and covers every registered applet command schema and
   `uniterm/api-version`
 - The declared-stable list exists, empty, and the project's instructions name it
-- The check leaves DocumentWire, ImageWire, layout and payload versions, the controller descriptor format, permission
-  versions, and the policy file format alone
+- The check leaves layout and payload versions, the controller descriptor format, permission versions, and the policy
+  file format alone
 - The version docs on ScriptWire, the exec wire, and the command schema version describe version 0 and 0.0
 - ADR-13 carries the amendment the user approved, or the milestone waits for it
 - ADR-16's consequence line says a changed answer lands in place while its wire is at 0
@@ -267,6 +268,8 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   it finds on disk later
 - The ScriptWire library that native controllers link never sends an identity on its own. A native controller built
   against it is admitted as before. The app never sends its own identity first
+- DocumentWire's and ImageWire's decoders refuse what they do not know, by name. The app checks that each document and
+  image helper it launches comes from its own build, and refuses a mismatch before any request
 
 ## Decision Log
 
@@ -278,6 +281,9 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 - 2026-11-26: The freeze covers ScriptWire's and the exec wire's protocol versions and the applet command schemas.
   DocumentWire, ImageWire, layout and payload versions, controller descriptor and permission versions, and the policy
   file keep their own rules. Converged in 1 pass. (autonomous)
+- 2026-11-26: Review gate: DocumentWire and ImageWire join the freeze, since the user's rule covers every wire. The
+  review had left them bumping without asking. They get the same guards as ScriptWire: strict decoders, and a check that
+  each helper comes from the app's own build.
 - 2026-11-26: Review gate: `uniterm/api-version` joins the freeze. The user stated the rule: a version stays at 0, with
   no automatic bump and no bump because of a proposal, and leaves 0 only when the user says so. The review had left it
   out to keep its "a change that breaks a script changes it" doc.
