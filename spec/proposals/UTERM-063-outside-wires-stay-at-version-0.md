@@ -109,6 +109,18 @@ the sense that only uniterm needs to know it. Nobody outside reads its number, s
 anyone, and its bumps cost no author anything. DocumentWire and ImageWire keep their exact match, which tells two builds
 apart when the bundle is replaced under a running app.
 
+### The controller policy file at the reset
+
+Original question: the policy file stores each approval as a permission kind and version, all at 1 today. After the
+reset this build knows only version 0. It reads a pre-reset file as written by a newer uniterm, then remembers no trust
+and saves none, and leaves the file as it is. What should the reset do with such a file?
+
+Decision: set a pre-reset policy file aside with a notice, as a broken file is today. Every controller is approved
+again once. The user chose this on 2026-11-26.
+
+Rationale: the decision touches only files written before the reset, which in practice means the user's own. The user
+does not need those approvals kept.
+
 ### Errors name the mismatch
 
 Decision: since the handshake no longer catches a stale program, each wire's decoder refuses a message it cannot read
@@ -216,16 +228,6 @@ At a frozen 0 the version cannot carry that.
   An approval stored under the old kind never covers the new meaning, so ADR-14 P10 holds with no version moving
 - Leave permission versions out of the freeze, against the user's rule that every external version freezes
 
-### The controller policy file at the reset
-
-The policy file stores each approval as a permission kind and version, all at 1 today. After the reset this build knows
-only version 0. It reads a pre-reset file as written by a newer uniterm, then remembers no trust and saves none, and
-leaves the file as it is. Every controller approval would stop being saved until the user deletes the file by hand.
-
-- Read a pre-reset file's version-1 permissions as version 0, since the reset changes no meaning. Remembered approvals
-  survive the reset
-- Set a pre-reset file aside, as a broken file is today, with a notice. The user approves each controller again
-
 ## Risks
 
 - **Programs built against an earlier build stop working** — likelihood: high, impact: low.
@@ -271,6 +273,7 @@ agree on every message.
   permission report version 0, and a schema reports 0.0. DocumentWire and ImageWire keep their versions
 - A protocol-mismatched exec hello is never admitted on its placeholder schema of 0.0
 - `uniterm/api-version` reports 0, and its doc says it stays at 0 until the user declares it
+- A policy file written before the reset is set aside with a notice, and the next approval is saved
 - The bundled `uniterm` command, the Janet helper, every test fixture, and every example driver and controller in the
   repository speak version 0, `Tests/ExecTestSupport/Fixtures/driver.pl` and the controller package fixtures included.
   Tests that compute an older version as the current one minus 1 still work at 0
@@ -346,6 +349,8 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   changed from "Outside Wires Stay at Version 0 Until Declared Stable", since a wire is only one kind of external
   interface. "Every wire and schema is at version 0" now reads "every external version". Two open questions follow:
   how a permission's meaning changes at 0, and what the reset does to the controller policy file.
+- 2026-11-26: A pre-reset controller policy file is set aside, and every controller is approved again once. The user
+  chose this, since only files from before the reset are affected.
 - 2026-11-26: Rewrote the drafted ADR-13 amendment. C1 had said "a wire, or a contract a wire carries, at version 0
   carries no compatibility promise. Its meaning may change in place". It now covers wire protocols only, leaves every
   carried contract to P4, and keeps P1's reason. Command schemas get their version-0 rule in their own contract in
