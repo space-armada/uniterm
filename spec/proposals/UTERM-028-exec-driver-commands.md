@@ -9,14 +9,13 @@
 - UTERM-024, for controller commands, keys, and events
 - UTERM-004, for exec drivers, their launch approval, and the exec wire
 - UTERM-013, for key ownership
-- UTERM-063: the exec wire stays at version 0 until uniterm's maintainers declare it version 1. At 0 there is
-  nothing to negotiate, so this proposal waits on that declaration. The reset retires versions 4 and 5, so the version
-  numbers in its offer and its M1 checks are redesigned at the declaration
+- UTERM-063: the exec wire is at version 0. The command frames land in place after UTERM-063 M2, whose strict
+  decoders refuse an unknown frame by name. There is no version offer
 
 ## Impacts
 
-- UTERM-004 — "Exec wire format": the exec protocol gains version 5, and the app offers the versions it speaks instead
-  of refusing every version but its own. UTERM-004 is implemented, so its text stays, and it gains a "Superseded in
+- UTERM-004 — "Exec wire format": the exec wire gains the command frames, in place at protocol version 0 under
+  UTERM-063. UTERM-004 is implemented, so its text stays, and it gains a "Superseded in
   part by UTERM-028" marker when this proposal is accepted.
 - UTERM-004 — "How control is enabled": Revoke Controller is offered on the anchor of a driver that holds the command
   grant, even when the driver owns no group. That section also gains a "Superseded in part by UTERM-028" marker when
@@ -31,8 +30,8 @@
   entry's rule that member commands need the driver's own pane remote-controlled. That entry gains a "superseded in
   part by UTERM-028" Decision Log line when this proposal is accepted.
 
-- UTERM-055 — "Version skew": a later version joins the offer, so M1's version-5 documentation says a driver picks a
-  version it knows from `versions` and ignores the others.
+- UTERM-055 — its capture frames land in place beside the command frames, at version 0. It reuses this proposal's
+  per-run grant, and its drop of queued frames on revocation.
 
 ## Summary
 
@@ -61,9 +60,8 @@ driver has no verified title.
 Decision: a per-run grant the user gives in the Pending Requests panel, as for a driver's clipboard powers. The palette
 row names the driver with the text pane chrome shows for it, which uniterm draws. (autonomous)
 
-- After the hello, at the protocol version that has commands, the driver sends one declaration that lists its commands
-  and their keys. It comes before any invocation. A second declaration that reaches the panel in the same run is
-  refused. See "The version-5 frames".
+- After the hello, the driver sends one declaration that lists its commands and their keys. It comes before any
+  invocation. A second declaration that reaches the panel in the same run is refused. See "The command frames".
 - Nothing goes live until the user chooses Allow for This Run. The panel row lists every command and key, bounded with
   a count of the rest. It names keys, not panes. It offers no Allow Once, since a declaration is not one effect. Deny
   holds for the rest of the run.
@@ -113,29 +111,21 @@ Original question: exec drivers are separately deployed programs, and the app ac
 today. A plain bump refuses every deployed driver, including ones that never declare a command. The app accepting both
 versions, or a plain bump.
 
-Decision: the app offers the versions it speaks, and the driver answers with one. Commands and invocations are
-protocol version 5. (autonomous)
+Decision: the command frames land in place at exec protocol version 0, under UTERM-063. There is no version offer.
+The user chose this on 2026-11-26. Amended 2026-11-26; see Decision Log.
 
-- The app's hello keeps `protocol: 4` and adds `versions: [4, 5]`. The app speaks first, so the offer rides in its
-  hello. A driver that knows the list answers with a version from it. A version-4 driver answers 4 and runs as today,
-  with no commands.
-- An older app sends no list. A new driver then answers 4 and runs without commands. It learns that from the app's
-  hello.
-- A driver that answers a version the app did not offer is refused before any effect, with both named.
-- Each version keeps one fixed meaning. At version 4, a declaration frame closes the channel as malformed, as an
-  unknown message type does today, and no invocation is pushed.
-- From version 5 on, a driver ignores a hello field it does not know. The version-5 documentation states this rule, so
-  a later version can add to the offer without breaking drivers.
-- Old app with new driver, and new app with old driver, both run with no deploy order. The one assumption is that a
-  deployed version-4 driver ignores the unknown `versions` field. No spec required that of version 4. See Risks.
+- The app's hello is unchanged. UTERM-063 resets the exec wire to 0, so version 4 and the planned version 5 are gone.
+- Old driver, new app: a driver that never declares commands runs as before. The app sends it no command frame, since
+  the `commands` frame and invocations follow only a declaration.
+- New driver, old app: an app built before this proposal refuses `declare-commands` by name, under UTERM-063 M2's
+  strict decoder, before any effect.
+- Every frame this proposal adds is a new message type. No existing name changes meaning, so UTERM-063's rule that a
+  changed meaning is refused needs no retired name here.
+- The frames carry a compatibility promise only once uniterm's maintainers declare the exec wire stable.
 
-Rationale: a plain bump refuses every deployed driver, including ones that never declare a command. The map viewer and
-the image viewer already accept exec drivers, so version-4 drivers for them may be deployed. Amended 2026-11-23; see
-Decision Log.
-The app sends its hello first, so "the app accepts both versions" without an offer cannot work. Its hello must commit to
-one number, and either an old driver or a new one refuses it. A feature list inside version 4 would let version 4's
-meaning grow, against UTERM-004's rule that unversioned text leaves old commands liable to new meanings. Converged in 2
-passes.
+Rationale: at version 0 a change lands in place, and there is nothing to negotiate. The offer existed to keep deployed
+version-4 drivers running, and UTERM-063 refuses every driver built before the reset anyway. The earlier decision, an
+offer of versions 4 and 5, is in the Decision Log.
 
 ### Which panes are the driver's
 
@@ -175,8 +165,8 @@ Decision: a driver whose anchor is disconnected keeps the groups it already owns
 command their remote-controlled members, so its commands stay live there. A layout still needs a remote-controlled
 anchor. (autonomous, addition)
 
-- This holds at every protocol version. It is authority policy, not wire meaning, so a version-4 driver's member
-  command that was refused now succeeds. Two authority rules for one kind of program would be worse.
+- This holds for every driver, whether or not it declares commands. It is authority policy, not wire meaning, so a
+  driver's member command that was refused now succeeds. Two authority rules for one kind of program would be worse.
 - Revoke All Controllers at the anchor still ends the driver's member commands and its own command power.
 - The refusal for a layout from a disconnected anchor keeps saying to enable remote control. A member command no longer
   gets it.
@@ -218,7 +208,7 @@ panel's row names keys, not panes. Refusing the overlap at declaration would go 
 one declaration per run would leave the driver powerless after the other controller ends. A Revoke per controller would
 change UTERM-004's implemented revoke contract with no need. Converged in 1 pass.
 
-### The version-5 frames
+### The command frames
 
 Original question, added by the whole-proposal review: the declaration and the invocation are a published contract.
 Their frame names and fields, and how a driver learns whether the user granted the power.
@@ -252,21 +242,15 @@ None.
 
 ## Risks
 
-- **The version-5 frames, the version offer, and the rule that drivers ignore unknown hello fields are a published
-  contract** — likelihood: high, impact: medium. Third-party drivers depend on them, and a wire format cannot be
-  recalled. The app's hello keeps `protocol: 4` for as long as the app offers version 4. Mitigation: each version keeps
-  one fixed meaning, and a later change adds a version to the offer, so no deployed driver breaks. See "Version skew"
-  and "The version-5 frames".
-- **A deployed version-4 driver refuses the app's hello because of the unknown `versions` field** — likelihood: low,
-  impact: medium. No spec required version-4 drivers to ignore unknown fields. Such a driver refuses the new app, as it
-  would under a plain bump. Accepted: the map viewer and the image viewer have accepted exec drivers only since
-  2026-11-17, and no driver documentation exists, so few if any such drivers exist. The failure is a refusal before any
-  effect, and the rule from version 5 on closes it for later versions. Amended 2026-11-23; see Decision Log.
+- **The command frames become a published contract when the exec wire is declared stable** — likelihood: high,
+  impact: medium. Third-party drivers will depend on them, and a declared wire format cannot be recalled. Mitigation:
+  they land at version 0, where they may change in place under UTERM-063's rules until the declaration. See "Version
+  skew" and "The command frames".
 - **Disconnecting a driver's pane no longer stops its commands** — likelihood: medium, impact: low. A user who learned
   that disconnecting takes a pane's keys back finds the driver's rows and keys still live at its anchor and members.
   Mitigation: Revoke All Controllers on the anchor of any driver holding the grant, and the key indicator on each pane where
   its keys are live.
-- **A version-4 driver's member command that was refused now succeeds** — likelihood: low, impact: low. This reverses
+- **A driver's member command that was refused now succeeds** — likelihood: low, impact: low. This reverses
   UTERM-004's 2026-11-11 rule for drivers. Accepted: the members are still remote-controlled, Revoke still stops the
   driver, and a driver gains nothing a script source does not already have. See "Members while the anchor is
   disconnected".
@@ -284,16 +268,11 @@ None.
 
 Amended 2026-11-20; see Decision Log.
 
-- A version-5 driver's declared commands show in the palette after the user allows them, and choosing one pushes an
+- A driver's declared commands show in the palette after the user allows them, and choosing one pushes an
   invocation that carries the command, the pane, and the input
-- A version-4 driver runs against the new app as before, with no commands
-- A fixture version-5 driver that reads the app's hello first runs against an app that offers no list, at version 4.
-  One that sends 5 to that app is refused with an error that says what to do
-- A driver that answers a version the app did not offer is refused before any effect, with both named
-- The version-5 documentation states that a driver ignores a hello field it does not know
-- The version-5 documentation states that a driver picks a version it knows from `versions` and ignores the others,
-  and a fixture version-5 driver runs against an offer that holds a version it does not know
-- At version 4, a declaration frame closes the channel as malformed, and no invocation is pushed
+- A driver that declares no commands runs as before, and receives no command frame
+- The exec protocol version stays 0, and the app's hello is unchanged
+- The exec wire's documentation describes the command frames
 - A second declaration in one run, after one reached the panel, is refused
 - Neither the launch approval nor a controller's host-launch grant gives the command power
 - A denied declaration stays denied for the run, and its panel row offers no Ask Again
@@ -317,7 +296,7 @@ Amended 2026-11-20; see Decision Log.
 - A declaration withdrawn by revocation replies with its error, and a driver that never held the grant gets no
   `commands` frame
 - A waiting declaration counts toward the driver's bound on waiting requests
-- A version-4 driver with a disconnected anchor commands its remote-controlled members
+- A driver that declares no commands, with a disconnected anchor, commands its remote-controlled members
 - At a pane that is both a member and an anchor, Revoke All Controllers ends both controllers, the badge menu names both,
   the key indicator names the driver, and the group owner's rows advertise no key that is not live there. When the
   driver's grant ends, the group owner's keys reach it there at once
@@ -398,6 +377,11 @@ Amended 2026-11-20; see Decision Log.
   is unchanged, since its analysis never depended on that order.
 - 2026-11-26: Waits on the exec wire's declaration, per UTERM-063. Added UTERM-063 to Dependencies. The version
   numbers in the offer and in M1 are redesigned at the declaration.
+- 2026-11-26: The command frames land in place at exec protocol version 0, per UTERM-063. The user chose this over
+  waiting for the exec wire's declaration, which the entry above recorded. "Version skew" no longer offers versions 4
+  and 5. "The version-5 frames" is renamed "The command frames", with the frames unchanged. Removed the risk that a
+  version-4 driver refuses the unknown `versions` field, since there is no such field and UTERM-063 refuses pre-reset
+  drivers. M1 lost its version offer checks and gained checks that the version stays 0 and the frames are documented.
 
 ## References
 

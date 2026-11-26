@@ -27,8 +27,8 @@
 | UTERM-030 M1-M2 | UTERM-032, UTERM-024 | Slide images load from UTERM-032's granted folder. The Markdown page opts in to UTERM-024's controller keys |
 | UTERM-025 M1 | UTERM-024, UTERM-030, UTERM-032 | The presenter needs UTERM-024's commands and keys, UTERM-030's slides, and UTERM-032's deck argument |
 | UTERM-026 M1-M4 | UTERM-024, UTERM-025, UTERM-032 | The presenter view extends UTERM-025's controller across two windows |
-| UTERM-028 M1 | UTERM-024 | Exec drivers gain UTERM-024's commands, keys, and events |
-| UTERM-055 M1 | UTERM-028 M1, UTERM-054 M5, UTERM-019 M3 | Needs UTERM-028 M1's version negotiation and UTERM-054's capture. UTERM-019 M3 gains the check for the `data` and `offset` keys, and builds the read hold M1 reuses. Also waits on the open bug `20261122-capture-bypasses-image-viewer-read-scope` |
+| UTERM-028 M1 | UTERM-024, UTERM-063 M2 | Exec drivers gain UTERM-024's commands, keys, and events. Its frames land in place at version 0, after UTERM-063 M2's strict decoders |
+| UTERM-055 M1 | UTERM-028 M1, UTERM-054 M5, UTERM-019 M3 | Needs UTERM-028 M1's driver grant and queued-frame drop, and UTERM-054's capture. Its frames land in place at version 0, after UTERM-063 M2, which UTERM-028 M1 already waits for. UTERM-019 M3 gains the check for the `data` and `offset` keys, and builds the read hold M1 reuses. Also waits on the open bug `20261122-capture-bypasses-image-viewer-read-scope` |
 | UTERM-029 M1-M3 | UTERM-024 M2, UTERM-025, UTERM-026, UTERM-030 M2, UTERM-032 M1 | Extends the presenter with UTERM-026's notes window, UTERM-030 M2's slide images, and UTERM-032 M1's input file |
 | UTERM-043 M2 | UTERM-019 M6, UTERM-024, UTERM-028, UTERM-041, UTERM-042 | Split from M1: each check runs when the feature it names has landed. UTERM-019 M3 precedes M6 in its rows |
 | UTERM-018 M1-M5 | None | |

@@ -10,9 +10,10 @@
   ScriptWire, which this proposal resets.
 - ADR-16 — proposed. Its Consequences say a changed answer is a new version under ADR-13. While the wire is at 0, the
   change lands in place under "A changed meaning is refused, never reinterpreted".
-- UTERM-028, UTERM-056 — accepted, not started. They negotiate versions on the exec wire and ScriptWire. While a wire is
-  at 0 there is nothing to negotiate, so each waits on its wire's declaration. UTERM-028's offer names versions 4 and 5,
-  which the reset retires, so its version numbers are redesigned at the exec wire's declaration.
+- UTERM-028, UTERM-055 — accepted, not started. Their exec frames land in place at version 0, after M2, with no version
+  offer. The user chose this for UTERM-028 on 2026-11-26.
+- UTERM-056 — accepted, not started. It negotiates ScriptWire versions. While ScriptWire is at 0 there is nothing to
+  negotiate, so its negotiation waits on ScriptWire's declaration.
 - UTERM-050 — accepted. Its bump of `uniterm/api-version` does not happen. The scripting API version stays at 0, and the
   change lands in place. Its ScriptWire change lands in place too under "A changed meaning is refused, never
   reinterpreted": a held `:directory` that may be gone takes a new key, or the old meaning holds.
@@ -263,9 +264,9 @@ None. Every question is settled.
   check under the new meaning. A script that checks `(uniterm/api-version)` against 1 does the same. Accepted: the user
   chose version 1, and such programs are the user's own.
 - **Declaring a wire stable is a one-way door** — likelihood: medium, impact: medium. From version 1, ADR-13 holds the
-  wire to P1 through P3, so its next change needs the negotiation UTERM-028 or UTERM-056 builds. Mitigation: only
-  uniterm's maintainers declare, and UTERM-028 and UTERM-056 wait on that declaration, so the cost is in front of the
-  user when they declare.
+  wire to P1 through P3, so its next change needs a version negotiation. UTERM-056's is planned for ScriptWire, and
+  the exec wire has none. Mitigation: only uniterm's maintainers declare, and each negotiation is designed at its
+  wire's declaration, so the cost is in front of the user when they declare.
 - **Every in-place change makes the user re-approve rebuilt native controllers** — likelihood: high, impact: low. A
   stale native controller must be rebuilt, which changes its version digest, and ADR-14 P9 ties a remembered approval
   to that digest. Accepted: the only native controllers are the user's own, and a rebuild already asks today.
@@ -319,7 +320,8 @@ agree on every message.
   - **Declared stable**: an external version uniterm's maintainers have declared version 1. Its compatibility promise
     holds from then on
 - ADR-16's consequence line says a changed answer lands in place while its wire is at 0
-- UTERM-028 and UTERM-056 say each waits on its wire's declaration
+- UTERM-056 says its negotiation waits on ScriptWire's declaration. UTERM-028 and UTERM-055 land their frames in place
+  at 0, with no version offer
 - The impacted proposals that plan a version bump say the change lands in place while the wire is at 0, after M2
 
 ### M2: Refuse stale programs by name
@@ -410,6 +412,9 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   declaration as a one-way door, re-approving rebuilt native controllers, and an outside program relying on a wire at 0.
   Raised the stale-program risk's likelihood to high for the user's own rebuilds. (autonomous)
 - 2026-11-26: Scheduled as M1-M2 in queue.md, before UTERM-043 M1.
+- 2026-11-26: UTERM-028 no longer waits on the exec wire's declaration. The user chose that its driver commands land in
+  place at version 0, and UTERM-055's capture frames follow. Impacts, the one-way door risk, and M1's check on the
+  impacted proposals now say so.
 
 ## References
 
