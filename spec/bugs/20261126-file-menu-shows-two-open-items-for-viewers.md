@@ -1,7 +1,14 @@
 # The File menu shows two items titled "Open…" while a viewer is focused
 
 **Status:** open
-**Validation:** not confirmed; the two items follow from the code, but how macOS binds an App Shortcuts remap of a
+**Estimate:** small to medium; non-trivial design decisions: the pane-local Open's new menu title (wording is a naming
+choice), whether the palette title changes too, and whether an existing remap of "Open…" for the pane-local item is
+allowed to stop matching. The fix would add an optional menu title to `AppletCommand` (as registry commands have),
+set it in `AppletCommand.openSource`, use it in the menu build, and update `SourceOpeningTests` and
+`BuiltInCommandsTests`, which pin the "Open…" title.
+**Validation:** the two same-titled items are confirmed by reading the code on 2026-11-26 (`openSource` titles
+"Open…" and uniterm's Open uses the menu title "Open…"; the menu hides applet items only by type). Not confirmed on
+screen; the two items follow from the code, but how macOS binds an App Shortcuts remap of a
 title two items share was not tried.
 
 ## Observed
