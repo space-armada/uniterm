@@ -1,7 +1,7 @@
 # A memory-pressure warning stops sorting in every data pane already open
 
 **Status:** open. Confirmed by tracing the code, not by a test.
-**Estimate:** small. The fix restores the documented contract, so it needs no design call.
+**Estimate:** small; no open design decisions. Re-checked 2026-11-26 against the code, UTERM-009, and UTERM-062. The fix touches `TableBudget.swift` (a lease reservation that skips the epoch check, for sorts) and `TableQuery.swift` (`SortMemory` uses it), plus one regression test in `TableQueryTests.swift` or `TableBudgetTests.swift`. UTERM-009 and the budget's doc comment limit a warning to loads running at that moment. UTERM-062 M2 is not started and keeps the same rule for a tab loaded before a warning, so the interim fix does not conflict with it.
 
 ## Observed
 
