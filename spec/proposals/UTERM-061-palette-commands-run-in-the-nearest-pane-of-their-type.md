@@ -9,7 +9,8 @@
 - UTERM-002: the command palette, its targeting rules, and its rule for unavailable commands
 - UTERM-013: the commands that applet types declare in the registry
 - UTERM-018: the "nearest" metric and its tie rule, which UTERM-018 says it builds once and shares. This proposal needs
-  only that shared code, not the walk's capability contract or its macOS hand-off. See "Sequencing against UTERM-018"
+  only that shared code, not the walk's capability contract or its macOS hand-off. It does not wait on UTERM-018:
+  whichever of the two lands first builds the shared code. See "Sequencing against UTERM-018"
 
 ## Impacts
 
