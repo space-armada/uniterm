@@ -34,8 +34,16 @@
   Its single close for a set of tabs asks one question for the set, which bears on "The map's unsaved edits across
   tabs".
 - UTERM-054, UTERM-055 — "For an applet with one tab or no per-tab owners, a pane among the program's targets counts as
-  wholly its own", and a pane capture shows every title in the tab bar. A capture of a viewer pane with tabs would show
-  the titles of files the user opened. The open bug `20261122-capture-bypasses-image-viewer-read-scope` is related.
+  wholly its own", and a pane capture shows every title in the tab bar. A viewer pane with tabs is no longer a one-tab
+  applet, so that rule needs amending. Its open question "What a program's capture shows of a file the program may not
+  read" decides what a capture of a viewer tab shows. The open bug `20261122-capture-bypasses-image-viewer-read-scope`
+  is related.
+- UTERM-041 — accepted, not started. It exempts a driver's pane from the per-tab authority marker because "Only the
+  image and map viewers accept a driver ... and each has one tab", and says the exclusion "needs another look" if a
+  multi-tab applet accepts a driver. It also puts the marker on a viewer's one tab. Both premises end here. Which tabs
+  carry the marker depends on "What a program may reach".
+- UTERM-028 — accepted, not started. Its version negotiation is what would let the exec wire take a new version. Until
+  it lands, the exec wire gains no tab field.
 - UTERM-006 — M5, exec driver reads, assumes one source per image pane.
 - UTERM-061 — the viewers' tab commands join the titles shared across applet types.
 
@@ -103,14 +111,18 @@ stay as well is open. See "An app-wide ceiling for data files".
 
 ### Read scope applies to each tab
 
-Decision: wherever a program can learn about a viewer pane, read scope is checked per tab, not once per pane. That covers
-a tab's title in the pane listing, the pane's directory, a tab's content, a pending wait, and a capture. A tab whose
-file is outside the caller's scope is listed with no title, as a pane is today.
+Decision: wherever a program can learn about a viewer pane through events and replies, read scope is checked per tab,
+not once per pane. That covers a tab's title in the pane listing, the pane's directory, a tab's content, and a pending
+wait. A tab whose file is outside the caller's scope is listed with no title, as a pane is today. The pane-level title
+and directory follow the selected tab's check.
 
-Rationale: UTERM-015 settles that a caller learns nothing about a user's file outside its read scope. Today the check
-reads one path per pane, through the user-file source, and applies the answer to every tab's title. With several tabs,
-a program scoped to one folder would read the names of files the user opened from another. This restores UTERM-015's
-rule. It lands with the first milestone that publishes several tabs.
+Captures are not part of this decision. What a program's capture shows of a file it may not read is UTERM-054's open
+question, and this proposal follows its answer for each tab.
+
+Rationale: UTERM-015 settles that events and replies carry no path or content from a source outside the caller's read
+scope. Today the check reads one path per pane, through the user-file source, and applies the answer to every tab's
+title. With several tabs, a program scoped to one folder would read the names of files the user opened from another.
+This restores UTERM-015's rule. It lands with the first milestone that publishes several tabs.
 
 ## Design Decisions (Open)
 
@@ -123,8 +135,8 @@ nothing in the viewers.
 
 - A. Viewers take Cmd-1 to Cmd-9 for tabs, as the terminal and browser do, and the map styles and Zoom to Fit move to
   other keys.
-- B. Viewers skip the numbered tab keys that collide. The map selects tabs 4 to 9 by number, and the image viewer tabs
-  1 to 8.
+- B. Viewers skip the numbered tab keys that collide. The map selects tabs 4 to 9 by number. The image viewer keeps
+  tabs 1 to 8 and loses Cmd-9, which means the last tab elsewhere.
 - C. Viewers have no numbered tab keys, and select tabs with Control-Tab, the tab bar, and the palette.
 
 ### What a hidden image tab keeps
@@ -135,7 +147,9 @@ keeps a bounded set of sources.
 
 - A. Hidden image tabs keep their bitmaps, in the pane's one lease. A full lease drops a hidden tab's cache first, so a
   hidden tab redraws from the helper when selected.
-- B. Each tab gets its own lease and floor, so a hidden tab keeps everything.
+- B. Each tab gets its own lease and floor. A lease is granted anything inside its 256 MiB floor even past the app's
+  limit, so each tab raises the app's bitmap bound by its floor: twenty tabs add 5 GiB beyond the 1 GiB limit. The same
+  ADR-07 bound question applies as for data files.
 - C. A hidden image tab keeps its place and zoom, and releases its bitmaps. Its first frame on selection comes from the
   helper.
 
@@ -150,10 +164,11 @@ end the app to say what bounds that exposure. Whether macOS ends the app at that
 also names memory exhaustion as a failure a separate process contains, and the image helper is killed past its 1 GiB
 footprint.
 
-- A. A budget per file and no app ceiling. The memory-pressure stop is the only app-wide guard.
+- A. A budget per file and no app ceiling. The memory-pressure stop is the only app-wide guard. Adds nothing.
 - B. A budget per file plus an app-wide ceiling sized against physical memory, so later files are cut only near real
-  exhaustion.
-- C. A budget per file, and tabs a drop adds load on first selection, so a drop of many files loads one at a time.
+  exhaustion. Brings in a new bound.
+- C. A budget per file, and tabs a drop adds load on first selection, so a drop of many files loads one at a time. This
+  bounds how many files load at once, not the total: every tab still loads once selected and stays loaded.
 - D. Move the data viewer's rows into a helper, so the app's memory no longer grows with data files. This reopens the
   scope the user left out.
 
@@ -164,24 +179,35 @@ Some program commands replace a viewer's document today: the text viewer's `show
 on today's version keeps today's meaning. A live-preview driver that calls `show-markdown` on every keystroke would make
 a tab per call if it added tabs.
 
+Routed opens also come from programs: approved Launch Services senders and `uniterm open`. UTERM-015 does not count
+them as the user's act. A tool that runs `uniterm open` on every save floods tabs the same way. This question must say
+which side of the line those opens fall on. A script's `send` names no version, and ScriptWire matches its version
+exactly inside the app bundle, so a script has no older `send` to stay on. Whether ADR-13 treats the Janet API as an
+outside wire is not settled.
+
 - A. On new schema versions, a program's open adds a tab, as the user's does. Today's versions keep replacing the
   selected tab.
-- B. A program's open replaces the tab that program opened in the pane, and adds one when it has none there.
+- B. A program's open replaces the tab that program opened in the pane, and adds one when it has none there. This brings
+  in tracking each caller's tabs in four viewers.
 - C. A program's open always adds a tab, on every version. This breaks ADR-13 for today's callers.
 
 ### What a program addresses in a viewer pane
 
 Script and controller commands name a pane and, optionally, a tab number. Only the browser reads the tab today. The
 viewers' remote commands act on the pane's one document. ScriptWire's `send` returns nothing, so a program cannot learn
-which tab its send made. The exec wire's commands and events, such as `shown` and `pin-selected`, carry no tab.
+which tab its send made. The data viewer has no remote command schema.
 
 - A. A command with no tab acts on the selected tab, as in the browser, and a named tab is honored. A user's tab switch
   between two of a program's commands sends the second to the user's tab.
 - B. A command with no tab is refused once the pane has several tabs.
-- C. A command with no tab acts on the tab this caller last opened in the pane, or else on the selected tab.
+- C. A command with no tab acts on the tab this caller last opened in the pane, or else on the selected tab. This brings
+  in tracking each caller's tabs in four viewers.
 
-The version split falls on each channel's own version: each viewer's command schema under ADR-13 P4, ScriptWire for
-`send`, and the exec wire for driver commands and events. Adding a tab field to any of them is a new minor version.
+Versions constrain every option. Each viewer's command schema carries its own major and minor version under ADR-13 P4,
+and its events, such as the image viewer's `shown` and the map's `pin-selected`, follow it. A tab field there is a new
+minor version. ScriptWire and the exec wire each have one whole-number version and refuse any other at hello, so a tab
+field on either would refuse every deployed caller. The exec wire can take a new version only through UTERM-028's
+negotiation. Until then, tab fields stay in the viewers' command schemas.
 
 ### What a program may reach in a viewer pane with tabs
 
@@ -191,14 +217,15 @@ opened beside tabs a program opened.
 - A. A program reaches every tab in a pane it may control.
 - B. A program reaches only the tabs it opened, as the browser's per-controller tab ownership does. UTERM-039 keeps that
   ownership. This brings in per-tab caller ownership in four viewers.
-- C. A program reaches every tab of a pane it may control, with read scope gating each tab's title, directory, content,
-  and capture. Viewers already gate content by read scope, where the browser gates by ownership.
+Read scope per tab is settled, so reaching every tab already means each tab's title, directory, and content are gated
+by scope. Viewers differ in how they gate content today: the text and image viewers check read scope, the map
+withholds file-pin values from every program whatever its scope, and the data viewer has no remote schema.
 
 ### A cap on tabs a program opens
 
 ADR-14 P15 bounds every program effect. The browser's limit of 10 is for tabs a page's scripts open. Its cap of 16
-controller tabs per grant was dropped by UTERM-039, on the user's ruling of 2026-11-21 that a cap is a behavior
-difference ADR-15 rules out.
+controller tabs per grant is dropped by UTERM-039, accepted but not built, on the user's ruling of 2026-11-21 that a cap
+is a behavior difference ADR-15 rules out.
 
 - A. Cap the viewer tabs a program opens. This reopens the user's 2026-11-21 ruling.
 - B. No cap for viewers, as UTERM-039 has for the browser.
@@ -212,12 +239,15 @@ adds a tab" leaves that empty tab beside the first file, so a drop of three file
 - B. The first open into a pane whose only tab is empty fills that tab. This is a special case of "every user open adds
   a tab".
 
+A drop of several files also needs to say which new tab it selects: the first dropped file's, or the last's.
+
 ### What Cmd-T means to a program
 
 A script's tab open dispatches on the shared tab-opening contract and expects a tab ID back at once. A viewer's Cmd-T
 shows a file panel, which cannot answer at once.
 
-- A. Viewers adopt the tab-opening contract, and a program's tab open makes an empty tab.
+- A. Viewers adopt the tab-opening contract, and a program's tab open makes an empty tab. This brings the contract
+  into four viewers.
 - B. Viewers do not adopt it. A program's tab open is refused with a message that says the viewer opens tabs from
   files, in place of today's "the pane's applet has no tabs to open".
 
@@ -265,9 +295,10 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
 ## Risks
 
 - **A program learns the names of files outside its read scope** — likelihood: high, impact: high.
-  Without per-tab checks, the pane listing, the pane's directory, and captures leak tab titles from the moment a pane
-  holds several tabs.
+  Without per-tab checks, the pane listing and the pane's directory leak tab titles from the moment a pane holds several
+  tabs.
   Mitigation: "Read scope applies to each tab" is settled, and M1 builds it before any viewer publishes several tabs.
+  Captures follow UTERM-054's answer.
 - **Program commands meet several tabs before their rules exist** — likelihood: medium, impact: medium.
   Mitigation: M1 settles and builds the program-facing rules before any viewer milestone ships tabs.
 - **Many large data files fill uniterm's memory** — likelihood: medium, impact: high.
@@ -287,15 +318,17 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
 
 **Status:** NOT STARTED
 
-- Read scope is checked per tab for titles, the pane's directory, content, pending waits, and captures. A program
-  scoped to one folder never reads the title of a tab whose file is elsewhere
+- Read scope is checked per tab for titles, content, and pending waits. A program scoped to one folder never reads the
+  title of a tab whose file is elsewhere. The pane-level title and directory follow the selected tab's check
+- A pending wait checks the source of the tab its handle belongs to, not the selected tab
 - The source-swap path takes each open as its own tab: N rapid opens, or N dropped files, add N tabs in order, and
   none supersedes another
 - Each tab keeps its own notices. A hidden tab's load notice names its file, and a new tab's load never drops another
   tab's notices
 - Program commands, events, and opens on a viewer pane follow "What a program addresses", "What a program's open
-  does", and "What a program may reach" as settled, on new versions of each channel
-- A caller on today's versions keeps today's meaning, per ADR-13
+  does", and "What a program may reach" as settled. Tab fields arrive as new minor versions of the viewers' command
+  schemas. ScriptWire and the exec wire gain no tab field unless UTERM-028's negotiation has landed
+- A caller on today's versions keeps today's meaning, per ADR-13, and no deployed driver is refused at hello
 - Each open decision above is settled
 
 ### M2: Data viewer tabs
@@ -303,8 +336,8 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
 **Status:** NOT STARTED
 
 - A data viewer pane holds several files as tabs, draws the shared tab bar, and hides it with one tab
-- The pane-local Open…, Cmd-T, and a drop each add a tab and select it. A drop of several files adds one tab per file,
-  and selects the tab "A new pane's empty tab" and the drop rule settle
+- The pane-local Open…, Cmd-T, and a drop each add a tab and select it. The "Drop one file at a time" refusal is gone,
+  and a drop of several files adds one tab per file and selects the tab "A new pane's empty tab" settles
 - Next, previous, and numbered tab selection work as "Tab keys that collide" settles. Close Tab or Pane closes the
   selected tab, and the last tab's close closes the pane
 - Reopen Closed Tab or Pane brings back a closed data tab with its sort and filter
@@ -334,7 +367,8 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
 - Each tab keeps its own zoom, position, and folder place
 - A hidden tab keeps what "What a hidden image tab keeps" settles, and its running work behaves as "A hidden tab's
   running work" settles
-- A decode helper crash shows a failure in the selected tab. The other tabs decode again on their next request
+- A decode helper crash shows a failure in the tab whose request was in flight, which can be a hidden tab's prefetch.
+  The other tabs decode again on their next request
 - Relaunch restores every tab and the selected tab
 
 ### M5: Map viewer tabs
@@ -369,6 +403,10 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
   tabs, an app-wide ceiling, a program's open, a new pane's empty tab, and Cmd-T for programs. Added impacts on
   UTERM-018's batch rule and M3, UTERM-040, UTERM-042, UTERM-054, and UTERM-055. Dropped UTERM-041 from Dependencies,
   since no milestone needs it.
+- 2026-11-26: Second critique pass. Took captures out of the settled read-scope decision, since UTERM-054 holds that
+  question open. Corrected the version facts: ScriptWire and the exec wire have one whole-number version each, and the
+  viewers' events belong to their command schemas. Added impacts on UTERM-041 and UTERM-028, the routed opens that
+  programs send, labels on options that add scope, and checks for waits, drops, and helper crashes.
 - 2026-11-26: ADR candidate: stable tab identity across the program boundary. `adr-impact` found that no ADR covers tab
   identity for any applet. Outcome: undecided, held by "Tab identity".
 - 2026-11-26: ADR candidate: whether an open into an occupied pane adds or replaces, across applets. Outcome: undecided.
