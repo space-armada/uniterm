@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-08
-**Updated:** 2026-11-22
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -459,6 +459,8 @@ None.
 - An origin pane that closes while a user open is in flight is revalidated at placement, and the open falls back to
   the no-origin anchor
 - The distance metric lives in the pane model, and UTERM-004's nearest rule can call the same code
+- When UTERM-061 M1 has already built the shared metric and tie rule, this milestone reuses them and builds no second
+  copy, and the scripts' nearest-pane rule calls them
 - In a flat row [A|B|C] with origin C and capable panes A and B, the open goes to B, and moving a divider never
   changes the pick
 - In the tree H[A, V[O, H[C, D]]] with origin O and capable panes A and C, the open goes to C
@@ -689,6 +691,9 @@ and the path-reading power.
   denied network access load a URL it wrote into a tab file. M5's check on a cancelled question moved to UTERM-049 M3,
   since only a tab file shows one.
 - 2026-11-22: Scheduled as UTERM-018 M1-M5 in queue.md.
+- 2026-11-26: Added an M1 check to reuse the shared metric and tie rule when UTERM-061 M1 built them first, and to
+  check that the scripts' nearest-pane rule calls them. UTERM-061's review found M1 said only that UTERM-004's rule
+  "can call the same code". Whichever of the two lands first builds the function.
 
 ## References
 
