@@ -203,8 +203,8 @@ types. Typing or deleting a character sorts the list afresh.
 
 Rationale: the user chose it on 2026-11-26. A tab running one program after another retitles itself all the time, and a
 list that keeps re-sorting cannot be read or pointed at. A full snapshot would show titles and enabled states that are
-no longer true. It fixes today's palette whatever this proposal decides, so it is built now as review polish, ahead of
-this proposal. (addition)
+no longer true. It fixes today's palette whatever this proposal decides, so it landed as review polish, ahead of this
+proposal, in "Hold the palette list still while it shows". M1 checks it either way. (addition)
 
 ### When the palette resolves the target
 
