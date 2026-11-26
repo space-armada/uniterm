@@ -2,13 +2,16 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-23
+**Updated:** 2026-11-26
 
 ## Dependencies
 
 - UTERM-024, for controller commands, keys, and events
 - UTERM-004, for exec drivers, their launch approval, and the exec wire
 - UTERM-013, for key ownership
+- UTERM-063: the exec wire stays at version 0 until uniterm's maintainers declare it version 1. At 0 there is
+  nothing to negotiate, so this proposal waits on that declaration. The reset retires versions 4 and 5, so the version
+  numbers in its offer and its M1 checks are redesigned at the declaration
 
 ## Impacts
 
@@ -393,6 +396,8 @@ Amended 2026-11-20; see Decision Log.
   hello said "no exec-capable applet ships today and no driver documentation exists". The user kept the risk at low
   likelihood, since exec drivers became possible only days ago and no driver documentation exists. The decision itself
   is unchanged, since its analysis never depended on that order.
+- 2026-11-26: Waits on the exec wire's declaration, per UTERM-063. Added UTERM-063 to Dependencies. The version
+  numbers in the offer and in M1 are redesigned at the declaration.
 
 ## References
 

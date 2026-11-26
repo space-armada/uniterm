@@ -2,12 +2,15 @@
 
 **Status:** accepted
 **Created:** 2026-11-23
-**Updated:** 2026-11-24
+**Updated:** 2026-11-26
 
 ## Dependencies
 
 - UTERM-004, for controller packages and their `native` entry kind
 - UTERM-021, for the adoption of every connection a native entry opens after `uniterm controller run` execs it
+- UTERM-063: ScriptWire stays at version 0 until uniterm's maintainers declare it version 1. At 0 there is nothing
+  to negotiate, and a stale native controller is refused by name. This proposal waits on that declaration. Its version
+  14 floor and fixtures are redesigned then
 
 ## Impacts
 
@@ -307,6 +310,8 @@ None.
   own, since each applies ADR-13.
 - 2026-11-23: (autonomous) Corrected the ADR citation for remembered approvals from ADR-09 to ADR-14, which supersedes it.
 - 2026-11-24: Scheduled as M1-M4 in queue.md.
+- 2026-11-26: Waits on ScriptWire's declaration, per UTERM-063. Added UTERM-063 to Dependencies. The version 14
+  floor and fixtures are redesigned at the declaration.
 
 ## References
 
