@@ -331,6 +331,12 @@ None.
   The UI suite drives the launcher, the open panel, Cmd-O routing, and restore. Things to look at in the visual check:
   the table's layout, the status segments, and the File menu. The menu shows two items titled "Open..." when a data
   viewer has focus, the window's routed Open and the pane-local one, and the pane-local one sits in its own section.
+- On 2026-11-26 the user ran the visual check in the running app, with synthetic files. The table, the status segments,
+  sorting, and the filter worked. The review asked for these changes, each its own commit: "Keep selected data viewer
+  cells readable on the light palette", "Size data viewer columns to their content", "Measure data viewer columns in
+  tabular digits", "Right-align numeric columns in the data viewer", "Show a long data viewer cell's whole value in a
+  popover", and "Name the open file and offer Open beside the data viewer's filter". The palette's identical "Open..."
+  rows became UTERM-061, and tabs for several files became UTERM-062.
 
 ### M2: JSON
 
@@ -380,6 +386,10 @@ None.
   one. Each open nested popover also takes one more 32 MiB floor beyond the limit, as "Large files" allows.
 - The visual check is left to the user. Things to look at: the nested-cell marker and color, the popover's size and
   position over a cell, `null` in a muted color, and a wide table's `(more keys)` column.
+- On 2026-11-26 the user ran the visual check. The nested cells, the popover, `null`, and missing keys looked right.
+  Opening a 1,100-key file froze the main thread, fixed in "Keep the main thread free while a wide data file opens",
+  which also shows the file opening. Scrolling to the far edge of a wide table was slow, answered by "Add jump-to-edge
+  arrows to long data viewer tables".
 
 ### M3: Search
 
@@ -416,6 +426,9 @@ None.
 - A match is a tinted cell, and the current one is tinted more. The UI tests check the count line, not the colors. The
   visual check is left to the user. Things to look at: the two tints on both palettes, the find bar under the filter,
   and the scroll to the current match in a wide table.
+- On 2026-11-26 the user ran the visual check. Find worked, but the filter field and the find bar looked alike, so the
+  filter read as a find that highlighted nothing. The user picked a mockup that sets them apart, built in "Set the data
+  viewer's filter and find apart".
 - No change to table parsing, so `make fuzz` did not run.
 
 ### M4: Spreadsheets
@@ -507,6 +520,8 @@ None.
 - The visual check is left to the user, and the UI tests have not run. The coordinator's `make test-app` runs them. The UI
   tests open a workbook through Cmd-O, switch sheets through the picker, and restore a stored sheet. Things to look at:
   the picker's place above the filter, "not computed" cells, and a workbook with a date column.
+- On 2026-11-26 the user ran the visual check on a three-sheet workbook and a 1904-date workbook. The sheet picker,
+  "not computed" cells, cached formula results, and every date, serial 60 and the 1904 shift included, looked right.
 
 ## Decision Log
 
