@@ -1,7 +1,7 @@
 # A program's zoom wait on a detached image pane never settles until the pane comes back
 
-**Status:** open. Not confirmed: the mechanism is traced, not reproduced.
-**Estimate:** small, with one design call: whether a zoom settles without tiles while its pane is off screen.
+**Status:** open. Traced on 2026-11-26 against the current code. The path is deterministic. No run was made.
+**Estimate:** small; no open design decisions. Settle the zoom once the viewport is set, as UTERM-062 settles it for hidden tabs.
 
 ## Observed
 
@@ -31,3 +31,15 @@ Two plausible behaviors, so this needs a design call:
 
 UTERM-062 settles the first for hidden image tabs, in "A hidden tab's running work". Fixing this bug the same way keeps
 detached panes and hidden tabs alike.
+
+## Triage notes
+
+2026-11-26. Read the code the fix would touch.
+
+- `zoomRemotely` applies the viewport with `content.zoom` and calls `observeRemote`. `zoomIsSettled` then reads `!tiles.entries.isEmpty`.
+- `detach` calls `releaseZoomForDetach`, which drops the tiles. `refreshTiles` and `tileArrived` both bail while `isDetached`. So no tile can arrive.
+- An animated image is not affected. `releaseZoomedFrames` sets `zoomLevel` to nil, and `zoomIsSettled` treats that as settled.
+- The fix is one line in `zoomIsSettled`: a still settles when `isDetached` or it holds a tile. `reattach` already calls `restoreZoomAfterReattach`, so the tiles arrive later.
+- The design call is trivial. UTERM-062 already decides that a program's zoom into a hidden tab settles without tiles. Keeping the wait pending would leave a program's `wait` hanging on a pane the user cannot see.
+- Regression test: in `ImageZoomTests.swift`, open a large still, `detach()`, send a remote `zoom` past fit, and assert the zoom handle settles as `.zoomed`. It must fail on the current code.
+- Files the fix touches: `Packages/UnitermKit/Sources/ImageViewerApplet/ImageViewerApplet+Remote.swift` and `Packages/UnitermKit/Tests/ImageViewerAppletTests/ImageZoomTests.swift`. The doc comment on `zoomIsSettled` also changes.
