@@ -578,6 +578,41 @@ Earlier fix: "Wait for the reference scroll view to move in the image viewer scr
   show whether uniterm dequeued it, and which first responder held the keyboard then. UTERM-060 M5 reads this entry's
   next Cmd-T stall. It records here whether uniterm recorded the unconfirmed T events.
 
+### `DataViewerUITests.testLauncherOpensAnEmptyViewerAndItsOpenButtonLoadsAFile`
+
+Fixed by: "Wait for the app to be frontmost before UI tests type, and paste open-panel paths"
+
+- Evidence: alone, it failed 1 of 6 at `waitForExistence` on the launcher after Cmd-D. The key never took effect.
+- Evidence: in a full suite, it failed at the go-to field check. The typed temp path had become a neighbouring
+  container's path. The `dev.uniterm.app.UITests.xctrunner` component turned into `dev.uniterm.UITests.xctrunner`.
+- Cause of the first failure: the test sent Cmd-D before the app was frontmost. A synthesized key event goes nowhere
+  then. The app never deactivates itself, so the race is in the test.
+- Cause of the second failure: the open panel's go-to field autocompletes each path component while text is typed.
+  Sibling folders that share a prefix make that rewrite the path.
+- Fix: `waitForTerminal` now waits for the app to be frontmost, and activates it once if it is not. The test pastes
+  the path instead of typing it, so the field has no keystrokes to autocomplete. It still checks the field's value.
+- Seen again: 2026-11-26, once, in a full local `make test` run of 213 UI tests on `agent/petunia`, at "Say
+  UTERM-061's stable palette list has landed". It ran mid-class in `DataViewerUITests`, not first.
+- Evidence: `UnitermUITestCase.swift:546` failed after 36.7 s with "the panel never selected sales.csv. The app is in
+  the background. The frontmost app is Google Chrome". That is a later wait than either earlier failure. The kept log
+  shows event 177863, a Shift key down at 15:01:18, confirmed only by the 5 s timeout. The frontmost lines show Google
+  Chrome activating at 15:01:30 and 15:01:46, Finder at 15:01:49, and Chrome again at 15:01:51. Whether a person or the
+  run caused those activations is not known. The test passed alone right after, on the same tree.
+- Status: unresolved. The sighting moves this entry back from Fixed.
+
+### `LaunchServicesOpenUITests.testADeniedOpenFromAnotherProgramOpensNothingAndSaysSo`
+
+- Seen: 2026-11-26, once, in the same full local run as the `DataViewerUITests` sighting above. It ran mid-class, not
+  first.
+- Evidence: `LaunchServicesOpenUITests.swift:57` failed after 33.7 s with "the question never reached the panel". The
+  Pending Requests panel opened, and its table showed no row within 30 s. The kept log shows no event confirmed only by
+  timeout during the test. The frontmost lines show only uniterm activating, under two process ids that alternate:
+  96726 and 31876. No other app took the front. Neither process was alive after the run. The test passed alone right
+  after, on the same tree.
+- Suspected cause: unknown. One reading is that the open from another program reached the other uniterm process. That
+  is not traced.
+- Status: unresolved.
+
 ## Fixed
 
 ### `PatternTests.testACatastrophicPatternStopsAtItsLimitAndStopsUsingCPU`
@@ -821,20 +856,6 @@ Fixed by: "Wait for the reloaded title in the browser recovery test"
   which is `127.0.0.1` on the fixture server. The product is right to show the host while the title is unknown. The
   race is in the test, which had no signal that the title had arrived.
 - Fix: the wait that follows Reload now includes the title, so the assertion runs after the title has arrived.
-
-### `DataViewerUITests.testLauncherOpensAnEmptyViewerAndItsOpenButtonLoadsAFile`
-
-Fixed by: "Wait for the app to be frontmost before UI tests type, and paste open-panel paths"
-
-- Evidence: alone, it failed 1 of 6 at `waitForExistence` on the launcher after Cmd-D. The key never took effect.
-- Evidence: in a full suite, it failed at the go-to field check. The typed temp path had become a neighbouring
-  container's path. The `dev.uniterm.app.UITests.xctrunner` component turned into `dev.uniterm.UITests.xctrunner`.
-- Cause of the first failure: the test sent Cmd-D before the app was frontmost. A synthesized key event goes nowhere
-  then. The app never deactivates itself, so the race is in the test.
-- Cause of the second failure: the open panel's go-to field autocompletes each path component while text is typed.
-  Sibling folders that share a prefix make that rewrite the path.
-- Fix: `waitForTerminal` now waits for the app to be frontmost, and activates it once if it is not. The test pastes
-  the path instead of typing it, so the field has no keystrokes to autocomplete. It still checks the field's value.
 
 ### `WindowsUITests.testCommandWClosesOnlyTheKeyWindow`
 
