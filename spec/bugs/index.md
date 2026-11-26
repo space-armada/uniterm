@@ -59,3 +59,4 @@
 | [20261123-package-admission-read-has-no-bound](20261123-package-admission-read-has-no-bound.md) | A controller package read that never returns leaves its admission pending forever | proposed |
 | [20261123-script-tab-numbers-keep-closed-tabs](20261123-script-tab-numbers-keep-closed-tabs.md) | A window's script tab numbers keep an entry for every tab ever seen | proposed |
 | [20261126-detached-image-zoom-wait-never-settles](20261126-detached-image-zoom-wait-never-settles.md) | A program's zoom wait on a detached image pane never settles until the pane comes back | open |
+| [20261126-memory-warning-stops-sorting-in-open-data-panes](20261126-memory-warning-stops-sorting-in-open-data-panes.md) | A memory-pressure warning stops sorting in every data pane already open | open |

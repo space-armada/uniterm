@@ -1,0 +1,33 @@
+# A memory-pressure warning stops sorting in every data pane already open
+
+**Status:** open. Confirmed by tracing the code, not by a test.
+**Estimate:** small. The fix restores the documented contract, so it needs no design call.
+
+## Observed
+
+Found by a design critique of UTERM-062 on 2026-11-26. After the system sends one memory-pressure warning, every data
+viewer pane that was already open skips every sort, silently, until it loads another file.
+
+## Cause
+
+- A lease records the budget's epoch when it is made (`Packages/UnitermKit/Sources/TableData/TableBudget.swift`,
+  `makeLease`, about lines 53-61).
+- `memoryPressureWarning` bumps the epoch (about line 64). From then on, every `reserve` on an older lease returns
+  `.memoryPressure`, since its epoch no longer matches (about line 70).
+- A sort reserves its key memory through the same lease (`TableQuery.swift`, `SortMemory`, about lines 54-61). It gets
+  `.memoryPressure`, treats that as no memory, and skips the sort (about lines 155-156).
+- The lease is only remade when the pane loads another file (`TableSession.swift`, about line 351).
+
+The budget's doc comment and UTERM-009 say a warning "ends every load running at that moment". It also ends every later
+sort in panes already open, which neither says.
+
+## Repro
+
+Not run. A package test would open a table, call `memoryPressureWarning()` on its budget, and then sort. The sort is
+skipped where it should run.
+
+## Fix
+
+Gate only loads on the epoch. A sort's reservation checks the budget's limit and floor, not the epoch, so a warning
+ends running loads and nothing else. UTERM-062 M2 replaces the event model with a pressure state, and its check that a
+tab loaded before a warning sorts and filters again covers this too.
