@@ -1,6 +1,6 @@
 # UTERM-063: External Versions Stay at 0 Until Declared Stable
 
-**Status:** designing
+**Status:** accepted
 **Created:** 2026-11-26
 **Updated:** 2026-11-26
 
@@ -395,6 +395,8 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   yet, and uniterm's maintainers declare, not its users. P5 now says a wire reaches version 1 only when uniterm's
   maintainers declare it stable, and is at version 0 under C1 until then. Every forward-looking "the user declares" in
   this proposal now says "uniterm's maintainers declare".
+- 2026-11-26: Accepted. The user chose to advance it at the end of the review. No decision earns a new ADR: the
+  lasting rules go into ADR-13's amendment.
 - 2026-11-26: Rewrote the drafted ADR-13 amendment. C1 had said "a wire, or a contract a wire carries, at version 0
   carries no compatibility promise. Its meaning may change in place". It now covers wire protocols only, leaves every
   carried contract to P4, and keeps P1's reason. Command schemas get their version-0 rule in their own contract in
