@@ -203,7 +203,8 @@ which tab its send made. The data viewer has no remote command schema.
 
 - A. A command with no tab acts on the selected tab, as in the browser, and a named tab is honored. A user's tab switch
   between two of a program's commands sends the second to the user's tab.
-- B. A command with no tab is refused once the pane has several tabs.
+- B. A command with no tab is refused once the pane has several tabs. A script's "nearest pane" target carries no tab,
+  so every such call on a pane with several tabs is refused, and the script must list panes and name a tab.
 - C. A command with no tab acts on the tab this caller last opened in the pane, or else on the selected tab. This brings
   in tracking each caller's tabs in four viewers.
 
@@ -230,7 +231,8 @@ opened beside tabs a program opened.
   ownership. This brings in per-tab caller ownership in four viewers.
 
 Read scope per tab is settled, so reaching every tab already means each tab's title, directory, and content are gated
-by scope. Viewers differ in how they gate content today: the text and image viewers check read scope, the map
+by scope. Under A, a user's file inside the program's scope stays reachable in a sibling tab. UTERM-054 rejected that
+shape for the terminal, and recorded each tab's owner to fix it. Viewers differ in how they gate content today: the text and image viewers check read scope, the map
 withholds file-pin values from every program whatever its scope, and the data viewer has no remote schema.
 
 ### A cap on tabs a program opens
@@ -342,6 +344,9 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
   schemas. A ScriptWire change waits for UTERM-056's negotiation, and an exec wire change waits for UTERM-028's
 - A caller on today's versions keeps today's meaning, per ADR-13. That includes the events a caller on today's minor
   receives from every tab. No deployed driver or native controller is refused at hello
+- Each program open path names the version that gates any new meaning: the viewer schema's minor for `show` and
+  `show-markdown`, the ScriptWire version for `send`, and none for `uniterm open`. A connection at today's ScriptWire
+  version still gets replacement from `send`, even after a Janet script's `send` changes
 - Each open decision above is settled
 
 ### M2: Data viewer tabs
@@ -424,6 +429,8 @@ launch, and a stale number resolves to "the tab is not open in that pane". ADR-0
   negotiation is UTERM-056's, not UTERM-028's. Native controllers keep today's meaning of `send`. Added the impact on
   UTERM-056, made the UTERM-054 impact depend on "What a program may reach", and added a check that events keep their
   meaning for callers on today's minor.
+- 2026-11-26: A closing re-check of the third pass's fixes converged. Routed its checks on the version that gates each
+  program open path, and added the terminal precedent from UTERM-054 to "What a program may reach".
 - 2026-11-26: ADR candidate: stable tab identity across the program boundary. `adr-impact` found that no ADR covers tab
   identity for any applet. Outcome: undecided, held by "Tab identity".
 - 2026-11-26: ADR candidate: whether an open into an occupied pane adds or replaces, across applets. Outcome: undecided.
