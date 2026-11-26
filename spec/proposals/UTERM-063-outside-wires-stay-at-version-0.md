@@ -12,8 +12,8 @@
   change lands in place under "A changed meaning is refused, never reinterpreted".
 - UTERM-028, UTERM-055 — accepted, not started. Their exec frames land in place at version 0, after M2, with no version
   offer. The user chose this for UTERM-028 on 2026-11-26.
-- UTERM-056 — accepted, not started. It negotiates ScriptWire versions. While ScriptWire is at 0 there is nothing to
-  negotiate, so its negotiation waits on ScriptWire's declaration.
+- UTERM-056 — deferred until ScriptWire's declaration. While ScriptWire is at 0 there is nothing to negotiate. Its one
+  piece of work at version 0, the advice in the hello refusal, lands in M2.
 - UTERM-050 — accepted. Its bump of `uniterm/api-version` does not happen. The scripting API version stays at 0, and the
   change lands in place. Its ScriptWire change lands in place too under "A changed meaning is refused, never
   reinterpreted": a held `:directory` that may be gone takes a new key, or the old meaning holds.
@@ -320,7 +320,7 @@ agree on every message.
   - **Declared stable**: an external version uniterm's maintainers have declared version 1. Its compatibility promise
     holds from then on
 - ADR-16's consequence line says a changed answer lands in place while its wire is at 0
-- UTERM-056 says its negotiation waits on ScriptWire's declaration. UTERM-028 and UTERM-055 land their frames in place
+- UTERM-056 is deferred until ScriptWire's declaration. UTERM-028 and UTERM-055 land their frames in place
   at 0, with no version offer
 - The impacted proposals that plan a version bump say the change lands in place while the wire is at 0, after M2
 
@@ -337,6 +337,10 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 - The strict exec decoder still reads both forms of the `error` message's text, `error.message` and `message`
 - A pre-reset exec hello with extra keys is refused with the version text, not an unknown-key error. Each peer reads the
   hello's version field first, and a test refuses a hello from another version with both versions named
+- The app's notice for a ScriptWire hello at another version names both versions, and says to rebuild the program
+  against this uniterm or update uniterm, as the exec wire's refusal does. It never says to relaunch uniterm, since the
+  identity check catches the bundle's own command. It never picks one remedy by comparing the numbers, since a
+  pre-reset program's version is above 0
 - ScriptWire and the exec wire each carry a table of retired names, empty at first. A test sends each retired name and
   checks that it is refused by name
 - The bundled `uniterm` command and the REPL send their code identity right after the hello. A swapped command from
@@ -415,6 +419,11 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 - 2026-11-26: UTERM-028 no longer waits on the exec wire's declaration. The user chose that its driver commands land in
   place at version 0, and UTERM-055's capture frames follow. Impacts, the one-way door risk, and M1's check on the
   impacted proposals now say so.
+- 2026-11-26: M2 gained the check that ScriptWire's hello refusal gives the advice that can work. Today the app posts
+  "Relaunch uniterm" for any hello at another version. After the reset that comes from programs built outside the
+  bundle, which a relaunch cannot fix. The fix came from UTERM-056 M3, whose remaining work waits on ScriptWire's
+  declaration. The user chose to land it here, so the wrong text never ships after the reset. Leaves undone: a user who
+  swaps an older uniterm under a running app is told to rebuild or update, not to relaunch.
 
 ## References
 

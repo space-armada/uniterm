@@ -12,7 +12,6 @@
 | UTERM-043 M1 | None | Split from M2: M1 builds only on today's control code. M2 checks it against newer features |
 | UTERM-041 M1-M2 | None | |
 | UTERM-042 M1-M3 | UTERM-041 M2 | M2 builds on UTERM-041 M1's tab bar and markers. M3 builds on its chip. M1 needs neither |
-| UTERM-056 M1-M4 | None | Placed before every row that changes ScriptWire, so none of them refuses a native controller built at version 14. M1 and M2 ship together |
 | UTERM-054 M6 | None | Split from M1-M5: M6 amends UTERM-019 and must land before UTERM-019 M1 ships |
 | UTERM-054 M1-M4 | None | Split from M5 and M6: M1-M4 need nothing from UTERM-019. M2 builds the full-page route if UTERM-019 M4 has not |
 | UTERM-019 M1-M2 | None | Split from M3: M1-M2 need nothing from UTERM-041 or UTERM-042 |
@@ -22,7 +21,7 @@
 | UTERM-020 M1-M9 | UTERM-019 M6 | Its Dependencies name UTERM-019 whole, including trusted input. M1 starts after UTERM-019 M1 |
 | UTERM-032 M1-M2 | None | |
 | UTERM-034 M1 | UTERM-032 | M1 amends UTERM-032's input-file sections and moves its input-file mark onto the bytes the command reads |
-| UTERM-057 M1 | UTERM-034 M1 | Reuses the chunk messages UTERM-034 M1 builds. Placed after UTERM-056, so its ScriptWire bump refuses no native controller |
+| UTERM-057 M1 | UTERM-034 M1 | Reuses the chunk messages UTERM-034 M1 builds. Its ScriptWire change lands in place at version 0, after UTERM-063 M2 |
 | UTERM-024 M1-M2 | UTERM-032 | New permission kinds follow UTERM-032's rule on where a kind may appear |
 | UTERM-030 M1-M2 | UTERM-032, UTERM-024 | Slide images load from UTERM-032's granted folder. The Markdown page opts in to UTERM-024's controller keys |
 | UTERM-025 M1 | UTERM-024, UTERM-030, UTERM-032 | The presenter needs UTERM-024's commands and keys, UTERM-030's slides, and UTERM-032's deck argument |
