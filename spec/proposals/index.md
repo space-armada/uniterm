@@ -62,6 +62,7 @@
 | [UTERM-058](UTERM-058-palette-tab-work-on-the-main-thread.md) | The palette lists and filters tabs without main-thread work that grows with the tab count | accepted |
 | [UTERM-059](UTERM-059-terminal-change-check-never-encodes-every-tab.md) | The terminal's change check never encodes every tab | accepted |
 | [UTERM-060](UTERM-060-keep-the-evidence-of-where-ui-test-input-went.md) | A failed UI run keeps XCTest's per-event confirmations and which app was frontmost, and a debug build records the input it receives | accepted |
+| [UTERM-061](UTERM-061-palette-commands-run-in-the-nearest-pane-of-their-type.md) | A palette command of another applet type runs in the nearest pane of its type | draft |
 
 ## Dependency Graph
 
@@ -119,6 +120,7 @@ UTERM-056 ← UTERM-004, UTERM-021
 UTERM-057 ← UTERM-004, UTERM-015, UTERM-034
 UTERM-058 ← UTERM-002, UTERM-053
 UTERM-059 ← UTERM-052
+UTERM-061 ← UTERM-018
 ```
 
 ## Not Yet Filed
