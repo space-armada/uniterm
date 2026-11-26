@@ -285,6 +285,21 @@ agree on every message.
   command-pin snapshot, the HSTS store, and the policy file format
 - The version docs on ScriptWire, the exec wire, and the command schema version describe version 0 and 0.0
 - ADR-13 carries the amendment the user approved, or the milestone waits for it
+- ADR-13 says "external wire" where it said "outside wire", its title included, as a change of wording with no change of
+  meaning. Its filename and the quoted text in its Amendments stay as they are
+- `docs/glossary.md`'s "Wires" section is titled "Wires and versions", and carries these entries:
+  - **External wire**, replacing "Outside wire": a wire to a program deployed apart from uniterm, ScriptWire and the
+    exec wire. Its version is an external version. At version 0 it makes no compatibility promise. From version 1 it
+    stays compatible across versions, per ADR-13
+  - **Internal wire**: a wire whose two ends ship in the uniterm bundle, DocumentWire and ImageWire. Its version is an
+    internal version, and it refuses any version but its own
+  - **External version**: a version that a program or file uniterm does not build names or checks. These are
+    ScriptWire's, the exec wire's, each applet command schema's, `uniterm/api-version`, the controller descriptor
+    format, and each permission's. It stays at 0 until the user declares it version 1, per UTERM-063
+  - **Internal version**: a version only uniterm reads, such as an internal wire's and the layout file's. It keeps its
+    own rules
+  - **Declared stable**: an external version the user has declared version 1. Its compatibility promise holds from then
+    on
 - ADR-16's consequence line says a changed answer lands in place while its wire is at 0
 - UTERM-028 and UTERM-056 say each waits on its wire's declaration
 - The impacted proposals that plan a version bump say the change lands in place while the wire is at 0, after M2
@@ -351,6 +366,9 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   how a permission's meaning changes at 0, and what the reset does to the controller policy file.
 - 2026-11-26: A pre-reset controller policy file is set aside, and every controller is approved again once. The user
   chose this, since only files from before the reset are affected.
+- 2026-11-26: M1 adds glossary entries for external and internal wires, external and internal versions, and declared
+  stable. "Outside wire" becomes "external wire" in the glossary and in ADR-13, to match the external and internal
+  versions. The user chose this.
 - 2026-11-26: Rewrote the drafted ADR-13 amendment. C1 had said "a wire, or a contract a wire carries, at version 0
   carries no compatibility promise. Its meaning may change in place". It now covers wire protocols only, leaves every
   carried contract to P4, and keeps P1's reason. Command schemas get their version-0 rule in their own contract in
@@ -366,7 +384,7 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 
 ## References
 
-- ADR-13: outside wires stay compatible across versions
+- ADR-13: outside wires stay compatible across versions, renamed to external wires in M1
 - ADR-14: P10, which "A permission whose meaning changes at 0" must keep
 - ADR-06: layout file versioning, outside the freeze
 - UTERM-062: "Callers that cannot name a tab"
