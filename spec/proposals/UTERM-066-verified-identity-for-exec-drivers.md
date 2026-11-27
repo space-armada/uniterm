@@ -111,13 +111,22 @@ Decision: a verified driver offers "Trust this version", for the exact verified 
 a signing key plus the driver's ID across signed versions. Both live in the controllers' policy file.
 
 **Decided by:** user, 2026-11-26
-**Pending override:** keep both levels, but store driver approvals in their own file, such as `drivers.json`, shown in
-the same Controllers & Permissions window. An older build that reads a driver approval in `policy.json` either stops
-using every controller approval, for a new scope kind, or moves the whole file aside, for a new selector. The window
-already merges `policy.json` and `files.json`, and `files.json` was split out for this reason. Recommended by
-new-proposal (critique).
 
-Rationale: the two levels mean the same thing for a driver as for a controller.
+Rationale: the two levels mean the same thing for a driver as for a controller. One store keeps one place to review
+and revoke trust. uniterm is pre-v1, so an older build that cannot read a driver entry is not a constraint.
+
+### Each approval names its artifact kind
+
+Decision: every entry in the policy store names its artifact kind, such as a controller package or a driver package. A
+selector matches only runs of its own kind. A package trusted both as a controller and as a driver has two entries,
+one per role, each with its own powers. Revoking one leaves the other.
+
+**Decided by:** user, 2026-11-26
+
+Rationale: ADR-14 P8 says one granted power never silently grants another. Trusting a package to read the clipboard as
+a driver in a pane must not let it do so as a controller started from a shell. The code already keeps script-file and
+package approvals apart for the same reason. One entry per role keeps each approval about one role, and the window can
+still group a package's entries together.
 
 ## Design Decisions (Open)
 
@@ -148,15 +157,6 @@ The layout-request API refuses unknown exec keys, so a new caller on an older ap
 
 - How a `host-launch` scope matches a package declaration: by the package's identity, or by its entry path
 - Whether a program may declare a package at all, or only the user
-
-### Keeping driver and controller approvals apart
-
-The code keeps script-file and package approvals apart on purpose: "a remembered approval of one never covers the
-other, whatever ID and key they share." A driver approval stored with a controller selector would cover a controller run
-of the same package, and the reverse.
-
-- A. A driver artifact kind, so the two never cover each other.
-- B. One artifact for both roles, for kinds that mean the same thing in each.
 
 ### How a layout saves a package declaration
 
@@ -197,13 +197,10 @@ variable. A driver is spawned by the app, with an environment built from the dec
 
 The proposal changes four contracts. Each needs its skew behavior settled.
 
-- The policy store, shared across builds and across instances running at once. It depends on "The same two trust
-  levels as controllers" and its pending override. In `policy.json`, an older build that meets a driver approval of a
-  kind it does not know keeps no trust at all, controller trust included. A selector kind it does not know moves the
-  whole file aside. Command, capture, and read-scope kinds are unknown to every build before UTERM-028, UTERM-055, and
-  UTERM-065. In a separate store, an older build never reads driver approvals, and its controller trust keeps working.
-  The same rule already reaches controllers when a new permission kind lands, so the question is whether drivers
-  follow it or get a stricter one.
+- The policy store, shared across builds and across instances running at once. Today an older build that meets an
+  entry of a kind it does not know keeps no trust at all, and a selector kind it does not know moves the whole file
+  aside. uniterm is pre-v1, so this breakage is accepted for now. Whether the store should tolerate unknown entries
+  before v1 is a question beyond this proposal, raised as an ADR candidate in the Decision Log.
 - The layout file. An older build keeps a version 4 file aside, per "How a layout saves a package declaration".
 - The descriptor, which gains an interpreter entry kind and a fixed command line. A new package on an old build is
   refused by strict parsing. An old package on a new build reads unchanged.
@@ -219,9 +216,9 @@ The proposal changes four contracts. Each needs its skew behavior settled.
 - **A verified script driver imports unverified code** — likelihood: high, impact: medium. An interpreter loads modules
   from its own search paths. Mitigation: the review text says imports are not verified, and "Trust this version" binds
   only the packaged files. Accepted pending the ADR-14 amendment above.
-- **An older build loses every controller approval** — likelihood: medium, impact: high. Two builds can run at once,
-  and downgrades happen. A driver approval in `policy.json` stops or moves aside every controller approval in an older
-  build. Mitigation: the pending override on "The same two trust levels as controllers".
+- **An older build loses every controller approval** — likelihood: medium, impact: low. A driver approval in
+  `policy.json` stops or moves aside every controller approval in an older build. Accepted: uniterm is pre-v1, and the
+  user accepts breaking changes until then.
 - **A remote party behind a trusted driver** — likelihood: low, impact: medium. "Trust this version" of a packaged
   ssh-like driver remembers powers for whatever host its argv names. The approval binds the local code, not the remote
   party. Mitigation: "Whether the launch itself can be remembered" keeps argv in front of the user under option A.
@@ -259,8 +256,9 @@ The proposal changes four contracts. Each needs its skew behavior settled.
 - A changed package asks again under "Trust this version", and a package signed by another key asks again under "Trust
   this identity"
 - A driver with no verified identity is never offered a remembered approval
-- An older build behaves toward driver approvals as "Version skew" settles for the chosen store
-- A store this build cannot write turns off the trust choices of its own artifact kind only
+- A driver approval never covers a controller run of the same package, and a controller approval never covers a driver
+  run
+- A package trusted in both roles shows two entries, and revoking one leaves the other
 - Revoking a remembered approval removes it from the store, ends a live run's use of it, and stops its queued work
 - Each use of a remembered power is checked at the effect, against the live policy
 
@@ -323,6 +321,13 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   Homebrew prefix is writable by the user. The ADR Deviations entry and the `-I` pending override do not name it. No
   design change was made for it. Corrected the ADR Deviations entry, which said the user chose after the full list was
   named. Routed `PERLLIB`, `BASH_FUNC_` keys, interpreter kinds with no isolating flag, and sibling imports to M3.
+- 2026-11-26: The user kept driver approvals in the controllers' policy file, and declined the pending override for a
+  separate `drivers.json`. Older builds do not matter before v1. Added "Each approval names its artifact kind", the
+  user's choice, which settles the open question on keeping driver and controller approvals apart. Removed that
+  question. The older-build risk is now accepted, and the M2 skew checks became role checks.
+- 2026-11-26: ADR candidate (hard to reverse): a build never loses or disables stored data it can read because of
+  stored data it cannot read. What it cannot read, it keeps unchanged and acts on nothing from. Undecided. Raised by
+  the user, who asked whether to adopt it before v1.
 
 ## References
 
