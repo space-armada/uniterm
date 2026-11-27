@@ -524,10 +524,9 @@ and its memory for as long as the pane lives. Selecting another tab only takes t
 hierarchy (`show(page:)` in `BrowserView.swift`). The tab still holds it. Many tabs add up, and UTERM-039 leaves a
 controller's tab count uncapped. Its Revisit line already names "unloading of background tabs" as a trigger.
 
-The browser already does part of this. A restored tab nobody has looked at loads only when it is first selected, and
-only while the pane is attached (`loadIfNeverLoaded` in `BrowserApplet.swift`). Detach pauses and suspends media in
-every tab (`setMediaSuspended` in `BrowserTab.swift`), and reattach lifts it. This idea covers the rest: a tab that has
-loaded and then gone to the background, in an attached pane. It needs a proposal of its own.
+The browser already does part of this. A restored tab nobody has looked at loads only when it is first selected
+(`loadIfNeverLoaded` in `BrowserApplet.swift`). This idea covers the rest: a tab that has loaded and then gone to the
+background. It needs a proposal of its own.
 
 The idea has two readings. Freeze keeps the web view and throttles or suspends its activity. WebKit's public API reaches
 only media this way, through `pauseAllMediaPlayback` and `setAllMediaPlaybackSuspended`. Occlusion control is private

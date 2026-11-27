@@ -5,8 +5,8 @@
 
 ## Context
 
-Each pane runs one applet. uniterm decides when an applet starts, when it leaves the screen, when it comes back, and
-when it ends. Only the applet knows what those moments mean for its own content. A terminal, a browser, and a media
+Each pane runs one applet. uniterm decides when an applet starts and when it ends. Only the applet knows what those
+moments mean for its own content. A terminal, a browser, and a media
 viewer each have different work in flight.
 
 Undo close reopens a pane in the same place with the same applet. It is not a snapshot of a running process. An applet
@@ -25,12 +25,10 @@ every change, but such state only needs saving once, as the app quits. Only the 
 ## Principles
 
 - **P1**: uniterm defines the applet lifecycle and sends its events. Each applet decides how it responds. The events are
-  start, detach, reattach, willQuit, and close. Detach means the applet has left the screen and stays alive. Reattach
-  means it is back. Close means the host is done with it.
+  start, willQuit, and close. Close means the host is done with it.
 - **P2**: uniterm sends each event when it happens, and does nothing else on the applet's behalf. It never keeps an
   applet alive after closing it, and it never stops or signals the applet's work itself.
-- **P3**: On detach, an applet stops at once what the user would notice but cannot see. It pauses audio and video, and
-  it holds back alerts.
+- **P3**: Struck on 2026-11-27; see Amendments.
 - **P4**: What an applet does after close is its own choice. It may end at once, finish its work after a delay, or save
   more state into its description. Any work it keeps alive after close must be bounded in time and visible to the user.
 - **P5**: Undo reopens a closed pane from its description, in the same place, with the same applet type.
@@ -40,8 +38,9 @@ every change, but such state only needs saving once, as the app quits. Only the 
 
 ## Consequences
 
-- Each applet defines what pausing means for it. An applet with nothing perceptible to pause has nothing to do on
-  detach.
+- Hiding a view is not a lifecycle event. An applet in a hidden, minimized, or covered window keeps running, and so does
+  one in a pane uniterm hides. Sound it plays carries on, and its alerts go out when they happen.
+- What an applet does with its own content that is off screen, such as a tab that is not selected, is its own choice.
 - An undo restores what the applet's description carries, and no more. A terminal's undo gives a fresh shell in the
   same directory.
 - Since undo cannot restore a running session on its own, a close that would end running work asks the user first.
@@ -52,8 +51,9 @@ every change, but such state only needs saving once, as the app quits. Only the 
 
 - **The host keeps closed applets alive for a grace period.** This gives an exact undo, but the host must keep every
   applet quiet and bounded without understanding it. For a terminal, that means stopping its processes with signals.
-- **The host defines events only, with no duties for applets.** This is simpler, but nothing would stop an applet from
-  playing audio from a pane the user cannot see.
+- **The host sends detach and reattach when an applet leaves the screen and comes back.** An applet then pauses audio
+  and video and holds back alerts while unseen. Nothing leaves the screen and stays alive since P2 and P5, and stopping
+  sound because a view is hidden breaks what a Mac app does when its window is hidden.
 - **Applets watch for the app's own termination notice.** The order between an applet's observer and the host's last
   save is not defined, so an applet could save after the layout is already written.
 
@@ -64,6 +64,17 @@ every change, but such state only needs saving once, as the app quits. Only the 
 - 2026-11-26: Added willQuit to P1's events and defined it in P6. Some state is too costly to describe on every layout
   save, and only the host knows when the last save happens. Removed from P1: "The events are start, detach, reattach,
   and close."
+- 2026-11-27: Removed detach and reattach from P1's events, and struck P3. The events were sent for a closed applet
+  kept alive for undo. P2 and P5 ended that, so no applet leaves the screen and stays alive. Hiding a view is not such
+  a moment. By P2 uniterm does nothing on the applet's behalf then, and a Mac app keeps playing sound while its window
+  is hidden, so stopping it would surprise the user. Removed from Context: "uniterm decides when an applet starts, when
+  it leaves the screen, when it comes back, and when it ends." Removed from P1: "The events are start, detach,
+  reattach, willQuit, and close. Detach means the applet has left the screen and stays alive. Reattach means it is
+  back." Removed P3: "On detach, an applet stops at once what the user would notice but cannot see. It pauses audio and
+  video, and it holds back alerts." Removed from Consequences: "Each applet defines what pausing means for it. An
+  applet with nothing perceptible to pause has nothing to do on detach." Removed from Alternatives Considered: "**The
+  host defines events only, with no duties for applets.** This is simpler, but nothing would stop an applet from
+  playing audio from a pane the user cannot see."
 
 ## References
 

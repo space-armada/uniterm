@@ -175,7 +175,7 @@ Decision: the bound covers the browser applet and its tab bar, per change.
   does no string or view work. A bulk insert splices once and makes one pass. Amended 2026-11-22; see Decision Log.
 - A restore or a bulk open does work linear in the tabs it brings, once. Each step builds a tab object and a record,
   with no view.
-- A pane-level event, such as start, detach, reattach, or close, walks every tab once.
+- A pane-level event, such as start or close, walks every tab once.
 
 The window's own work per change is outside this bound: the palette rebuild, which stays out of scope, and the
 description's array pass at each call, which UTERM-052 declares.

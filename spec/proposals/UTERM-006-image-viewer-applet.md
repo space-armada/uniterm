@@ -69,7 +69,8 @@ Decision: a custom view, fed by ImageIO decoding in a sandboxed helper process, 
   is waiting. A request that arrives while the prefetch is pending replaces it. A prefetch already decoding runs to
   completion, and the waiting request goes next, so the added wait is at most one fit decode. A pane zoomed past fit
   does not prefetch. The previous image's fit decode is kept after a step.
-- The view steps animated frames itself, and pauses them on detach, per ADR-05.
+- The view steps animated frames itself, and pauses them while the image is off screen. Off screen is the viewer's own
+  state. No lifecycle event sets it, and a hidden tab will, under UTERM-062. Amended 2026-11-27; see Decision Log.
 - The supported set is whatever `CGImageSourceCopyTypeIdentifiers` reports on the running macOS, kept to the types that
   conform to `public.image`. Before the helper answers, the open panel and the folder listing accept any type that
   conforms to `public.image`. Amended 2026-11-07; see Decision Log.
@@ -214,9 +215,9 @@ and a folder listing taken once, with Reload.
   close and run it. Amended 2026-11-07; see Decision Log.
 - Manual stepping stops at the first and last image.
 - Play or Pause Slideshow is one command, since a registry command has one title. Playback advances every 5 seconds and
-  wraps at the end. A manual step stops it, and so does zooming past fit, from the start of a pinch. It pauses on detach
-  and resumes on reattach only if it was playing. A status segment shows it is playing. The interval is fixed, with no
-  setting, and playing state is never saved. Amended 2026-11-07; see Decision Log.
+  wraps at the end. A manual step stops it, and so does zooming past fit, from the start of a pinch. It pauses while
+  the image is off screen and resumes only if it was playing. A status segment shows it is playing. The interval is
+  fixed, with no setting, and playing state is never saved. Amended 2026-11-27; see Decision Log.
 - Name order is Finder's: localized and numeric-aware, so `img2` comes before `img10`. Date order is the file's
   modification time, newest first, with ties in name order. Capture dates would mean reading EXIF in the app, which
   "Rendering" rules out.
@@ -250,9 +251,9 @@ it, so it is not written yet. Every applet implements:
 
 - A view the pane hosts, a title, and status bar segments.
 - `start`, `focus`, and a palette update.
-- `detach`, `reattach`, and `close`. uniterm sends these lifecycle events, and each applet owns its response, per
-  ADR-05. On detach an applet pauses audio, video, and alerts at once. uniterm keeps no closed applet alive. An applet
-  that keeps work going after close owns its bound and a visible indicator.
+- `close`. uniterm sends this lifecycle event, and each applet owns its response, per ADR-05. uniterm keeps no closed
+  applet alive. An applet that keeps work going after close owns its bound and a visible indicator. Amended 2026-11-27;
+  see Decision Log.
 - `isRunningSomething` and `runningLabels`. Closing a pane, a window, or the app asks first when an affected pane is
   running something, and the dialog names it.
 - `describe()`, an inert description with a type and a per-type version. Undo and layout restore both rebuild the
@@ -353,8 +354,8 @@ None.
   a retry, and every terminal keeps running
 - An app and a helper from different protocol versions refuse each other, with a message to relaunch uniterm
 - A Display P3 image and an HDR image look the same as in Preview, and EXIF orientation is applied
-- An animated image plays, and pauses on detach. A long animation streams its frames within the bitmap budget without
-  starving step and tile requests
+- An animated image plays, and pauses while off screen. A long animation streams its frames within the bitmap budget
+  without starving step and tile requests. Amended 2026-11-27; see Decision Log.
 - The app knows the supported types without reading image bytes, and a type list that includes PDF still leaves PDF
   unopened
 - A new or restored image pane while the helper or bitmap budget is exhausted shows its image at fit, or says why it
@@ -423,8 +424,8 @@ None.
   per key repeat
 - Next, Previous, First, Last, Play, Sort, and Reload are registry commands with no default chord, and Cmd-Left in the
   palette's search field moves the caret while an image pane has focus
-- The slideshow advances every 5 seconds and wraps, stops on a manual step, pauses on detach, and resumes on reattach
-  only if it was playing
+- The slideshow advances every 5 seconds and wraps, stops on a manual step, pauses while off screen, and resumes only
+  if it was playing. Amended 2026-11-27; see Decision Log.
 - Name order matches Finder's for numbered files, and date order is newest first with ties in name order
 - Stepping works while a large folder is still listing, and Reload keeps the current image or lands nearest it
 - When the folder of a single opened file cannot be listed, such as under macOS privacy protection, the pane shows that
@@ -505,8 +506,8 @@ None.
   goes back to the last zoom whose whole window of frames was held. Amended 2026-11-07; see Decision Log.
 - Moving the window to a display with a different scale requests new pixels
 - A user remap of the shared "Actual Size" title moves the terminal's item and the viewer's item together
-- On detach a zoomed pane releases its 1:1 decode, its tiles, and an animation's zoomed frames, and keeps only its
-  backdrop. Amended 2026-11-07; see Decision Log.
+- While off screen a zoomed image releases its 1:1 decode, its tiles, and an animation's zoomed frames, and keeps only
+  its backdrop. Amended 2026-11-27; see Decision Log.
 - The helper releases a prefetched bitmap once sent, and zoom is never refused for memory a prefetch holds
 
 **As built:**
@@ -860,6 +861,18 @@ tabs. Amended 2026-11-26; see Decision Log.
   stepping, and `zoom` name their tab, and M5 waits on UTERM-062 M4. The note said before: "UTERM-065 must be accepted,
   and its M1 and M2 built, before this milestone can start." The user placed M5 after UTERM-062.
 - 2026-11-26: Scheduled as UTERM-006 M5 in queue.md.
+- 2026-11-27: The user retired the `detach` and `reattach` lifecycle events, and ADR-05 is amended to match. The host
+  sends neither, and hiding a view sends an applet nothing. The pause and release code that M1 to M3 built stays, as
+  the viewer's own off-screen state. Nothing in the app sets that state until UTERM-062's hidden image tabs do. The As
+  built blocks keep their wording, since they record what shipped then.
+  - Amended "Rendering". It said "The view steps animated frames itself, and pauses them on detach, per ADR-05."
+  - Amended "Navigation". It said the slideshow "pauses on detach and resumes on reattach only if it was playing".
+  - Amended "The applet contract". It said "`detach`, `reattach`, and `close`. uniterm sends these lifecycle events, and
+    each applet owns its response, per ADR-05. On detach an applet pauses audio, video, and alerts at once."
+  - Amended M1. Its check said "An animated image plays, and pauses on detach."
+  - Amended M2. Its check said the slideshow "pauses on detach, and resumes on reattach only if it was playing".
+  - Amended M3. Its check said "On detach a zoomed pane releases its 1:1 decode, its tiles, and an animation's zoomed
+    frames, and keeps only its backdrop."
 
 ## References
 

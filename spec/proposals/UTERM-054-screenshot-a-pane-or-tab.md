@@ -343,7 +343,7 @@ and the terminal may have no current frame. Candidates:
   owners, that select switches the tab the user is looking at.
 - Make the tab show itself before the capture. One call then silently does two operations, a select and a capture.
 
-UTERM-019 M4 requires a snapshot of an unselected tab or a tab in a detached pane to work or return a structured error.
+UTERM-019 M4 requires a snapshot of an unselected tab to work or return a structured error.
 The answer here must agree with it. A stale frame that reports success is a risk under every candidate.
 
 Decision: an applet captures a target state only when its milestone proved that state. Every other state returns a

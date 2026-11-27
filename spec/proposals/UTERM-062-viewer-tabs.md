@@ -351,13 +351,13 @@ one map file are caught at save by the map's existing conflict check. Converged 
 Original question: the image viewer's bitmap budget is one lease per pane, with one floor. Should hidden image tabs keep
 their bitmaps in the pane's lease, get a lease each, or release their bitmaps?
 
-Decision: a hidden image tab keeps what a detached pane keeps today: its fit backdrop and the frame on screen. It
-releases its tiles, zoomed frames, the helper's level, and its cached neighbors, through the same code detach runs. All
+Decision: a hidden image tab keeps what the image viewer's off-screen code keeps today: its fit backdrop and the frame on
+screen. It releases its tiles, zoomed frames, the helper's level, and its cached neighbors, through that same code. All
 of a pane's tabs share its one lease. When a reservation for on-screen content would fail, hidden tabs' backdrops give
 way first, least recently selected first, in any pane's lease. On-screen content is never refused while a hidden tab
-anywhere holds a backdrop. (autonomous)
+anywhere holds a backdrop. (autonomous) Amended 2026-11-27; see Decision Log.
 
-Rationale: a detached pane already keeps only its backdrop, so a hidden tab follows an existing rule, and switching to
+Rationale: the viewer's off-screen code already keeps only the backdrop, so a hidden tab reuses it, and switching to
 it is instant at fit. Keeping everything in the shared lease would hold tiles nobody sees, and today's reservation frees
 only the current image's cache, so the selected tab could be refused its first frame. A lease per tab grants a floor to
 content nobody sees. Releasing every bitmap would stall a program's `wait` on its hidden tab, and turn a tab whose
@@ -369,17 +369,17 @@ pane's zoom. Converged in 1 pass.
 Original question: the image viewer's slideshow, animated images, and prefetch run in its pane, and a detached pane
 pauses them. What does a hidden tab do?
 
-Decision: a tab runs perceptible work only while it is on screen, meaning its pane is attached and the tab is selected.
-A hidden tab pauses its animation, its slideshow timer, keeping the intent to play, its prefetch, and its tiles, and
-resumes when selected. Its alerts go out at once and name its file, as the terminal's hidden tabs do. It still asks the
-helper for the still decodes its own first load and its program's commands need, behind the selected tab's requests. A
-program's zoom into a hidden tab settles without waiting for tiles. (autonomous)
+Decision: a tab runs perceptible work only while it is on screen, meaning the tab is selected. A hidden tab pauses its
+animation, its slideshow timer, keeping the intent to play, its prefetch, and its tiles, and resumes when selected. Its
+alerts go out at once and name its file, as the terminal's hidden tabs do. It still asks the helper for the still
+decodes its own first load and its program's commands need, behind the selected tab's requests. A program's zoom into a
+hidden tab settles without waiting for tiles. (autonomous) Amended 2026-11-27; see Decision Log.
 
-Rationale: ADR-05 stops what the user would notice but cannot see, and a hidden tab is not seen. Keeping a slideshow
-running would make the pane's one helper serve the hidden tab, starving the selected tab's tiles and frames. Holding
+Rationale: a hidden tab is not seen, so its animation and slideshow would run for nobody. Keeping a slideshow
+running would also make the pane's one helper serve the hidden tab, starving the selected tab's tiles and frames. Holding
 alerts back would hide a failed open until the user selects its tab, against M1's notice rule. Pausing still decodes
-would stall a program's `show` and `wait` on its hidden tab. The detached-pane zoom wait has the same gap today, filed
-as `20261126-detached-image-zoom-wait-never-settles`. Converged in 1 pass.
+would stall a program's `show` and `wait` on its hidden tab. The off-screen code's zoom wait had the same gap, filed
+and since fixed as `20261126-detached-image-zoom-wait-never-settles`. Converged in 1 pass.
 
 ## Design Decisions (Open)
 
@@ -493,27 +493,31 @@ None. Every question is settled.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-27; see Decision Log.
+
 - A text viewer pane holds several documents as tabs, with the same open, select, close, and reopen behavior as M2
 - Each tab keeps its own scroll position, find, and contents sidebar state
 - A decoder helper exit shows a failure in the tab it was serving. The other tabs decode again on their next request
 - Each tab keeps its own web view, and a web content process that ends reports to its own tab
-- A hidden tab's alerts go out at once and name its file. A hidden tab holds its file-watch changes as a detached pane
-  does, and applies them when selected
+- A hidden tab's alerts go out at once and name its file. A hidden tab holds its file-watch changes through the text
+  viewer's existing held change, and applies them when selected
 - Relaunch restores every tab and the selected tab. The written payload version is the highest any tab needs
 
 ### M4: Image viewer tabs
 
 **Status:** NOT STARTED
 
+Amended 2026-11-27; see Decision Log.
+
 - An image viewer pane holds several images or folders as tabs, with the same open, select, close, and reopen behavior
   as M2
 - Each tab keeps its own zoom, position, and folder place
 - A hidden tab keeps its fit backdrop and the frame on screen, and releases its tiles, zoomed frames, the helper's
-  level, and its cached neighbors through detach's code
+  level, and its cached neighbors through the viewer's existing off-screen code
 - On-screen content in any pane takes back hidden tabs' backdrops, least recently selected first, before it is refused.
   The budget's count follows what views actually hold
-- Every gate on running work tests "on screen", attached and selected, not detach alone. A hidden tab's animation,
-  slideshow timer, prefetch, and tiles pause and resume on selection
+- Every gate on running work tests "on screen", which means selected. A hidden tab's animation, slideshow timer,
+  prefetch, and tiles pause and resume on selection
 - A hidden tab's alerts go out at once and name its file. Its still decodes for its first load and its program's
   commands run behind the selected tab's requests, and a program's zoom into a hidden tab settles without tiles
 - Selecting a tab whose helper source was dropped opens it again without a visible error
@@ -640,13 +644,27 @@ None. Every question is settled.
   Don't Save, or Cancel for map tabs with edits. UTERM-054's tab scope counts a driver's own pane as wholly its own,
   and its open question gained tab titles. Two passages now cite UTERM-063 for version 0 instead of "before 1.0".
   UTERM-006 M5 is left to UTERM-065, which already names a tab.
+- 2026-11-27: The user retired the `detach` and `reattach` lifecycle events, and ADR-05 is amended to match. No pane is
+  ever detached, so the wording that leaned on a detached pane changed. A hidden tab behaves exactly as decided. The
+  image viewer keeps its pause and release code, and the text viewer keeps its held file-watch change. Both are the
+  applet's own off-screen state now, and nothing in the app calls them until M3 and M4 do.
+  - Amended "What a hidden image tab keeps". It said "a hidden image tab keeps what a detached pane keeps today", that
+    it releases "through the same code detach runs", and "a detached pane already keeps only its backdrop, so a hidden
+    tab follows an existing rule". It now names the image viewer's off-screen code.
+  - Amended "A hidden tab's running work". It said "on screen, meaning its pane is attached and the tab is selected".
+    On screen now means selected. Its rationale said "ADR-05 stops what the user would notice but cannot see, and a
+    hidden tab is not seen", and ADR-05 no longer says that. It also said "The detached-pane zoom wait has the same gap
+    today", and that bug is fixed.
+  - Amended M3. It said a hidden tab holds its file-watch changes "as a detached pane does".
+  - Amended M4. It said a hidden tab releases "through detach's code", and that every gate tests "on screen", "attached
+    and selected, not detach alone".
 
 ## References
 
 - ADR-02: panes are addressed by stable ID
 - ADR-03: restore never runs a program
 - ADR-04: applet keys
-- ADR-05: close guards and detached panes
+- ADR-05: close guards
 - ADR-06: each applet versions its own payload
 - ADR-07: failure isolation
 - ADR-08: the main thread never waits on outside work
