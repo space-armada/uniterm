@@ -1,6 +1,7 @@
 # A memory-pressure warning stops sorting in every data pane already open
 
-**Status:** open. Confirmed by tracing the code, not by a test.
+**Status:** fixed 2026-11-26
+**Fixed:** 2026-11-26
 **Estimate:** small; no open design decisions. Re-checked 2026-11-26 against the code, UTERM-009, and UTERM-062. The fix touches `TableBudget.swift` (a lease reservation that skips the epoch check, for sorts) and `TableQuery.swift` (`SortMemory` uses it), plus one regression test in `TableQueryTests.swift` or `TableBudgetTests.swift`. UTERM-009 and the budget's doc comment limit a warning to loads running at that moment. UTERM-062 M2 is not started and keeps the same rule for a tab loaded before a warning, so the interim fix does not conflict with it.
 
 ## Observed
@@ -32,3 +33,9 @@ skipped where it should run.
 Gate only loads on the epoch. A sort's reservation checks the budget's limit and floor, not the epoch, so a warning
 ends running loads and nothing else. UTERM-062 M2 replaces the event model with a pressure state, and its check that a
 tab loaded before a warning sorts and filters again covers this too.
+
+## Fix note
+
+`Lease.reserveForWork` checks the limit and floor but not the epoch, and `SortMemory` uses it. `reserve` is unchanged, so a
+warning still ends loads. A sort in a pane already open now runs after a warning. Files: `TableBudget.swift`,
+`TableQuery.swift`. Regression test: `TableQueryTests.testASortStillRunsAfterAMemoryWarning`.

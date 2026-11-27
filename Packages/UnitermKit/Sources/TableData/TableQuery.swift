@@ -56,7 +56,7 @@ public struct SortMemory: Sendable {
   let giveBack: @Sendable (Int) -> Void
 
   public init(lease: TableBudget.Lease) {
-    reserve = { lease.reserve($0) == .granted }
+    reserve = { lease.reserveForWork($0) == .granted }
     giveBack = { lease.giveBack($0) }
   }
 }

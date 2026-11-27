@@ -117,4 +117,20 @@ final class TableQueryTests: XCTestCase {
     XCTAssertEqual(refused, .done(.rows([0, 1, 2]), sortSkipped: true))
     XCTAssertEqual(tight.used, 0)
   }
+
+  /// Catches a memory warning that stops sorting in a pane that is already open. A warning ends the
+  /// loads running at that moment. A later sort on the same lease still gets its key memory.
+  func testASortStillRunsAfterAMemoryWarning() throws {
+    let snapshot = try table(self, "name,qty\nb,2\na,1\nc,3\n")
+    let query = TableQuery(sort: SortSpec(column: qty, ascending: true))
+    let budget = TableBudget(limit: 1 << 20, floor: 0)
+    let lease = budget.makeLease()
+
+    budget.memoryPressureWarning()
+
+    let sorted = TableQueryEngine.run(snapshot, query: query, memory: SortMemory(lease: lease))
+
+    XCTAssertEqual(sorted, .done(.rows([1, 0, 2]), sortSkipped: false))
+    XCTAssertEqual(budget.used, 0)
+  }
 }
