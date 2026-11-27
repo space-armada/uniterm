@@ -48,6 +48,20 @@ uniterm is UI-heavy, so the user's hands-on reviews produce a steady stream of t
 - A breaking change to an external interface at 0 lands in place, without a new version. An older program's message is
   read with its old meaning or refused, never reinterpreted.
 
+## Queue Rows That Wait on CI
+
+- Some queue rows wait on something only CI can produce, such as a failed job or a count of clean runs. Their note
+  names `make ci-waiting-evidence`.
+- A `/work-queue` run runs `make ci-waiting-evidence` once, while it plans. The command reads GitHub, so it needs the
+  sandbox off.
+- A row whose line says WAITING is held for that run, the way a run note holds a proposal. Pass `--hold` for its
+  proposal to `proposals.py next`. The row takes no `next N` slot, runs no milestone, and gets no report. The plan
+  names it as held in one line.
+- A row whose line says FIRED runs as usual. So does a waiting row the user names by its ID.
+- No run repeats a test or reruns a CI job to make a row's trigger fire.
+- The clean count the command prints is a floor. The closing rule in `spec/flaky-tests.md` decides the real count.
+- When a waiting row finishes, remove its check from `scripts/ci-waiting-evidence.sh`.
+
 ## Git
 
 - You may commit without asking first.
