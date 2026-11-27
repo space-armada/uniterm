@@ -84,3 +84,20 @@ UTERM-044 M1, DONE. It has no `Live after` line.
     rect, and As built cites the final run.
   - The flaky entry's Fix line did not mention the skip path. Fixed.
   - Duplicate pointer readers and a long doc comment. Fixed.
+
+### Row review and final review
+
+The run's final review over the whole range also served as this row's review.
+
+- adr-impact: the range adds and edits no ADR. ADR-07 and ADR-08 are consistent. No uncovered decision passes the
+  bar.
+- The reviewer found no code defect. It checked the flaky entry's history across both commits, the M2 and M4 split,
+  the bug files, the commit subjects, and the remaining raw signals and wheels. It ran the wheel check and its
+  self-test. Its findings:
+  - UTERM-045 M2's queue row had not moved to history. Fixed in "Retire the wheel call's queue row".
+  - Two lines in the launcher flaky entry ran past 120 columns. Rewrapped.
+  - One long As built line in UTERM-046 M3. Left as is: UTERM-046 is implemented and frozen, and a rewrap is not a
+    correction of fact.
+  - The terminal wheel joined the "every synthesized wheel" decision's list. The reviewer judged it a correction of
+    an enumeration under a decision that already said "every". The Decision Log entry quotes the prior text and is
+    marked run best guess.

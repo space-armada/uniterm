@@ -25,6 +25,9 @@ Row reports:
 - [UTERM-045 M3](20261127-uterm-045-m3-launcher-count.md)
 - [UTERM-045 M2](20261127-uterm-045-m2-one-way-to-send-a-wheel.md)
 
+The run finished on 2026-11-27. Four rows remain in the queue: UTERM-044 M3, UTERM-060 M5, UTERM-060 M6, and the new
+UTERM-045 M4. Each waits on CI evidence or a local stall that the run cannot cause.
+
 The rows that changed only spec text, UTERM-060 M5 and UTERM-045 M3, had their milestone review stand as their row
 review. The final review covers them again over the whole range.
 
