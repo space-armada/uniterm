@@ -57,6 +57,7 @@ final class OpenedImage {
     hasGainMap =
       CGImageSourceCopyAuxiliaryDataInfoAtIndex(
         source, 0, kCGImageAuxiliaryDataTypeHDRGainMap) != nil
+      || Self.hasISOGainMap(source)
 
     let dpiWidth = Self.dpi(properties[kCGImagePropertyDPIWidth])
     let dpiHeight = Self.dpi(properties[kCGImagePropertyDPIHeight])
@@ -69,6 +70,15 @@ final class OpenedImage {
     #if DEBUG
       regionFault = Self.regionFault(in: properties)
     #endif
+  }
+
+  /// True when the first image carries a gain map in the ISO 21496-1 format. Apple's older format
+  /// has its own auxiliary type, and the system names the ISO one only from macOS 15.
+  private static func hasISOGainMap(_ source: CGImageSource) -> Bool {
+    guard #available(macOS 15.0, *) else { return false }
+
+    return CGImageSourceCopyAuxiliaryDataInfoAtIndex(
+      source, 0, kCGImageAuxiliaryDataTypeISOGainMap) != nil
   }
 
   #if DEBUG

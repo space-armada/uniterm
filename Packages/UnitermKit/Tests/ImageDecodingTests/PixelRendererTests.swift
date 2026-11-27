@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreImage
 import ImageIO
 import ImageTestSupport
 import ImageWire
@@ -225,6 +226,35 @@ final class PixelRendererTests: XCTestCase {
     let red = image.pixels.withUnsafeBytes { $0.loadUnaligned(as: Float16.self) }
 
     XCTAssertGreaterThan(red, 1.5)
+  }
+
+  /// Catches an ISO 21496-1 gain map being treated as plain SDR. CoreImage writes that format when
+  /// given an HDR image beside the SDR one. The source must report a gain map, and its decode must
+  /// carry values above white into the half-float pixels. The file is made here from flat colors.
+  func testAnISOGainMapDecodesAsHDR() throws {
+    let extent = CGRect(x: 0, y: 0, width: 64, height: 64)
+    let sdr = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: extent)
+    let hdr = CIImage(
+      color: CIColor(
+        red: 4, green: 4, blue: 4, alpha: 1,
+        colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!)!
+    ).cropped(to: extent)
+
+    let data = try XCTUnwrap(
+      CIContext().heifRepresentation(
+        of: sdr, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+        options: [.hdrImage: hdr]))
+
+    let source = try open(data)
+
+    XCTAssertTrue(source.hasGainMap, "the ISO gain map was not noticed")
+
+    let image = try PixelRenderer.render(source, frame: 0, maxPixel: 0)
+    let samples = image.pixels.withUnsafeBytes { Array($0.bindMemory(to: Float16.self)) }
+    let brightest = samples.enumerated().filter { $0.offset % 4 != 3 }.map(\.element).max() ?? 0
+
+    XCTAssertEqual(image.space, .extendedLinearDisplayP3)
+    XCTAssertGreaterThan(brightest, 1.5, "highlights stopped at SDR white")
   }
 
   /// Catches an animation that reports one frame, loses its delays, or decodes the wrong frame.
