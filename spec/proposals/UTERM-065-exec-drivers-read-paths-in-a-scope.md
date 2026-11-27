@@ -1,6 +1,6 @@
 # UTERM-065: Exec Drivers Read Paths in a Scope
 
-**Status:** draft
+**Status:** accepted
 **Created:** 2026-11-26
 **Updated:** 2026-11-26
 
@@ -305,6 +305,8 @@ None.
   reply.
 - 2026-11-26: Settled "Relative paths from a driver", the user's choice. A relative path resolves against the folder
   the driver was started in. The user turned down refusing relative paths. Routed an M1 check.
+
+- 2026-11-26: Accepted by the user.
 
 ## References
 

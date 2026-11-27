@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-11-03
-**Updated:** 2026-11-20
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -1447,6 +1447,9 @@ Amended 2026-11-03 and 2026-11-04; see Decision Log. Moved from M2. This milesto
   anchor's window comes forward, the routed pane takes focus, and a new window becomes key. This replaces the bullet that
   a pane or window a program's open makes takes no focus, and the anchor bullet's lines that such an open raises no
   window. It also replaces the M5 and M7 checks that an approved open takes no focus and raises no existing window.
+- 2026-11-26: Superseded in part by UTERM-065. An exec driver that holds UTERM-065's per-run read grant brings opens,
+  and names paths in its scope. This replaces the 2026-11-16 best guess 8, that an exec driver brings no opens, for a
+  driver that holds the grant.
 
 ## References
 
