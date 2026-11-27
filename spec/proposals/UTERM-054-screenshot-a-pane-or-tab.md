@@ -489,9 +489,9 @@ Rationale: one behavior per action, as ADR-15 asks, with the attention bound P15
 would leave the user no way to cancel it, and would hide a read of the user's pane. Withholding only the failure would
 make what the user sees depend on who asked. Converged in 1 pass.
 
-## Design Decisions (Open)
-
 ### What a program's capture shows of a file the program may not read
+
+Original question:
 
 The tab-scope rule in "Which panes a program may capture" counts a program's source tab as its own. It checks no file
 read scope. An applet that shows a user-opened file can therefore hand a program, in pixels, what its own contract
@@ -529,6 +529,30 @@ Sub-questions that follow from the first candidate:
 - Once UTERM-062 gives the viewers tabs: whether a pane capture's tab bar shows the titles of tabs whose files the
   caller may not read. UTERM-062 checks read scope per tab for titles, so a title the caller may not read is withheld
   everywhere else.
+
+Decision: a capture never shows a file the caller may not read. Where only part of the image comes from such a file,
+that part is left out. Where the pane's content is such a file, the capture is refused with a named reason. The user
+chose this on 2026-11-26, over refusing every such capture and over allowing it with review text that says so.
+
+- The image viewer, the text viewer's plain text, PDF, and Markdown, and the data viewer refuse a capture whose content
+  is a user-opened file outside the caller's read scope. The reason joins the append-only reason kinds.
+- The map viewer captures without the file layer and without its rows in the pin list when the caller may not read the
+  map's file. A program's own pins still show.
+- Once UTERM-062 gives the viewers tabs, a pane capture's tab bar shows no title for a tab whose file the caller may not
+  read, as UTERM-062 withholds that title everywhere else.
+- The check uses the caller's read scope, the same one the viewer's replies and events use, so a capture and a reply
+  never disagree about what a program may see. An exec driver's caller holds no read scope, so it applies to drivers
+  as written.
+
+Rationale: uniterm already promises that a program learns nothing about a user's file outside its read scope. A capture
+that hands over the pixels would break that promise for any program with the capture power. Leaving out only the
+unreadable part keeps the useful captures: a script that adds its own pins to the user's map can still capture them.
+Refusing every capture would lose that case. Allowing it would shrink the promise to paths and names, and every file
+the user opens in a granted pane would reach the program.
+
+## Design Decisions (Open)
+
+None.
 
 ## Risks
 
@@ -667,13 +691,18 @@ Sub-questions that follow from the first candidate:
 **Status:** NOT STARTED
 
 Waits for UTERM-019 M3, which builds handles and read-result, and for the byte type that UTERM-019's "Result encoding"
-adds. Also waits for the open question "What a program's capture shows of a file the program may not read".
+adds.
 
 - A user's cancel, a time-out, or a revocation of a program's pending capture fails its pending reply or frees its
   handle with a structured error, under ADR-11
 - A capture without the capture grant returns a structured error that names the power
 - A capture whose image would show a tab outside the program's tab scope, including a title in the tab bar, is refused.
   A script's capture of its own source tab works
+- A script without read access to the user's photo in its image viewer pane gets a named refusal, not the image. The
+  same holds for a user-opened file in the text viewer and the data viewer
+- A script without read access to the map's file captures the map without the file's pins and without their pin list
+  rows, and its own pins show
+- A capture and the viewer's replies agree on what the caller may see, through the same read scope
 - A capture's ScriptWire reply holds until the PNG is ready and returns a handle, and its PNG reads back in chunks
 - A pending capture that fails the authority re-check at completion frees its slot
 - A program's pending capture never refuses the user's own capture of that pane
@@ -808,6 +837,10 @@ Lands before UTERM-019 M1 ships, and does not wait for M1 to M5 here.
   applet with one tab as wholly the program's. Now a driver's own pane counts as wholly its own, and a viewer group
   pane's tab scope is the tabs the program owns. The open question on a file the program may not read gained the
   sub-question of tab titles in a pane capture.
+- 2026-11-26: Settled "What a program's capture shows of a file the program may not read": a capture never shows a file
+  the caller may not read. Part of an image from such a file is left out, as the map's file layer is, and a capture
+  whose content is such a file is refused with a named reason. Unreadable tab titles show blank once UTERM-062 lands.
+  The user chose this. M5 no longer waits on the question, and gained checks for it.
 
 ## References
 

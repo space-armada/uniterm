@@ -291,18 +291,17 @@ None.
   targets.
 - **A driver's capture reads a user-opened file its events withhold** — likelihood: medium, impact: high.
   Mitigation: a capture needs the per-run power, whose panel text says a capture reads whatever the pane shows. A
-  driver's caller holds no read scope, so UTERM-054's resolution of
+  driver's caller holds no read scope, so UTERM-054's rule for
   [20261122-capture-bypasses-image-viewer-read-scope](../bugs/20261122-capture-bypasses-image-viewer-read-scope.md)
-  applies to drivers as written, and M1 waits for that resolution. If it refuses captures outside the read scope, image
-  viewer anchor captures by drivers are refused, and the live case narrows to the driver's own map pins and browser
-  members.
+  applies to drivers as written. A capture leaves out or refuses what the caller may not read, so a driver's capture
+  of a user-opened image in its anchor is refused, and a map capture leaves out the file's pins. The live case narrows
+  to the driver's own map pins and browser members. Amended 2026-11-26; see Decision Log.
 - **The design rests on three unbuilt proposals and a proposed ADR** — likelihood: high, impact: medium.
   Mitigation: M1 waits for UTERM-028 M1 and UTERM-054 M2, M3, and M5. M5 reaches UTERM-019's byte type and exec
   base64. Following UTERM-054's rules also rests on ADR-15, which is proposed. A change to any of their capture or
   frame shapes reopens the matching decision here.
-- **M1 waits on a bug no proposal schedules** — likelihood: medium, impact: medium.
-  Mitigation: the read-scope bug names this gate, so its triage sees that exec capture waits on it. Its fix is a design
-  call in UTERM-054, and UTERM-054 does not reference it yet. Until it is settled, M1 cannot be scheduled. The revoke
+- **M1 rests on UTERM-054 M5's read-scope rule** — likelihood: medium, impact: medium.
+  Mitigation: UTERM-054 settled the rule on 2026-11-26, and its M5 builds it before M1, which waits for M5. The revoke
   drop of queued replies also rests on UTERM-028 M1's queued-frame drop, which M1 already waits for.
 
 ## Milestones
@@ -311,7 +310,7 @@ None.
 
 **Status:** NOT STARTED
 
-Waits for UTERM-063 M2, for UTERM-028 M1, for UTERM-054 M2, M3, and M5, and for UTERM-054's resolution of
+Waits for UTERM-063 M2, for UTERM-028 M1, and for UTERM-054 M2, M3, and M5. M5 builds the read-scope rule for
 [20261122-capture-bypasses-image-viewer-read-scope](../bugs/20261122-capture-bypasses-image-viewer-read-scope.md).
 
 - A driver sends capture, read-result, and discard at exec protocol version 0, and the hello is unchanged
@@ -442,6 +441,9 @@ Waits for UTERM-063 M2, for UTERM-028 M1, for UTERM-054 M2, M3, and M5, and for 
   with the frames unchanged. "Version skew" rests on UTERM-063 M2's refusal by name. Removed the risk that a version 4
   driver rejects the longer hello. UTERM-028 stays a dependency for its driver grant and its queued-frame drop, and M1
   now also waits for UTERM-063 M2. M1 lost its version offer checks and its version 5 fixture.
+- 2026-11-26: UTERM-054 settled its read-scope question: a capture leaves out or refuses what the caller may not read.
+  M1 no longer waits on an unsettled bug, only on UTERM-054 M5, which builds the rule. The risk that M1 waits on a bug
+  no proposal schedules became a risk on that rule.
 
 ## References
 
