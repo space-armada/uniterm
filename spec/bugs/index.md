@@ -65,7 +65,9 @@
 | [20261126-palette-command-refused-after-refresh-is-silent](20261126-palette-command-refused-after-refresh-is-silent.md) | A palette command that becomes unavailable after the list was built does nothing, silently | fixed |
 | [20261126-image-zoom-wait-hangs-when-every-tile-is-refused](20261126-image-zoom-wait-hangs-when-every-tile-is-refused.md) | A program's zoom wait hangs when the budget refuses every tile it needs | fixed |
 | [20261126-host-never-sends-detach-or-reattach](20261126-host-never-sends-detach-or-reattach.md) | The host never sends an applet detach or reattach, so audio and alerts never pause off screen | fixed |
-| [20261126-failed-pane-open-drops-the-old-source](20261126-failed-pane-open-drops-the-old-source.md) | A failed Open in This Pane drops the pane's old file instead of keeping it | open |
-| [20261126-iso-gain-map-images-show-as-sdr](20261126-iso-gain-map-images-show-as-sdr.md) | An image with an ISO 21496-1 gain map shows as SDR in the image viewer | open |
+| [20261126-failed-pane-open-drops-the-old-source](20261126-failed-pane-open-drops-the-old-source.md) | A failed Open in This Pane drops the pane's old file instead of keeping it | fixed |
+| [20261126-iso-gain-map-images-show-as-sdr](20261126-iso-gain-map-images-show-as-sdr.md) | An image with an ISO 21496-1 gain map shows as SDR in the image viewer | fixed |
 | [20261126-unanswered-reviews-fill-connection-slots](20261126-unanswered-reviews-fill-connection-slots.md) | Unanswered reviews hold connection slots until every script is refused | rejected |
 | [20261127-exec-driver-cannot-name-its-pane-for-a-first-layout](20261127-exec-driver-cannot-name-its-pane-for-a-first-layout.md) | An exec driver cannot make its first layout, since nothing tells it its pane's number | proposed |
+| [20261127-chosen-open-check-misses-full-load-failures](20261127-chosen-open-check-misses-full-load-failures.md) | A file that passes the open check but fails its full load still replaces the pane's old file | proposed |
+| [20261127-image-load-messages-say-image-twice](20261127-image-load-messages-say-image-twice.md) | The image viewer's load messages say "image" twice | fixed |

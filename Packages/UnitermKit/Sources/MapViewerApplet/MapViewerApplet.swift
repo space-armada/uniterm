@@ -19,6 +19,9 @@ import UniformTypeIdentifiers
 /// reach the same path, which finds the file and parses it off the main thread. The file's pins are
 /// their own layer, so loading another file replaces them and nothing else. The description holds
 /// the file's path and bookmark, never its pins.
+///
+/// An open the user chooses, from the panel or a drop, asks `checkSource` first. A file that cannot
+/// be opened then leaves the pane's source alone.
 @MainActor
 public final class MapViewerApplet: Applet, SourceReplacing {
   public let typeID = MapViewerDescription.typeID
@@ -337,7 +340,8 @@ public final class MapViewerApplet: Applet, SourceReplacing {
   /// is saved with the pane.
   ///
   /// `SourceReplacing` lets a viewer throw. This one never does, since every failure shows once
-  /// the load runs.
+  /// the load runs. A swap the user chose goes through `checkSource` first, so a file that cannot
+  /// be read never reaches here and the pins stay.
   public func replaceSource(with file: URL, startDirectory: String) {
     guard isDirty else {
       load(file, startDirectory: startDirectory)
@@ -360,6 +364,22 @@ public final class MapViewerApplet: Applet, SourceReplacing {
       guard await host?.applet(self, confirm: request) == true, !closed else { return }
 
       load(file, startDirectory: startDirectory)
+    }
+  }
+
+  /// Finds and reads `file` the way a load does, and drops what it read. The pins, the document,
+  /// and the saved path stay as they were.
+  public func checkSource(_ file: URL, startDirectory: String) async throws {
+    switch await SourceResolver.resolve(path: file.path, bookmark: nil) {
+    case .failure(let error):
+      throw error
+
+    case .success(let source):
+      let result = await GeoJSONFileReader.readDocument(source.file, limits: Self.limits)
+
+      try Task.checkCancellation()
+
+      if case .failure(let error) = result { throw error }
     }
   }
 

@@ -54,9 +54,9 @@ final class OpenedImage {
     self.orientation = orientation
     let swapped = (5...8).contains(orientation)
 
-    hasGainMap =
-      CGImageSourceCopyAuxiliaryDataInfoAtIndex(
-        source, 0, kCGImageAuxiliaryDataTypeHDRGainMap) != nil
+    // Apple's older gain map and the ISO 21496-1 one are separate auxiliary types.
+    hasGainMap = [kCGImageAuxiliaryDataTypeHDRGainMap, kCGImageAuxiliaryDataTypeISOGainMap]
+      .contains { CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, 0, $0) != nil }
 
     let dpiWidth = Self.dpi(properties[kCGImagePropertyDPIWidth])
     let dpiHeight = Self.dpi(properties[kCGImagePropertyDPIHeight])

@@ -488,6 +488,32 @@ final class MapFileTests: XCTestCase {
     XCTAssertEqual(applet.filePinsShown.map(\.label), ["A"])
   }
 
+  /// Catches an Open in This Pane that drops the pane's pins when the chosen file cannot be read.
+  /// The pane keeps its pins and its saved path, and the status bar names the file that failed.
+  func testAFailedOpenInThisPaneKeepsTheOldFileAndWarns() async throws {
+    let scratch = try GeoScratch(self)
+    let good = try scratch.write(
+      "a.geojson", GeoFixtures.collection([GeoFixtures.point("A", 1, 1)]))
+    let bad = try scratch.write("broken.geojson", #"{ "type": "FeatureCollection", "features": ["#)
+
+    let applet = MapViewerApplet(startDirectory: nil)
+    let host = RecordingHost()
+    applet.host = host
+
+    applet.replaceSource(with: good, startDirectory: scratch.url.path)
+    await applet.opening?.value
+    XCTAssertEqual(applet.filePinsShown.map(\.label), ["A"])
+
+    await applet.replaceSource(withChosen: bad).value
+    await applet.opening?.value
+
+    XCTAssertEqual(applet.filePinsShown.map(\.label), ["A"])
+    XCTAssertEqual(try MapViewerDescription.decode(applet.describe()).path, good.path)
+
+    let warned = host.sent.contains { $0.level == .warning && $0.text.contains("broken.geojson") }
+    XCTAssertTrue(warned, "\(host.sent)")
+  }
+
   /// Catches a map that binds Cmd-O, a missing Open command, and a clear that is always on. Open is
   /// in File with no key, and Clear File Pins is off until there is something to clear.
   func testTheCommandsDeclareOpenWithNoKeyAndClearWhenThereIsAFile() async throws {

@@ -62,8 +62,9 @@ final class FileMapping {
 }
 
 extension UTType {
-  /// What a message calls the format.
+  /// What a message calls the format, with no noun. A message adds its own, as "This PNG image".
+  /// The localized description is not used, since it often ends in the same noun.
   var formatName: String {
-    localizedDescription ?? preferredFilenameExtension?.uppercased() ?? identifier
+    preferredFilenameExtension?.uppercased() ?? identifier
   }
 }

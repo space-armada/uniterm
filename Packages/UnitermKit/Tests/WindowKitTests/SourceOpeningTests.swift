@@ -11,6 +11,10 @@ extension FakeApplet: SourceReplacing {
     replacedSources.append((file, startDirectory))
   }
 
+  func checkSource(_ file: URL, startDirectory: String) async throws {
+    if let replaceFailure { throw replaceFailure }
+  }
+
   // The tests hand `SourceOpening.open` a scripted picker of their own.
   var openPicker: OpenPicker { { _, _ in [] } }
 }
@@ -108,8 +112,8 @@ final class SourceOpeningTests: XCTestCase {
     XCTAssertTrue(applet.replacedSources.isEmpty)
   }
 
-  /// Catches a failed replace that is silent, or one that loses the source the pane had. The applet
-  /// throws, the pane says why, and nothing was recorded.
+  /// Catches a failed replace that is silent, or one that loses the source the pane had. The
+  /// applet's check throws, the pane says why, and nothing was replaced.
   func testAFailedReplaceIsReportedOnThePaneAndKeepsTheOldSource() async throws {
     let fixture = try WindowFixture()
     defer { fixture.cleanUp() }

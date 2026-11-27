@@ -15,6 +15,9 @@ import UniformTypeIdentifiers
 /// descriptor to the pane's helper. The app never reads image bytes: the helper decodes in its own
 /// sandbox and sends pixels the app has checked.
 ///
+/// An open the user chooses, from the panel or a drop, asks `checkSource` first. A file that cannot
+/// be opened then leaves the pane's source alone.
+///
 /// The description holds the source's path and bookmark and the current image's name, never
 /// pixels. `describe()` reads memory only.
 ///
@@ -307,6 +310,18 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     restoreWaitsForStart = false
 
     begin(path: file.path, bookmark: nil, wanted: nil, origin: .user)
+  }
+
+  /// Finds and opens `file` the way a load does, and drops what it opened. A file that is not an
+  /// image, or cannot be read, fails here. The pane keeps its image and its saved path. A file
+  /// whose bytes the helper cannot decode still shows that in the pane after the swap.
+  public func checkSource(_ file: URL, startDirectory: String) async throws {
+    let result = await SourceLoader.load(
+      path: file.path, bookmark: nil, storedKind: nil, wanted: nil, sort: record.sort, types: types)
+
+    try Task.checkCancellation()
+
+    if case .failure(let failure) = result { throw failure }
   }
 
   /// Opens a source by path, as the user named it or a restore stored it.

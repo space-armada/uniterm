@@ -218,6 +218,33 @@ final class TextViewerAppletTests: XCTestCase {
     XCTAssertEqual(applet.content.pdfView.document?.pageCount, 2)
   }
 
+  /// Catches an Open in This Pane that drops the pane's document when the chosen file cannot be
+  /// read. The pane keeps its page and its saved path, and the status bar names the file.
+  func testAFailedOpenInThisPaneKeepsTheOldDocumentAndWarns() async throws {
+    let scratch = try Scratch(self)
+    let good = try scratch.write("one.pdf", DocumentFixtures.pdf(pages: ["one"]))
+    let bad = try scratch.write("broken.pdf", Data("not a pdf".utf8))
+    let host = RecordingHost()
+    let applet = Harness.applet(startDirectory: scratch.url.path)
+    applet.host = host
+
+    try applet.replaceSource(with: good, startDirectory: scratch.url.path)
+    let opened = await Harness.settled(applet)
+    XCTAssertTrue(opened)
+    XCTAssertEqual(applet.content.body, .pdf)
+
+    await applet.replaceSource(withChosen: bad).value
+    _ = await Harness.settled(applet)
+
+    XCTAssertEqual(applet.content.body, .pdf)
+    XCTAssertEqual(applet.content.pdfView.document?.pageCount, 1)
+    XCTAssertEqual(applet.title, "one.pdf")
+    XCTAssertEqual(applet.record.path, good.path)
+
+    let warned = host.sent.contains { $0.level == .warning && $0.text.contains("broken.pdf") }
+    XCTAssertTrue(warned, "\(host.sent)")
+  }
+
   /// Holds a start-directory answer until `open()`.
   private actor AnswerGate {
     private var continuation: CheckedContinuation<Void, Never>?

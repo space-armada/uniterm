@@ -1,7 +1,7 @@
 # An image with an ISO 21496-1 gain map shows as SDR in the image viewer
 
-**Status:** open
-**Validation:** not confirmed in the running app; traced in the code, and ImageIO decodes the fixture to 4.0× when asked for HDR
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27
 
 **Estimate:** small; no open design decisions.
 
@@ -33,3 +33,22 @@ editors produce it too. Apple's older gain-map format still takes the HDR path.
 Also check for `kCGImageAuxiliaryDataTypeISOGainMap` when setting `hasGainMap`. Add a decode test with a real ISO
 gain-map file that checks values above 1.0 survive. Keep that file synthetic, made by the generator above. The
 existing tests decode no real gain-map file of either kind, so add one for Apple's format too.
+
+## Fix note
+
+Triage run on 2026-11-27.
+
+- `OpenedImage` now also asks for the ISO gain map. `hasGainMap` is true for either format, so the HDR decode runs for
+  both.
+- The regression test `PixelRendererTests.testAnISOGainMapDecodesAsHDR` builds a HEIC from flat colors with CoreImage's
+  `.hdrImage` option. It failed before the fix, because the gain map was not noticed. It passes now, and the half-float
+  pixels carry values above 1.5.
+- `PixelRendererTests.testAnAppleGainMapDecodesAsHDR` covers Apple's older format. It builds a JPEG with CoreImage's
+  `.hdrGainMapImage` option and writes a headroom of 4 into the map's metadata, as the hand-check generator does. It
+  passes on the code before and after the fix. It fails when the detection drops Apple's type.
+- Files: `Packages/UnitermKit/Sources/ImageDecoding/OpenedImage.swift` and
+  `Packages/UnitermKit/Tests/ImageDecodingTests/PixelRendererTests.swift`.
+
+Corrected later on 2026-11-27. The first fix guarded the ISO check for macOS 15, and this note said an ISO image still
+shows as SDR on macOS 14. Both were wrong. The package and the app target macOS 26, so the guard was dead code and is
+gone. The note also said no test of Apple's format could be built. It could, and it now exists.

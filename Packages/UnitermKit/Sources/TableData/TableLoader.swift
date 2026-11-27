@@ -80,6 +80,39 @@ public enum TableLoader {
       source, lease: lease, pageTarget: pageTarget, isCancelled: { Task.isCancelled }, emit: emit)
   }
 
+  /// Reads `source` until its first rows arrive or it ends, and says why it failed, if it did. The
+  /// rows are dropped and the lease is released. A pane asks this before it gives up the table it
+  /// shows.
+  @concurrent
+  public static func probe(
+    _ source: TableSource, budget: TableBudget, pageTarget: Int = defaultPageTarget
+  ) async -> TableLoadError? {
+    let lease = budget.makeLease()
+
+    defer { lease.release() }
+
+    var failure: TableLoadError?
+    var enough = false
+
+    loadBlocking(
+      source, lease: lease, pageTarget: pageTarget,
+      isCancelled: { enough || Task.isCancelled },
+      emit: { event in
+        switch event {
+        case .snapshot:
+          enough = true
+
+        case .finished(_, .failed(let error), _):
+          failure = error
+
+        case .finished:
+          break
+        }
+      })
+
+    return failure
+  }
+
   /// The same load with the spreadsheet caps spelled out. Tests and the fuzzer shrink them to
   /// reach a cap with a small file.
   static func loadBlocking(

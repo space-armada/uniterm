@@ -75,6 +75,32 @@ final class DataViewerAppletTests: XCTestCase {
     XCTAssertEqual(saved.startDirectory, scratch.url.path)
   }
 
+  /// Catches an Open in This Pane that drops the pane's file when the chosen one cannot be read.
+  /// The pane keeps its table and its saved path, and the status bar names the file that failed.
+  func testAFailedOpenInThisPaneKeepsTheOldFileAndWarns() async throws {
+    let scratch = try Scratch(self)
+    let good = try scratch.write("a.csv", "amount\n3\n1\n2\n")
+    let bad = try scratch.write("broken.json", #"{"rows": [{"amount": 1}, "#)
+    let applet = DataViewerApplet(startDirectory: nil, budget: makeBudget())
+    let host = RecordingHost()
+    applet.host = host
+
+    try applet.replaceSource(with: good, startDirectory: scratch.url.path)
+    let first = await loaded(applet)
+    XCTAssertTrue(first)
+
+    await applet.replaceSource(withChosen: bad).value
+    _ = await eventually { applet.session.phase != .loading }
+
+    XCTAssertEqual(applet.session.phase, .loaded)
+    XCTAssertEqual(applet.title, "a.csv")
+    XCTAssertEqual(column(applet, 0), ["3", "1", "2"])
+    XCTAssertEqual(try DataViewerDescription.decode(applet.describe()).path, good.path)
+
+    let warned = host.sent.contains { $0.level == .warning && $0.text.contains("broken.json") }
+    XCTAssertTrue(warned, "\(host.sent)")
+  }
+
   /// Catches a missing file that crashes or shows an empty table, and a message that says
   /// "corrupt". The pane says the file is missing and keeps the path.
   func testAMissingFileShowsAMessageInThePane() async throws {
