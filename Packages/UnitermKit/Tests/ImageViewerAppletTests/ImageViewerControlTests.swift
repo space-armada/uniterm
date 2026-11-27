@@ -904,6 +904,45 @@ final class ImageViewerControlTests: XCTestCase {
     XCTAssertTrue(applet.content.viewport?.isFit == true)
   }
 
+  /// Catches a zoom wait that hangs when the bitmap budget refuses every tile the zoom needs. The
+  /// budget holds the backdrop and nothing more, so each tile is denied. The handle fails with the
+  /// zoom limit and the pane goes back to fit. It cannot prove a refusal by the helper, which has
+  /// its own test.
+  func testAZoomWhoseEveryTileTheBudgetRefusesFailsWithTheZoomLimit() async throws {
+    let (applet, _) = panes.make(bitmapBudget: ImageBitmapBudget(limit: 1, floor: 968_192))
+
+    try await large(applet)
+
+    XCTAssertEqual(
+      applet.bitmapBudget.held(by: applet.lease), 968_192, "the budget holds the backdrop only")
+
+    let started = send("zoom", ["scale": .number(1)], to: applet)
+    let handle = try XCTUnwrap(started.handle)
+    let reply = await waitLong(handle, on: applet)
+
+    XCTAssertEqual(reply["state"], .string("failed"))
+    XCTAssertEqual(reply["code"], .string("zoom-limit"))
+    XCTAssertTrue(applet.content.viewport?.isFit == true)
+    XCTAssertTrue(applet.tiles.entries.isEmpty)
+  }
+
+  /// Catches a partial refusal that fails a zoom which worked. The budget takes some tiles and
+  /// refuses the rest, so the handle ends `done` and the pane keeps the zoom.
+  func testAZoomWhoseSomeTilesTheBudgetRefusesStillEndsDone() async throws {
+    let (applet, _) = panes.make(bitmapBudget: ImageBitmapBudget(limit: 1, floor: 1200 * 800 * 4))
+
+    try await large(applet)
+
+    let started = send("zoom", ["scale": .number(1)], to: applet)
+    let handle = try XCTUnwrap(started.handle)
+    let reply = await waitLong(handle, on: applet)
+
+    XCTAssertEqual(reply["state"], .string("done"))
+    XCTAssertEqual(reply["fit"], .bool(false))
+    XCTAssertFalse(applet.tiles.entries.isEmpty)
+    XCTAssertFalse(applet.tileDenied.isEmpty, "the budget refused some tiles")
+  }
+
   /// Catches a zoom that tells a caller whether a linked image outside its scope decodes. The user
   /// opened a folder in the controller's scope whose one member links to a file outside it. The
   /// pane shows that file, fails on it, or has not opened it yet. A zoom answers `done` in all

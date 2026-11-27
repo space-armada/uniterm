@@ -277,14 +277,12 @@ extension ImageViewerApplet {
     }
 
     guard let image = BitmapFactory.makeImage(header, pixels: pixels) else {
-      tileDenied.insert(key)
-      refreshTiles()
+      deny(key, among: wanted)
       return
     }
 
     guard reserve(pixels.count) else {
-      tileDenied.insert(key)
-      refreshTiles()
+      deny(key, among: wanted)
       return
     }
 
@@ -298,6 +296,20 @@ extension ImageViewerApplet {
     lastGood = viewport
     refreshTiles()
     observeRemote()
+  }
+
+  /// A tile could not be made or kept. Once every tile the viewport wants is denied and the pane
+  /// holds none, nothing more will ever be asked for, so the zoom is refused. A partial denial
+  /// leaves a zoom that shows some detail.
+  private func deny(_ key: TileKey, among wanted: [TileKey]) {
+    tileDenied.insert(key)
+
+    if tiles.entries.isEmpty, wanted.allSatisfy({ tileDenied.contains($0) }) {
+      zoomRefused("There is not enough memory to show this image at this zoom.")
+      return
+    }
+
+    refreshTiles()
   }
 
   // MARK: Limits
