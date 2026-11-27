@@ -69,7 +69,6 @@
 | [UTERM-065](UTERM-065-exec-drivers-read-paths-in-a-scope.md) | An exec driver asks for a read scope, approved for its run, and names paths in it | accepted |
 | [UTERM-066](UTERM-066-verified-identity-for-exec-drivers.md) | An exec driver can be a verified package, and keep remembered approvals for its powers | accepted |
 | [UTERM-067](UTERM-067-stores-keep-what-they-cannot-read.md) | Every store keeps entries it cannot read, starting with the controller trust stores | draft |
-| [UTERM-068](UTERM-068-browser-content-blocking.md) | Native browser ad blocking with custom rules, a starter list, and subscriptions | draft |
 
 ## Dependency Graph
 
@@ -133,7 +132,6 @@ UTERM-064 ← UTERM-018, UTERM-063
 UTERM-065 ← UTERM-004, UTERM-015, UTERM-063
 UTERM-066 ← UTERM-004, UTERM-063
 UTERM-067 ← UTERM-004
-UTERM-068 ← UTERM-005, UTERM-053
 ```
 
 ## Not Yet Filed
