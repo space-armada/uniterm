@@ -339,7 +339,8 @@ agree on every message.
 **As built:**
 
 - The policy file's format moved from 1 to 2 and a scope stores its edition. A file in an earlier format is set aside
-  with a notice. See the Decision Log entry for 2026-11-27 (run best guess) on the policy file format.
+  with a notice. See the Decision Log entry for 2026-11-27 (run best guess) on the policy file format. UTERM-067 M2
+  then moved it from 2 to 3.
 - An approval covers a request only at the edition it was made at. An older edition reads and covers nothing, and an
   edition above the build's reads as newer. UTERM-067 M2 narrows the newer case to one entry. Not built here.
 - A hello at another exec protocol version decodes to its own case that carries no schema. The channel refuses it
@@ -489,6 +490,9 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   landed first and moves it to 2, and UTERM-067 M2 then moves it to 3. M1's check on the policy file said before: "The
   file is told apart by its format number, which this milestone moves when it lands after UTERM-067, so no pre-reset
   scope is ever read as an edition". It now says what M1 does. Either order breaks the file twice, as UTERM-067's risk "Every approval is given again once" says.
+- 2026-11-27: Correction of fact in M1's As built. It said "The policy file's format moved from 1 to 2 and a scope
+  stores its edition." That was the format when M1 landed. UTERM-067 M2 then moved it from 2 to 3, so the shipped
+  format is 3. The As built bullet now says so.
 - 2026-11-27: M1 built. Each impacted proposal that plans a version change was amended to land in place, and each
   carries its own Decision Log entry. UTERM-019 and UTERM-050 hold a decision the user made, so each keeps its text and
   carries a pending override that cites this proposal's user decisions of 2026-11-26. UTERM-028, UTERM-055, UTERM-062,

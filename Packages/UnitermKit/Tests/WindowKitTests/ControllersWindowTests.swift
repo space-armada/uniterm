@@ -429,6 +429,33 @@ final class ControllersWindowTests: XCTestCase {
     XCTAssertTrue(ControllersWindowController.unreadableText(1).contains("may read it"))
   }
 
+  /// Catches the reapproval notice lost when a refresh overtakes the read that carried it. The
+  /// store shows that notice once, so the read that replaces the cancelled one finds none. It
+  /// cannot prove the order of the two reads, so it holds only where the first read wins the lock.
+  func testARefreshThatOvertakesTheReadWithTheReapprovalNoticeStillShowsIt() async throws {
+    let store = ControllerTrustStore(directory: folder.appendingPathComponent("trust"))
+
+    try FileManager.default.createDirectory(
+      at: store.directory, withIntermediateDirectories: true)
+    try Data("{}".utf8).write(to: store.directory.appendingPathComponent("files.json"))
+
+    let window = ControllersWindowController(scriptHost: host)
+
+    addTeardownBlock { @MainActor in window.close() }
+
+    await Task.yield()
+
+    window.refresh()
+
+    try await bounded("the window reads the policies") { await window.settle() }
+
+    let content = try XCTUnwrap(window.window?.contentView)
+    let line = try XCTUnwrap(
+      content.firstDescendant(identifier: "controllers-notice") as? NSTextField)
+
+    XCTAssertTrue(line.stringValue.contains("approved again once"), line.stringValue)
+  }
+
   /// Catches two entries for one selector that fold into one row, or a selection that jumps from
   /// one to the other. Both show, each keeps the selection when the list refreshes, the detail says
   /// Revoke removes both, and Revoke does.

@@ -60,17 +60,7 @@ public enum StrictJSONReader {
       throw StrictJSONError(offset: 0, reason: "the document is not UTF-8")
     }
 
-    return try parse(validatedUTF8: [UInt8](bytes), maxBytes: maxBytes)
-  }
-
-  /// Reads bytes the caller has already checked to be UTF-8, such as a slice of a document that
-  /// was checked whole. It skips that check, which costs a pass over every slice.
-  public static func parse(validatedUTF8 bytes: [UInt8], maxBytes: Int) throws -> StrictJSON {
-    guard bytes.count <= maxBytes else {
-      throw StrictJSONError(offset: maxBytes, reason: "the document is over \(maxBytes) bytes")
-    }
-
-    var reader = Reader(bytes: bytes)
+    var reader = Reader(bytes: [UInt8](bytes))
 
     reader.skipSpace()
 

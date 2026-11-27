@@ -125,7 +125,7 @@ public struct ControllerTrustStore: Sendable {
 
   public func read() -> ControllerTrustState {
     do {
-      return try locked { try load().state }
+      return try locked { try load(announce: true).state }
     } catch {
       return ControllerTrustState(
         policies: [], writable: false,
@@ -142,7 +142,7 @@ public struct ControllerTrustStore: Sendable {
   ) throws(ControllerTrustStoreError) -> ControllerTrustChange {
     do {
       return try locked {
-        let loaded = try load()
+        let loaded = try load(announce: false)
 
         guard loaded.state.writable else {
           throw ControllerTrustStoreError.readOnly(
@@ -186,20 +186,22 @@ public struct ControllerTrustStore: Sendable {
   }
 
   /// Reads the file under the lock. An unreadable file is moved aside here, and so is an earlier
-  /// store.
-  private func load() throws -> Loaded {
+  /// store. A caller that returns the state's notice to the user passes `announce`. Only then is
+  /// the reapproval notice marked as shown, so a change that drops the state leaves it for a read.
+  private func load(announce: Bool) throws -> Loaded {
     let retired = try retireEarlierStores()
     let data: Data
 
     do {
       data = try readBounded()
     } catch CocoaError.fileReadNoSuchFile {
-      return try fresh(retiredAny: retired)
+      return try fresh(retiredAny: retired, announce: announce)
     }
 
     do {
       let document = try ControllerPolicyFile.read(data, editions: editions)
-      let notice = retired ? reapprovalNotice() : nil
+      let notice =
+        retired || hasRetiredFiles ? reapprovalNotice(announce: announce) : nil
 
       return Loaded(
         state: ControllerTrustState(
@@ -225,7 +227,7 @@ public struct ControllerTrustStore: Sendable {
       let kept = try retire(fileURL.lastPathComponent)
 
       return try fresh(
-        retiredAny: true,
+        retiredAny: true, announce: announce,
         extra:
           "The old file, format \(format), was kept as retired/\(kept.lastPathComponent).")
     } catch {
@@ -242,7 +244,7 @@ public struct ControllerTrustStore: Sendable {
 
   /// An empty file in this format, written at once when an earlier store was retired, so no build
   /// keeps retiring another's file.
-  private func fresh(retiredAny: Bool, extra: String? = nil) throws -> Loaded {
+  private func fresh(retiredAny: Bool, announce: Bool, extra: String? = nil) throws -> Loaded {
     guard retiredAny else {
       return Loaded(state: ControllerTrustState(policies: [], writable: true, notice: nil))
     }
@@ -253,21 +255,31 @@ public struct ControllerTrustStore: Sendable {
       throw ControllerTrustStoreError.io("\(error)")
     }
 
-    let notice = [reapprovalNotice(), extra].compactMap { $0 }.joined(separator: " ")
+    let notice = [reapprovalNotice(announce: announce), extra].compactMap { $0 }.joined(
+      separator: " ")
 
     return Loaded(
       state: ControllerTrustState(
         policies: [], writable: true, notice: notice.isEmpty ? nil : notice))
   }
 
+  /// Whether an earlier store was retired by a load that did not announce it. The notice is owed
+  /// until the marker says it was shown.
+  private var hasRetiredFiles: Bool {
+    let names =
+      (try? FileManager.default.contentsOfDirectory(atPath: retiredDirectory.path)) ?? []
+
+    return names.contains { $0 != ".notified" }
+  }
+
   /// The notice that every approval is given again once. It shows the first time an earlier store
   /// is retired. An older build that writes its file again does not bring it back.
-  private func reapprovalNotice() -> String? {
+  private func reapprovalNotice(announce: Bool) -> String? {
     let marker = retiredDirectory.appendingPathComponent(".notified")
 
     guard !FileManager.default.fileExists(atPath: marker.path) else { return nil }
 
-    try? Data().write(to: marker)
+    if announce { try? Data().write(to: marker) }
 
     return "An earlier uniterm wrote its controller and script file approvals in a format that "
       + "cannot say what each one covered. Every controller and script file is approved again "

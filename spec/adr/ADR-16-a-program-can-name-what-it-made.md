@@ -40,9 +40,8 @@ UTERM-049, and UTERM-062.
 ## Consequences
 
 - Every operation that makes or fills a place, in every applet and on every wire, must give the program the place's
-  identity. Changing an existing operation's answer lands in place while its wire is at 0, under "A changed meaning is
-  refused, never reinterpreted" in UTERM-063. From version 1 it is a new version under ADR-13. Some changes then wait on
-  that wire's version negotiation.
+  identity. Changing an existing operation's answer lands in place while its wire is at 0, under ADR-13 C1. From
+  version 1 it is a new version under ADR-13. Some changes then wait on that wire's version negotiation.
 - Some operations do not meet P1 today. ScriptWire's `send` answers with nothing, and the viewers' commands that show a
   file do not name a tab.
 - A program has to keep the identities it was given. Listing places does not say who made them, so a program that loses

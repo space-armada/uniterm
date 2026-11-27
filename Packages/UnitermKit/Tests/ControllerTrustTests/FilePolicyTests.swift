@@ -340,6 +340,19 @@ final class FilePolicyTests: XCTestCase {
       "round 1")
   }
 
+  /// Catches the reapproval notice lost when the first load after an earlier store is retired is a
+  /// change. A change returns no notice, so it must leave the notice for the next read.
+  func testAChangeThatRetiresAnEarlierStoreLeavesTheNoticeForTheNextRead() throws {
+    try plant("files.json")
+
+    try store.update { $0 + [Self.packagePolicy()] }
+
+    let state = store.read()
+
+    XCTAssertTrue(state.notice?.contains("approved again once") == true, "\(state)")
+    XCTAssertNil(store.read().notice)
+  }
+
   /// Catches the notice that every approval is given again once repeating each time an older build
   /// writes its `files.json` again. It shows the first time, and the file is still retired.
   func testTheReapprovalNoticeShowsOnce() throws {

@@ -28,6 +28,10 @@ public final class ControllersWindowController: NSWindowController {
   private var observer: ChangeObservers.Token?
   private var reading: Task<Void, Never>?
 
+  /// A notice a read carried that a later refresh overtook. The store shows a notice once, so the
+  /// read that follows finds none. The next shown read holds this one until it is on screen.
+  private var overtakenNotice: String?
+
   private(set) var rows: [Row] = []
 
   /// The read-scope directories shown, with their links resolved. They are read off the main
@@ -153,9 +157,17 @@ public final class ControllersWindowController: NSWindowController {
 
       let state = await scriptHost.rememberedTrust()
 
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled else {
+        overtakenNotice = overtakenNotice ?? state.notice
 
-      show(policies: state.policies, notice: state.notice, unreadable: state.unreadable)
+        return
+      }
+
+      let text = [overtakenNotice, state.notice].compactMap { $0 }.joined(separator: " ")
+
+      overtakenNotice = nil
+      show(
+        policies: state.policies, notice: text.isEmpty ? nil : text, unreadable: state.unreadable)
     }
   }
 
