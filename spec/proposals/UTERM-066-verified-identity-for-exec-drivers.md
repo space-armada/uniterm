@@ -259,8 +259,9 @@ approves its text. Until then, the script decisions stand as the deviation recor
 
 > **C2** (relaxes P9): A script run by a shared interpreter may hold a remembered approval when uniterm itself
 > snapshots and verifies the script and every file its package declares, and starts the interpreter with a command line
-> those verified files fix. Nothing from outside the verified files may change how the interpreter starts: no
-> argument before the script, and no environment key the interpreter or the loader reads as a hook. The proof of
+> those verified files fix. No argument comes before the script, and no environment key the interpreter or the loader
+> reads as a hook comes from outside the verified files. Settings that change where the interpreter finds its startup
+> files, such as `HOME`, are outside what uniterm verifies, and the user is told so. The proof of
 > identity is uniterm's own verification, not a name, path, or digest the script or its runner claims. The approval
 > covers only the verified files and the access they declare. The interpreter, its install, and whatever the script
 > loads beyond its package are outside it, and the user is told so. Verifying files cannot isolate a program from the
@@ -456,6 +457,11 @@ None.
   other goes to the user: C2 says nothing outside the verified files changes how the interpreter starts, but a declared
   `HOME` moves Python's user site folder, and no rule refuses it. No design change was made for it. Routed checks to
   M1, M2, and M3, and added UTERM-004's `host-launch` scope to Impacts.
+- 2026-11-26: Narrowed C2, the user's choice. It said "Nothing from outside the verified files may change how the
+  interpreter starts", which a declared `HOME` makes false, since Python finds its user site folder from `HOME`. It now
+  promises only that no argument comes before the script and no hook key comes from outside the verified files, and
+  says settings such as `HOME` are outside what uniterm verifies. The user turned down refusing `HOME` in package
+  declarations.
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 

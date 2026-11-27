@@ -196,16 +196,20 @@ Revoke.
 Rationale: the badge is where the pane already shows a driver's grants and offers Revoke. M1 needs Revoke there anyway.
 A grant display on the run strip would be a second place, and UTERM-048's inspector is not built.
 
+### Relative paths resolve against the driver's starting folder
+
+Decision: a relative path from a driver, in its request or in a command, resolves against the folder the driver was
+started in, which its declaration names. A driver started in `~/Pictures` that names `./trip` means `~/Pictures/trip`.
+The resolved path is what the scope check and the scoped open use, and what replies report.
+
+**Decided by:** user, 2026-11-26
+
+Rationale: a relative path means the driver's own starting folder, as it does for any program. The folder is part of
+the driver's declaration, so it flows explicitly through the exec contract, not through hidden state.
+
 ## Design Decisions (Open)
 
-### Relative paths from a driver
-
-`ReadScope` and the scoped open take absolute paths only. A driver's declaration has a working directory, so a driver
-may name `./trip`. CLAUDE.md asks that such an attribute flow explicitly, and that the choice be the user's.
-
-- A. Paths must be absolute, in the request and in commands. A relative path is a bad argument, not an outside-scope
-  error.
-- B. Relative paths resolve against the declaration's directory, which the app already holds.
+None.
 
 ## Risks
 
@@ -236,6 +240,8 @@ may name `./trip`. CLAUDE.md asks that such an attribute flow explicitly, and th
   applet with a path argument
 - The launch approval, and a controller's host-launch grant that covered the launch, never grant the scope
 - A path outside the scope is refused with one error, whether it is missing, unsupported, or denied
+- A relative path in a request or a command resolves against the driver's starting folder before the scope check, and
+  replies report the resolved path
 - Run end, Revoke, and pane close stop queued reads, and their handles fail. A driver keeps its channel after Revoke
 - The driver's pane offers Revoke while the read grant stands, even when the driver holds no other grant
 - The pane's control badge counts a driver that holds only the read grant, and its menu names the scope
@@ -297,6 +303,8 @@ may name `./trip`. CLAUDE.md asks that such an attribute flow explicitly, and th
 - 2026-11-26: Re-check of those four decisions converged with no design-level defect. Routed four checks to M1: a
   second request while one waits, a request after a Revoke, no Ask Again after a Deny, and no read before the success
   reply.
+- 2026-11-26: Settled "Relative paths from a driver", the user's choice. A relative path resolves against the folder
+  the driver was started in. The user turned down refusing relative paths. Routed an M1 check.
 
 ## References
 
