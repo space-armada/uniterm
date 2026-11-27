@@ -312,8 +312,9 @@ marker. (autonomous)
   actions a button, so it is amended with "Interactive markers". A pane-level marker also answers show-menu.
 
 Rationale: the pane-level markers stand in for the tab, so the same gesture opens the same menu. Drivers attach only
-to the image and map viewers, which have one tab each. So a driver's chip always shows at the pane level, and without
-this entry its go-to items would have no mouse path where the chip shows. Folding the tab's items into the badge's menu
+to the image and map viewers. A driver's chip always shows at the pane level, beside the badge, as UTERM-041 settles,
+also once UTERM-062 gives those panes a tab bar. Without this entry its go-to items would have no mouse path where the
+chip shows. Amended 2026-11-26; see Decision Log. Folding the tab's items into the badge's menu
 would repeat each revoke item in one menu, and the items would move when a second tab opens. A badge that opened two
 menus by mouse button would give one control two meanings. A one-tab pane with no marker loses only Close Tab, which
 Cmd-W already does. Converged in 1 pass.
@@ -535,6 +536,8 @@ Builds on M2 and on UTERM-041 M2, for the chip.
   asks Save, Don't Save, or Cancel for every such tab in one question, instead of Close or Cancel. The rationale in
   "Panes with no tab bar" that drivers attach only to one-tab viewers no longer holds once UTERM-062 lands. Where a
   driver's chip shows then is not settled here.
+- 2026-11-26: "Panes with no tab bar" no longer rests on driven viewers having one tab. A driver's chip stays at the
+  pane level beside the badge in a pane with a tab bar, as UTERM-041 now settles, so this entry remains its mouse path.
 
 ## References
 

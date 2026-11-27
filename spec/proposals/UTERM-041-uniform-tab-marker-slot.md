@@ -295,7 +295,9 @@ the controller runs in, drawn as the chip per "The markers' look".
 
 Decision: the chip marks the controller's tab. It goes on the tab whose session the controller is bound to. That holds
 for a controller started in the tab and for one granted the pane explicitly. Each is bound to one session root and
-ends when that session ends (`ScriptHost.swift`, about line 1017). An exec driver's chip goes on its pane's one tab.
+ends when that session ends (`ScriptHost.swift`, about line 1017). An exec driver is bound to its pane, not a tab, so
+its chip shows at the pane level, beside the control badge, whether or not the pane shows a tab bar. Amended
+2026-11-26; see Decision Log.
 Chosen by the user on 2026-11-21, at the review gate, over the review's "no addition". (addition)
 
 - This brings in recording each session root's tab, which `App/AppDelegate.swift` (about line 250) drops today, and
@@ -705,6 +707,9 @@ None.
   tab of its own pane, so every tab there is exempt. In a group pane, a viewer tab carries the authority marker only
   when the controller owns it, as a browser tab does. Where a driver's chip shows in a pane with a tab bar is not
   settled here.
+- 2026-11-26: A driver's chip shows at the pane level, beside the control badge, also when UTERM-062 gives its pane a
+  tab bar. The user chose this over a chip on every tab and a chip on the selected tab. A driver is bound to the pane,
+  and the chip then never moves as tabs open, close, or change selection.
 
 ## References
 
