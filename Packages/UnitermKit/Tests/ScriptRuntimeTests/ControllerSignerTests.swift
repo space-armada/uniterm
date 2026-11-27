@@ -167,7 +167,7 @@ final class ControllerSignerTests: XCTestCase {
   /// signature over the exact bytes, carry the fixture key's fingerprint, and verify as nothing
   /// else.
   func testTheSignerSignsAFileBesideItAsAFileSignature() throws {
-    let text = "(declare-permissions {:id \"dev.example.tidy\"} {:kind :pane-control :version 1})\n"
+    let text = "(declare-permissions {:id \"dev.example.tidy\"} {:kind :pane-control})\n"
     let file = try scriptFile(text)
 
     XCTAssertEqual(keyCommand("sign", "--key", "fixture", file.path), 0)
@@ -196,7 +196,7 @@ final class ControllerSignerTests: XCTestCase {
   func testTheSignerRefusesAFileThatCouldNotBeTrustedByIdentity() throws {
     let cases: [(String, String)] = [
       ("(print :hi)\n", "first form is not (declare-permissions"),
-      ("(declare-permissions {:kind :pane-control :version 1})\n", "names no :id"),
+      ("(declare-permissions {:kind :pane-control})\n", "names no :id"),
       ("(declare-permissions {:name \"Tidy\"})\n", "names no :id"),
       ("(declare-permissions {:id \"Bad ID\"})\n", "id"),
     ]

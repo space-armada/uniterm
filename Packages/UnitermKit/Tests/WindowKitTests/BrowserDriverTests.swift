@@ -45,7 +45,7 @@ final class BrowserDriverTests: XCTestCase {
     let layout =
       #"{"split":"row","children":[{"pane":\#(pane.rawValue)},"#
       + #"{"open":"fixture-powered","control":"remote-controlled"}]}"#
-    let go = #"{"leaf":1,"applet":"fixture-powered","schema":[1,0],"name":"go","arguments":{}}"#
+    let go = #"{"leaf":1,"applet":"fixture-powered","schema":[0,0],"name":"go","arguments":{}}"#
 
     return [layout] + Array(repeating: go, count: commands)
   }

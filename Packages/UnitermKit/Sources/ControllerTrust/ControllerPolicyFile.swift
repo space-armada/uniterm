@@ -4,46 +4,56 @@ import SourceAccess
 
 /// Why a policy file was not read. Either way it authorizes nothing.
 public enum ControllerPolicyFileError: Error, Equatable, Sendable, CustomStringConvertible {
-  /// The file is not format 1 as this version reads it: broken JSON, an unknown field, a scope
-  /// whose meaning this version does not know, or a value out of bounds.
+  /// The file is not the format this version reads: broken JSON, an unknown field, a scope this
+  /// version cannot read, or a value out of bounds.
   case unreadable(String)
 
-  /// A newer uniterm wrote the file: a newer format, or a well-formed permission whose kind or
-  /// version this build does not know. Its meanings may be broader than this build can tell, so
-  /// it is left as it is. The text names what is newer.
+  /// An earlier uniterm wrote the file, in a format that did not record an edition with each
+  /// approval. It cannot be told apart from an approval at an edition this build knows, so it
+  /// grants nothing. The number is the format it was written in.
+  case older(Int)
+
+  /// A newer uniterm wrote the file: a newer format, or a well-formed permission whose kind this
+  /// build does not know or whose edition is above this build's. Its meanings may be broader than
+  /// this build can tell, so it is left as it is. The text names what is newer.
   case newer(String)
 
   public var description: String {
     switch self {
     case .unreadable(let text): return "the policy file cannot be read: \(text)"
+    case .older(let format): return "the policy file is format \(format), from an earlier uniterm"
     case .newer(let what): return "the policy file has \(what), from a newer uniterm"
     }
   }
 }
 
-/// The controller policy file's format: strict JSON, one document, version 1.
+/// The controller policy file's format: strict JSON, one document, format 2.
 ///
 /// ```json
 /// {
-///   "format": 1,
+///   "format": 2,
 ///   "policies": [
 ///     {
 ///       "approved": "2026-11-11T10:00:00Z",
 ///       "name": "Slides",
-///       "scopes": [{"kind": "pane-control", "version": 1}, {"kind": "clipboard-read", "version": 1}],
+///       "scopes": [{"edition": 0, "kind": "pane-control"}, {"edition": 0, "kind": "clipboard-read"}],
 ///       "selector": {"controller": "dev.example.slides", "kind": "version", "version": "..."}
 ///     }
 ///   ]
 /// }
 /// ```
 ///
-/// Each scope is spelled as a format 2 descriptor spells the permission, with its kind, version,
-/// and scope. The reader is as strict as the descriptor's: a repeated key or an unknown field
-/// refuses the whole file as broken. A (kind, version) pair this build does not know refuses it as
-/// newer, so a meaning a later build adds is never read as a narrower one here, and the file is
-/// kept for the build that wrote it.
+/// Each scope is spelled as a descriptor spells the permission, with its kind and scope, and adds
+/// the edition the approval was made at. The reader is as strict as the descriptor's: a repeated
+/// key or an unknown field refuses the whole file as broken. A kind this build does not know, or an
+/// edition above the one it knows, refuses the file as newer, so a meaning a later build adds is
+/// never read as a narrower one here, and the file is kept for the build that wrote it. An edition
+/// below this build's reads, and covers nothing.
+///
+/// Format 1 recorded a permission version where this format records an edition. A format 1 file is
+/// set aside, and each approval is given again once.
 public enum ControllerPolicyFile {
-  public static let format = 1
+  public static let format = 2
   public static let maxBytes = 1 << 20
   public static let maxPolicies = 256
 
@@ -51,10 +61,11 @@ public enum ControllerPolicyFile {
   /// file's holds file selectors. A selector of the other kind makes the file unreadable, so the
   /// two stores can never be read as each other's.
   public static func decode(
-    _ bytes: Data, artifact: ControllerArtifact = .package
+    _ bytes: Data, artifact: ControllerArtifact = .package,
+    editions: ControllerPermissionEditions = .current
   ) throws(ControllerPolicyFileError) -> [ControllerPolicy] {
     do {
-      return try read(bytes, artifact: artifact)
+      return try read(bytes, artifact: artifact, editions: editions)
     } catch let error as ControllerPolicyFileError {
       throw error
     } catch let error as StrictJSONError {
@@ -66,8 +77,9 @@ public enum ControllerPolicyFile {
     }
   }
 
-  private static func read(_ bytes: Data, artifact: ControllerArtifact) throws -> [ControllerPolicy]
-  {
+  private static func read(
+    _ bytes: Data, artifact: ControllerArtifact, editions: ControllerPermissionEditions
+  ) throws -> [ControllerPolicy] {
     let document = try StrictJSONReader.parse(bytes, maxBytes: maxBytes)
 
     guard case .object(let top) = document else {
@@ -80,6 +92,12 @@ public enum ControllerPolicyFile {
       format > Self.format
     {
       throw ControllerPolicyFileError.newer("format \(format)")
+    }
+
+    if case .integer(let format)? = top.first(where: { $0.key == "format" })?.value,
+      (1..<Self.format).contains(format)
+    {
+      throw ControllerPolicyFileError.older(format)
     }
 
     let fields = try document.members(of: "the file", required: ["format", "policies"])
@@ -98,7 +116,7 @@ public enum ControllerPolicyFile {
     var selectors = Set<ControllerSelector>()
 
     for entry in entries {
-      let policy = try readPolicy(entry, artifact: artifact)
+      let policy = try readPolicy(entry, artifact: artifact, editions: editions)
 
       guard selectors.insert(policy.selector).inserted else {
         throw ControllerPolicyFileError.unreadable("a selector is listed twice")
@@ -111,7 +129,7 @@ public enum ControllerPolicyFile {
   }
 
   private static func readPolicy(
-    _ value: StrictJSON, artifact: ControllerArtifact
+    _ value: StrictJSON, artifact: ControllerArtifact, editions: ControllerPermissionEditions
   ) throws -> ControllerPolicy {
     let fields = try value.members(
       of: "a policy", required: ["selector", "name", "scopes", "approved"])
@@ -131,7 +149,7 @@ public enum ControllerPolicyFile {
     var scopes = Set<ControllerPermission>()
 
     for scope in try fields["scopes"]!.array("a policy's scopes") {
-      guard scopes.insert(try readScope(scope)).inserted else {
+      guard scopes.insert(try readScope(scope, editions: editions)).inserted else {
         throw ControllerPolicyFileError.unreadable("a scope is listed twice")
       }
     }
@@ -182,40 +200,50 @@ public enum ControllerPolicyFile {
     }
   }
 
-  private static func readScope(_ value: StrictJSON) throws -> ControllerPermission {
+  private static func readScope(
+    _ value: StrictJSON, editions: ControllerPermissionEditions
+  ) throws -> ControllerPermission {
     guard case .object(let members) = value,
       case .string(let kind)? = members.first(where: { $0.key == "kind" })?.value
     else {
       throw ControllerPolicyFileError.unreadable("a scope needs a kind")
     }
 
-    // The pair is read before the fields, since a newer build's kind may carry fields this one
-    // does not know. Such a file is newer, not broken.
-    guard case .integer(let version)? = members.first(where: { $0.key == "version" })?.value else {
-      throw ControllerPolicyFileError.unreadable("a scope needs a whole-number version")
+    // The kind and edition are read before the fields, since a newer build's kind may carry
+    // fields this one does not know. Such a file is newer, not broken.
+    guard case .integer(let edition)? = members.first(where: { $0.key == "edition" })?.value else {
+      throw ControllerPolicyFileError.unreadable("a scope needs a whole-number edition")
     }
 
-    guard ControllerPermission.meaning(kind: kind, version: version) != nil else {
-      throw ControllerPolicyFileError.newer("\(kind) version \(version)")
+    guard let known = editions.edition(of: kind) else {
+      throw ControllerPolicyFileError.newer("the kind \(kind)")
+    }
+
+    guard edition <= known else {
+      throw ControllerPolicyFileError.newer("\(kind) edition \(edition)")
+    }
+
+    guard edition >= 0 else {
+      throw ControllerPolicyFileError.unreadable("a scope's edition cannot be negative")
     }
 
     let fields: [String: StrictJSON]
 
     switch kind {
     case "capability":
-      fields = try value.members(of: "a capability scope", required: ["kind", "version", "name"])
+      fields = try value.members(of: "a capability scope", required: ["kind", "edition", "name"])
 
     case "host-launch":
       fields = try value.members(
         of: "a host-launch scope",
-        required: ["kind", "version", "executable", "directory", "environment"])
+        required: ["kind", "edition", "executable", "directory", "environment"])
 
     case "path-read":
       fields = try value.members(
-        of: "a path-read scope", required: ["kind", "version", "directories"])
+        of: "a path-read scope", required: ["kind", "edition", "directories"])
 
     default:
-      fields = try value.members(of: "a \(kind) scope", required: ["kind", "version"])
+      fields = try value.members(of: "a \(kind) scope", required: ["kind", "edition"])
     }
 
     let permission: ControllerPermissionKind
@@ -269,7 +297,7 @@ public enum ControllerPolicyFile {
           }))
     }
 
-    return ControllerPermission(permission, version: version)
+    return ControllerPermission(permission, edition: edition)
   }
 
   private static func isDigest(_ text: String) -> Bool {
@@ -346,7 +374,7 @@ public enum ControllerPolicyFile {
       members.append(("directories", .array(scope.directories.map(JSONText.string))))
     }
 
-    members.append(("version", .integer(permission.version)))
+    members.append(("edition", .integer(permission.edition)))
 
     return .object(members.sorted { $0.0 < $1.0 })
   }

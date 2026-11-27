@@ -1653,8 +1653,8 @@ static Janet cfun_ask(int32_t argc, Janet *argv) {
 
 static const JanetReg uniterm_cfuns[] = {
     {"api-version", cfun_api_version,
-     "(uniterm/api-version)\n\nThe version of the host API. A change that breaks a script "
-     "changes it."},
+     "(uniterm/api-version)\n\nThe version of the host API. It stays 0 until uniterm's "
+     "maintainers declare it version 1. A change that breaks a script lands in place."},
     {"post-status", cfun_post_status,
      "(uniterm/post-status level text)\n\nPosts a message to the status bar. The level is "
      ":info, :warning, or :error."},

@@ -368,7 +368,7 @@ final class MapViewerUITests: UnitermUITestCase {
     let control: [String: Any] = [
       "access": "disconnected", "driver": "exec",
       "exec": [
-        "argv": ["/usr/bin/perl", Self.driverScript, "script", "map-viewer", "1.0"] + commands,
+        "argv": ["/usr/bin/perl", Self.driverScript, "script", "map-viewer", "0.0"] + commands,
         "environmentKeys": [String](),
       ],
     ]

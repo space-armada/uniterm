@@ -108,7 +108,7 @@ final class ImageViewerControlTests: XCTestCase {
 
   private func send(
     _ name: String, _ arguments: [String: JSONValue] = [:], to applet: ImageViewerApplet,
-    scope given: ReadScope?? = nil, version: AppletSchemaVersion = AppletSchemaVersion(1, 0)
+    scope given: ReadScope?? = nil, version: AppletSchemaVersion = AppletSchemaVersion(0, 0)
   ) -> Call {
     let call = Call()
     let granted = given ?? scope
@@ -1063,7 +1063,9 @@ final class ImageViewerControlTests: XCTestCase {
   func testACommandWrittenForAnotherVersionIsRefusedBeforeAnyEffect() {
     let (applet, _) = pane()
 
-    for version in [AppletSchemaVersion(2, 0), AppletSchemaVersion(1, 1)] {
+    for version in [
+      AppletSchemaVersion(1, 0), AppletSchemaVersion(0, 1), AppletSchemaVersion(2, 0),
+    ] {
       guard
         case .failure(let error)? = send(
           "show", ["path": .string(path("a.png"))], to: applet, version: version

@@ -43,7 +43,7 @@ final class ExecDriverChannelTests: XCTestCase {
   }
 
   private func start(
-    _ mode: String, type: String = SlidesFixture.typeID, schema: String = "1.0",
+    _ mode: String, type: String = SlidesFixture.typeID, schema: String = "0.0",
     _ rest: [String] = [],
     directory: String? = nil, keys: [String] = [], values: [String: String] = [:],
     killGrace: DispatchTimeInterval = .seconds(2), host: ExecDriverChannel.HostHandler? = nil,
@@ -161,14 +161,16 @@ final class ExecDriverChannelTests: XCTestCase {
   /// before its hello. Each driver sends a set-deck that must never land.
   func testEveryHelloMismatchEndsTheChannelWithNoCommandRun() async throws {
     let cases: [(String, String, [String], String)] = [
-      ("hello-protocol", "1.0", ["1"], "exec protocol 1"),
-      ("hello-protocol", "1.0", ["2"], "exec protocol 2"),
-      ("hello-protocol", "1.0", ["3"], "exec protocol 3"),
-      ("hello-schema", "1.0", ["2.0"], "schema version 2.0"),
-      ("hello-schema", "1.0", ["1.1"], "schema version 1.1"),
-      ("refuse", "1.0", [], "needs exec protocol 9"),
-      ("command-first", "1.0", [], "before its hello"),
-      ("script", "1.0", [], "written for a fixture-chart"),
+      ("hello-protocol", "0.0", ["1"], "exec protocol 1"),
+      ("hello-protocol", "0.0", ["2"], "exec protocol 2"),
+      ("hello-protocol", "0.0", ["3"], "exec protocol 3"),
+      ("hello-protocol", "0.0", ["4"], "exec protocol 4"),
+      ("hello-schema", "0.0", ["2.0"], "schema version 2.0"),
+      ("hello-schema", "0.0", ["1.0"], "schema version 1.0"),
+      ("hello-schema", "0.0", ["0.1"], "schema version 0.1"),
+      ("refuse", "0.0", [], "needs exec protocol 9"),
+      ("command-first", "0.0", [], "before its hello"),
+      ("script", "0.0", [], "written for a fixture-chart"),
     ]
 
     for (mode, schema, rest, needle) in cases {
@@ -204,8 +206,9 @@ final class ExecDriverChannelTests: XCTestCase {
   }
 
   /// Catches an app that takes a driver written for a later minor, or refuses one written for an
-  /// earlier minor. The pane takes version 1 with a minor up to 2, so a driver at 1.1 connects.
-  func testADriverWrittenForAnEarlierMinorConnects() async throws {
+  /// earlier minor. This tests the major and minor rule that applies from a declared-stable schema
+  /// 1.0. The pane claims 1.2, so a driver at 1.1 connects.
+  func testADeclaredStableSchemaTakesADriverWrittenForAnEarlierMinor() async throws {
     let notes = NotesFixture()
 
     notes.schemaVersion = AppletSchemaVersion(1, 2)
@@ -220,11 +223,14 @@ final class ExecDriverChannelTests: XCTestCase {
   }
 
   /// Catches an event or a field that a later minor added reaching a driver written for an earlier
-  /// one, which could not know to ignore it. The pane takes 1.1. A driver at 1.0 gets `notes-shown`
+  /// one, which could not know to ignore it. This tests the rule for a declared-stable schema. The
+  /// pane claims 1.1. A driver at 1.0 gets `notes-shown`
   /// without its `empty` field, and never gets `notes-cleared`. The set-notes after the clear is the
   /// barrier, since it shows the driver kept receiving events past the dropped one.
   func testAnEventAndAFieldANewerMinorAddedNeverReachAnOlderDriver() async throws {
     let notes = NotesFixture()
+
+    notes.schemaVersion = AppletSchemaVersion(1, 1)
 
     _ = try start(
       "script", type: NotesFixture.typeID, schema: "1.0",
@@ -247,6 +253,8 @@ final class ExecDriverChannelTests: XCTestCase {
   /// its field.
   func testADriverAtTheCurrentMinorGetsTheLaterMinorsEventAndFields() async throws {
     let notes = NotesFixture()
+
+    notes.schemaVersion = AppletSchemaVersion(1, 1)
 
     _ = try start(
       "script", type: NotesFixture.typeID, schema: "1.1",

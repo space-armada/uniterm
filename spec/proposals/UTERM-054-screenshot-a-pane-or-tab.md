@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-22
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -18,7 +18,8 @@
   that waits. UTERM-019 is amended before its M1 ships so one pane capture power covers every applet and the snapshot
   takes this proposal's held reply. See "How a program's capture power relates to browser capture".
 - UTERM-055 — "Where a program's capture command lives" and "What an unselected tab or a hidden pane captures". Exec
-  drivers reach this proposal's host capture, its reason kinds, and its tab scope through UTERM-055's exec version.
+  drivers reach this proposal's host capture, its reason kinds, and its tab scope through UTERM-055's exec frames, which land in
+  place at exec protocol version 0 under UTERM-063. Amended 2026-11-27; see Decision Log.
 - UTERM-048 — the pane inspector lists a pane's facts. A capture of the inspector's pane is an ordinary capture, and
   the inspector needs no change.
 
@@ -129,17 +130,16 @@ Decision: the deploy units are the app, external exec drivers, native controller
 and the controller policy file. The Janet helper ships with the app's side of ScriptWire in the app bundle, so the
 two are not skewed. A newer user script on an older app gets an unbound-symbol error.
 
-- Native controllers: a native controller entry opens its own ScriptWire connection from outside the bundle, and
-  ScriptWire's hello accepts only the app's exact version. The capture calls change ScriptWire, so a native controller
-  built against the earlier version is refused at hello, and a newer one is refused by an older app. Every ScriptWire
-  change does this today. Filed as
+- Native controllers: a native controller entry opens its own ScriptWire connection from outside the bundle. ScriptWire
+  is at 0 under UTERM-063, so the capture calls land in place after UTERM-063 M2, with no new version. A native
+  controller built against the earlier calls is refused by name at its first message that changed, and it is rebuilt.
+  This was filed as
   [20261122-native-controller-refused-after-scriptwire-change](../bugs/20261122-native-controller-refused-after-scriptwire-change.md),
-  which names the conflict with ADR-13. Accepted until UTERM-056 lands, since this proposal makes no ScriptWire change
-  that others do not. After that, a native controller at version 14 or later keeps running, and only lacks the capture
-  calls. Amended 2026-11-23; see Decision Log.
+  which names the conflict with ADR-13. ADR-13's C1 removes the conflict while ScriptWire is at 0. Amended 2026-11-27;
+  see Decision Log.
 
-- Exec drivers: this proposal changes no exec frame or version, so a driver on either side sees no difference.
-  UTERM-055 adds exec capture in its own version. Amended 2026-11-22; see Decision Log.
+- Exec drivers: this proposal changes no exec frame, and the exec wire stays at 0, so a driver on either side sees no
+  difference. UTERM-055 adds exec capture in place at version 0. Amended 2026-11-22; see Decision Log.
 - New descriptor, old app: a descriptor that names the capture power is refused at load, as UTERM-004 format 2 refuses
   every unknown kind. A controller that needs capture states it, and runs only on an app that knows it.
 - Old descriptor, new app: a descriptor without the capture power gets none. A grant stored before the power existed
@@ -212,7 +212,8 @@ capture never exists as a separate kind. The amendment moves the browser snapsho
 reply shape, and changes UTERM-019's rule that next-events is the only command that waits. `:browser/snapshot` leaves UTERM-019's
 capability set, since the host capture takes both the viewport and the full page. PDF output and find in page stay
 browser commands under the pane capture power. Amended 2026-11-22; see Decision Log. If UTERM-019 M1 ships first, browser capture is widened to every
-applet under a version 2 of the same kind. An approval under version 1 then covers only the browser, under ADR-14 P10.
+applet by moving the kind's edition. An approval made at the earlier edition then covers nothing of it, and the user is
+asked again, under ADR-14 P10.
 (autonomous)
 
 - The power's bound under ADR-14 P15 is its targets, settled in "Which panes a program may capture", plus the result
@@ -291,7 +292,7 @@ capability with the caller.
   under ADR-11, and returns a result handle. The bytes read back in chunks under the byte type that UTERM-019's "Result
   encoding" adds. The pending path re-checks authority at completion, as `formResult` does, and a result that fails the
   re-check frees its slot.
-- External exec drivers capture under UTERM-055, which adds an exec protocol version. This proposal adds no exec frame. Amended 2026-11-22; see Decision Log.
+- External exec drivers capture under UTERM-055, which adds exec frames in place at exec protocol version 0. This proposal adds no exec frame. Amended 2026-11-22; see Decision Log.
 
 Rationale: one host path serves the user and programs, as "Scripts and controllers capture too" requires. Per-applet
 commands would copy the host's steps into each applet's schema, and a script that captures any pane would switch on
@@ -573,8 +574,8 @@ None.
   Accepted: an older app loads no policies from a file that holds a kind it lacks, and keeps the file read-only until the
   user upgrades. This is UTERM-004's designed behavior for every new kind. See "Version skew".
 - **A native controller stops connecting after the capture calls ship** — likelihood: medium, impact: medium.
-  Accepted until UTERM-056 lands: until then, every ScriptWire change refuses native controllers built against another
-  version. Amended 2026-11-23; see Decision Log. See "Version skew".
+  Accepted: ScriptWire is at 0, so a native controller built against the earlier calls is refused by name and rebuilt.
+  Amended 2026-11-27; see Decision Log. See "Version skew".
 - **The capture error's reason kinds become published names** — likelihood: high, impact: low.
   Mitigation: programs switch on them, so they are append-only, and a test pins every existing name. A renamed reason
   is a new name beside the old one.
@@ -582,7 +583,7 @@ None.
   Mitigation: the pixel area is clamped before rendering, as UTERM-019 settles, and results are capped per result and per
   run.
 - **The capture power becomes a published name** — likelihood: high, impact: low.
-  Mitigation: the power is versioned in the descriptor format, as UTERM-004 does for every power. See "Version skew".
+  Mitigation: the power carries an internal edition, as UTERM-063 gives every power. See "Version skew".
 - **Copy Screenshot replaces what the clipboard held** — likelihood: medium, impact: low.
   Accepted: Copy Screenshot is an explicit user command, as every Copy is. Programs never copy a capture.
 - **The browser and program milestones rest on UTERM-019, which has built nothing** — likelihood: high, impact: medium.
@@ -728,8 +729,8 @@ Lands before UTERM-019 M1 ships, and does not wait for M1 to M5 here.
 - `:browser/snapshot` is gone from UTERM-019's capability set, and its snapshot checks point at this proposal's host
   capture
 - UTERM-019's rule that next-events is the only command that waits names the capture's held reply as a second one
-- If UTERM-019 M1 shipped first, browser capture is widened to every applet under version 2, and an approval under
-  version 1 covers only the browser
+- If UTERM-019 M1 shipped first, browser capture is widened to every applet by moving the kind's edition, and an
+  approval made at the earlier edition covers nothing of it
 - The amendment says that UTERM-019's PDF, find, and cookie results keep their own browser read-result, and that exec
   drivers' browser snapshot moves to UTERM-055
 - If UTERM-019 M4 shipped `:browser/snapshot` first, the removal follows UTERM-019's rule that a dropped feature leaves
@@ -841,6 +842,17 @@ Lands before UTERM-019 M1 ships, and does not wait for M1 to M5 here.
   the caller may not read. Part of an image from such a file is left out, as the map's file layer is, and a capture
   whose content is such a file is refused with a named reason. Unreadable tab titles show blank once UTERM-062 lands.
   The user chose this. M5 no longer waits on the question, and gained checks for it.
+- 2026-11-27: From UTERM-063. ScriptWire and the exec wire are at 0 and do not bump, and a permission kind carries an
+  internal edition in place of a version. The capture calls land in place after UTERM-063 M2.
+  - Amended "Version skew". It said "The capture calls change ScriptWire, so a native controller built against the
+    earlier version is refused at hello", accepted "until UTERM-056 lands", and that UTERM-055 adds exec capture "in its
+    own version". A native controller built earlier is refused by name and rebuilt.
+  - Amended the decision "How a program's capture power relates to browser capture" and M6. They said browser capture
+    is widened "under a version 2 of the same kind", and that "an approval under version 1 then covers only the
+    browser". The kind's edition moves instead, and the user is asked again.
+  - Amended the Impacts line for UTERM-055, the exec-capture bullet in "Where a program's capture command lives", the
+    native-controller risk, and the risk on the power becoming a published name. That risk said "the power is versioned
+    in the descriptor format".
 
 ## References
 
@@ -850,7 +862,7 @@ Lands before UTERM-019 M1 ships, and does not wait for M1 to M5 here.
 - ADR-07: failure isolation
 - ADR-08: UI responsiveness
 - ADR-11: deferred applet replies never hide effects
-- ADR-13: outside wires stay compatible across versions
+- ADR-13: external wires stay compatible across versions
 - ADR-14: a controller controls what it opened
 - ADR-15: a program's operation is the user's
 - `spec/ideas.md`, "Screenshot of a pane or tab"

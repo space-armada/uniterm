@@ -33,12 +33,12 @@ final class ControllerConsentUITests: UnitermUITestCase {
     try write(
       """
       {
-        "format": 2,
+        "format": 0,
         "id": "dev.uniterm.uitest.consent",
         "name": "Synthetic Consent Fixture",
         "entry": {"kind": "janet", "path": "main.janet"},
         "files": {"main.janet": "sha256:\(digest)"},
-        "permissions": [{"kind": "pane-control", "version": 1}]
+        "permissions": [{"kind": "pane-control"}]
       }
 
       """, to: package + "/controller.json")
@@ -448,8 +448,8 @@ final class ControllerConsentUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Tidy"}
-        {:kind :pane-control :version 1}
-        {:kind :clipboard-read :version 1})
+        {:kind :pane-control}
+        {:kind :clipboard-read})
 
       (print "declared file ran")
 
@@ -528,7 +528,7 @@ final class ControllerConsentUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Reader"}
-        {:kind :path-read :version 1 :directories ["\(NSHomeDirectory())"]})
+        {:kind :path-read :directories ["\(NSHomeDirectory())"]})
 
       (print "path reading file ran")
 
@@ -573,7 +573,7 @@ final class ControllerConsentUITests: UnitermUITestCase {
     let source = Data(
       """
       (declare-permissions {:id "dev.uniterm.uitest.signed" :name "Synthetic Signed Tidy"}
-        {:kind :pane-control :version 1})
+        {:kind :pane-control})
 
       (print "signed file ran")
 

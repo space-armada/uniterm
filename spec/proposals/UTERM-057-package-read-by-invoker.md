@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-23
-**Updated:** 2026-11-24
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -19,10 +19,11 @@
   run", for Janet packages. UTERM-004 is implemented, so each takes a "Superseded in part by UTERM-057" marker.
 - UTERM-034 — its line "A package keeps its snapshot. It is outside this proposal." This proposal is where that gap
   lands.
-- UTERM-056 — any change to the controller begin changes ScriptWire, and moves its version. Until UTERM-056 lands, that
-  refuses every native controller built against the earlier version.
-- UTERM-019, UTERM-029, UTERM-032, UTERM-034, and UTERM-054 — each also moves ScriptWire's version. Whichever lands
-  later bumps again.
+- UTERM-056 — any change to the controller begin changes ScriptWire. ScriptWire is at 0 under UTERM-063 and does not
+  move, so the change lands in place after UTERM-063 M2, and a native controller built against the earlier begin is
+  refused by name. Amended 2026-11-27; see Decision Log.
+- UTERM-019, UTERM-029, UTERM-032, UTERM-034, and UTERM-054 — each also changes ScriptWire in place. None moves its
+  version.
 
 ## ADR Deviations
 
@@ -166,32 +167,32 @@ The other options:
 Original question: the controller begin is a ScriptWire message, and the command and the app ship in one bundle. How
 does the change land across versions, beside UTERM-056?
 
-Decision: ScriptWire's version goes up. Settled 2026-11-23 (autonomous); see Decision Log.
+Decision: ScriptWire is at 0 under UTERM-063 and does not bump. The controller begin changes in place, after UTERM-063
+M2. The old path-based begin is a retired message, and the app refuses it by name. Settled 2026-11-23 (autonomous).
+Amended 2026-11-27; see Decision Log.
 
 - Only the bundled command sends the controller begin. A native entry's own connections are adopted, never begun. So
   the begin's change crosses only the command and the app, which ship in one bundle. ADR-13 P6 lets the command's
   own messages refuse every version but their own.
-- Old command to new app, and new command to old app, both refuse at the hello with the relaunch text, under today's
-  exact match. No deploy order is needed. A revert and a redeploy undo the change.
-- If UTERM-056 lands first, the app answers a hello with the lower of the two versions. An old command then passes the
-  hello. Its path-based begin gets an explicit refusal, never admission, per UTERM-056. The new app keeps no path-based
-  admission at any version, so an old command can never bring back the program-chosen open.
+- Old command to new app: the old command's path-based begin is refused by name with an explicit refusal, never
+  admitted. A swapped bundle is caught by the command's identity check, which says to relaunch uniterm. New command to
+  old app: the old app's strict decoder refuses the message it does not know. No deploy order is needed. A revert and a
+  redeploy undo the change.
+- The new app keeps no path-based admission, so an old command can never bring back the program-chosen open.
 - No stored data changes. A package's version stays the SHA-256 of `controller.json`, so earlier approvals still apply.
-- Native controllers built against the earlier version are refused until UTERM-056 lands. See Risks.
-- UTERM-019, UTERM-029, UTERM-032, UTERM-034, and UTERM-054 also bump ScriptWire. Whichever lands later bumps again.
+- A native controller built against the earlier begin is refused by name, and rebuilt. See Risks.
+- UTERM-019, UTERM-029, UTERM-032, UTERM-034, and UTERM-054 also change ScriptWire in place, and none bumps it.
 
-Rationale: an exact bump gives both directions the relaunch text, and each version keeps one meaning, per ADR-13 and
-UTERM-056.
+Rationale: a retired message refused by name gives both directions a clear error, and the version stays 0 under
+UTERM-063.
 
 The other options:
 
-- A new begin message without a bump fails its own skew analysis. A new command against an old app passes the hello,
-  then the old app closes the connection on an unknown type. The user reads "closed the connection before the script
-  began", not the relaunch text. The new app would also have to serve or specially refuse an old command's path begin at
-  the same version. Version 14 would gain a meaning, which ADR-13 rejects, and the next bump from another proposal
-  takes the natives' refusal anyway.
+- A new begin message that an old app does not refuse by name fails its own skew analysis. A new command against an old
+  app then closes on an unknown type, and the user reads "closed the connection before the script began". UTERM-063 M2
+  makes every decoder refuse by name, which removes that failure.
 - Waiting on UTERM-056 before landing spares native controllers. But it holds up a confirmed privacy fix for programs
-  nobody is known to run, while accepted proposals bump the version anyway.
+  nobody is known to run.
 
 ## Design Decisions (Open)
 
@@ -210,12 +211,12 @@ None.
   size is already bounded by `ControllerDescriptor.maxPackageBytes`. M1 names a deadline sized for it. The app refuses
   on the descriptor before it accepts file bytes, and streams each file to disk and the hash rather than holding the
   whole package.
-- **Native controllers built against the earlier ScriptWire version are refused** — likelihood: low, impact: medium.
-  The bump refuses them at the hello until UTERM-056 lands. Accepted: no program on them is known outside the test
-  fixture, and UTERM-054 accepts the same refusal. UTERM-056 restores them.
-- **Several proposals bump the same wire version** — likelihood: medium, impact: low. UTERM-019, UTERM-029, UTERM-032,
-  UTERM-034, and UTERM-054 each bump ScriptWire. Two could take the same number. Mitigation: whichever lands later bumps
-  again, and the hello refuses any mismatch, so a clash fails closed.
+- **Native controllers built against the earlier ScriptWire are refused** — likelihood: low, impact: medium. The
+  retired begin is refused by name. Accepted: no program on them is known outside the test fixture, and UTERM-054
+  accepts the same refusal. A native controller is rebuilt.
+- **Several proposals change the same wire in place** — likelihood: medium, impact: low. UTERM-019, UTERM-029,
+  UTERM-032, UTERM-034, and UTERM-054 each change ScriptWire. Mitigation: ScriptWire stays at 0, each change takes a
+  new name when its meaning changes, and the strict decoders refuse any name they do not know.
 - **The chunk messages are designed for one file** — likelihood: medium, impact: low. UTERM-034 M1 designs them for a
   declared script. A package needs many files and a descriptor in one stream. Mitigation: whichever proposal lands
   first builds them for both. UTERM-034 M1 checks that its chunks carry a package, and this M1 checks that the package
@@ -271,8 +272,9 @@ The app never opens a path for a controller package, its descriptor, or its sign
 - A test that swaps a parent folder for a link after the command's read shows the run uses the bytes the command read,
   and the app opens nothing
 - The package stream and UTERM-034's declared-file stream use one chunk mechanism
-- An older command and a newer app, and the reverse, refuse each other at the hello until UTERM-056 has landed
-- When UTERM-056 has landed, an older command's path-based begin gets an explicit refusal, never admission
+- An older command and a newer app, and the reverse, refuse each other by name before any effect, and a swapped bundle
+  is caught by the command's identity check
+- An older command's path-based begin gets an explicit refusal, never admission
 - Earlier approvals of a package still apply to the same `controller.json`
 - `uniterm run <folder>` and `uniterm controller run <folder>` both take the new path
 - The user runs a package in Documents from a program started outside uniterm, on a Mac where uniterm holds a
@@ -334,6 +336,12 @@ The app never opens a path for a controller package, its descriptor, or its sign
   proposal's M1, since a failed check changes which process reads.
 - 2026-11-23: Accepted.
 - 2026-11-24: Scheduled as M1 in queue.md.
+- 2026-11-27: From UTERM-063. ScriptWire is at 0 and does not bump, so the controller begin changes in place after
+  UTERM-063 M2, and the old path-based begin is refused by name.
+  - Amended "Version skew". It said "ScriptWire's version goes up", and that both directions refuse "at the hello with
+    the relaunch text, under today's exact match".
+  - Amended the Impacts lines for UTERM-056 and the proposals that also bump ScriptWire, and the two risks on native
+    controllers and on several proposals bumping one version.
 
 ## References
 

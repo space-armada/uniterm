@@ -10,7 +10,8 @@
  * a longjmp never crosses a Swift frame.
  */
 
-#define UNITERM_JANET_API_VERSION 1
+/* The scripting API's version. It stays 0 until uniterm's maintainers declare it version 1. */
+#define UNITERM_JANET_API_VERSION 0
 
 /* The most bytes a host function's error message may carry, with its terminator. */
 #define UNITERM_JANET_ERROR_CAPACITY 256

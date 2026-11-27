@@ -390,7 +390,7 @@ extension MapViewerApplet {
   /// A restarted driver finds the previous driver's pins in the default layer until it sends
   /// `set-layer`, which replaces the layer whole.
   public nonisolated static let remoteSchema = AppletCommandSchema(
-    appletType: MapViewerDescription.typeID, version: AppletSchemaVersion(1, 0),
+    appletType: MapViewerDescription.typeID, version: AppletSchemaVersion(0, 0),
     commands: [
       AppletMessageSchema(
         name: "add",

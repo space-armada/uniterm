@@ -265,10 +265,16 @@ public final class ExecDriverChannel: AppletEventSink {
 
   private func handle(_ message: ExecDriverMessage) {
     switch (phase, message) {
-    case (.greeting, .hello(let version, let type, let schemaVersion)):
-      greet(version: version, type: type, schemaVersion: schemaVersion)
+    case (.greeting, .hello(_, let type, let schemaVersion)):
+      greet(type: type, schemaVersion: schemaVersion)
 
-    case (.connected, .hello):
+    case (.greeting, .helloOfAnotherVersion(let version)):
+      refuse(
+        code: "unsupported-version",
+        text: "The driver speaks exec protocol \(version), and this uniterm speaks "
+          + "\(ExecProtocol.version). Update the driver or uniterm so they match.")
+
+    case (.connected, .hello), (.connected, .helloOfAnotherVersion):
       end(.failed("it sent a second hello"))
 
     case (.greeting, .command), (.greeting, .paneCommand), (.greeting, .layout),
@@ -314,42 +320,38 @@ public final class ExecDriverChannel: AppletEventSink {
     }
   }
 
-  /// Both sides must support the other. A driver that names another protocol, applet type, or
-  /// schema version is told why, and the channel ends before any command runs.
-  private func greet(version: Int, type: String, schemaVersion: AppletSchemaVersion) {
-    let refusal: (code: String, text: String)?
+  /// Both sides must support the other. A driver that names another applet type or schema version
+  /// is told why, and the channel ends before any command runs. A driver at another protocol
+  /// version never gets here.
+  private func greet(type: String, schemaVersion: AppletSchemaVersion) {
+    if type != schema.appletType {
+      refuse(
+        code: "unsupported-applet",
+        text:
+          "The driver was written for a \(type) applet, and this pane runs \(schema.appletType).")
 
-    if version != ExecProtocol.version {
-      refusal = (
-        "unsupported-version",
-        "The driver speaks exec protocol \(version), and this uniterm speaks "
-          + "\(ExecProtocol.version). Update the driver or uniterm so they match."
-      )
-    } else if type != schema.appletType {
-      refusal = (
-        "unsupported-applet",
-        "The driver was written for a \(type) applet, and this pane runs \(schema.appletType)."
-      )
-    } else if !schema.version.accepts(schemaVersion) {
-      refusal = (
-        "unsupported-version",
-        "The driver was written for \(type) schema version \(schemaVersion), and this pane takes "
-          + "version \(schema.version.major) with a minor up to \(schema.version.minor). Update "
-          + "the driver or uniterm."
-      )
-    } else {
-      refusal = nil
-    }
-
-    guard let refusal else {
-      driverSchemaVersion = schemaVersion
-      phase = .connected
-      applet?.events.sinkAttached(self)
       return
     }
 
-    transport?.send(ExecWire.frame(.error(id: nil, code: refusal.code, message: refusal.text)))
-    end(.refused(refusal.text))
+    guard schema.version.accepts(schemaVersion) else {
+      refuse(
+        code: "unsupported-version",
+        text:
+          "The driver was written for \(type) schema version \(schemaVersion), and this pane takes "
+          + "version \(schema.version.major) with a minor up to \(schema.version.minor). Update "
+          + "the driver or uniterm.")
+
+      return
+    }
+
+    driverSchemaVersion = schemaVersion
+    phase = .connected
+    applet?.events.sinkAttached(self)
+  }
+
+  private func refuse(code: String, text: String) {
+    transport?.send(ExecWire.frame(.error(id: nil, code: code, message: text)))
+    end(.refused(text))
   }
 
   private func run(id: JSONValue, name: String, arguments: JSONValue) {

@@ -60,7 +60,7 @@ where one is needed.
 - Adding a new kind of entry no longer needs a new file or a new store version. A change to what an existing kind
   means still does.
 - Stores a build keeps for itself are covered. Files a user saves and exchanges, such as exported tab sets, are
-  documents with their own formats, and ADR-13 covers outside wires.
+  documents with their own formats, and ADR-13 covers external wires.
 
 ## Alternatives Considered
 
@@ -79,5 +79,5 @@ where one is needed.
 - [UTERM-067](../proposals/UTERM-067-stores-keep-what-they-cannot-read.md): applies it to the trust stores
 - [ADR-03](ADR-03-restored-state-never-runs-a-program.md): restored state never runs a program unasked
 - [ADR-06](ADR-06-layout-file-versioning-and-schema-ownership.md): the layout file's payloads already follow P2
-- [ADR-13](ADR-13-outside-wires-stay-compatible-across-versions.md): outside wires
+- [ADR-13](ADR-13-outside-wires-stay-compatible-across-versions.md): external wires
 - [ADR-14](ADR-14-a-controller-controls-what-it-opened.md): remembered approvals and their scope

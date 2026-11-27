@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -15,7 +15,7 @@
 
 - UTERM-030 — "Slide images": slide images load from the folder this proposal grants.
 - UTERM-029 — "Input kinds and host functions": amends this proposal so a PDF or a folder may be the input, under
-  `input-file` version 2, with four host functions to read them. Its PDF pages count as slide images under this grant.
+  a later edition of the `input-file` kind, with four host functions to read them. Its PDF pages count as slide images under this grant.
 - UTERM-025 — "How it starts": the presenter takes its deck as an argument, under this proposal.
 - UTERM-004 — "Permission scopes and approval flow": supersedes in part its rule that approvals hold typed authority
   ceilings, not exact launch inputs, and that arguments are never part of a remembered scope. A remembered folder for
@@ -114,12 +114,12 @@ any protected location the scope lies in.
 
 ### Version skew
 
-Decision: the `input-file` kind and the folder crossing from the command to the app are new, so ScriptWire's version
-goes up.
+Decision: the `input-file` kind and the folder crossing from the command to the app are new. ScriptWire is at 0 under
+UTERM-063 and does not bump, so they land in place after UTERM-063 M2. Amended 2026-11-27; see Decision Log.
 
-- A new command with an old app, or the reverse, fails before any effect, with the message to relaunch uniterm. It fails
-  at the hello, or, for an old command once UTERM-056 has landed, at its begin. The command is the bundle's own, so a
-  relaunch heals it. Amended 2026-11-23; see Decision Log.
+- A new command with an old app, or the reverse, fails before any effect. The side that did not change refuses the
+  message it does not know by name, and a swapped bundle is caught by the command's identity check, which says to
+  relaunch uniterm. The command is the bundle's own, so a relaunch heals it.
 - An older build refuses a declared file that declares `input-file`, since it does not know the kind.
 - A remembered approval that holds a folder lives in the one trust store, per "The stored approval". A build with
   UTERM-067's reader that cannot read it keeps it unread, and its other approvals keep working. A build from before
@@ -160,11 +160,11 @@ named binding in the uniterm module. The script's stdin stays the invoker's.
   terminal.
 - The text, the canonical path, and the folder all come from that one open. The folder is the parent of the file's
   canonical path. The open descriptor must be the file that canonical path names, or the run is refused.
-- The command sends the folder to the app beside the declaration report, in the same ScriptWire version bump as
-  "Version skew". The app refuses a declaration that marks an input file and arrives with no folder, and a folder that
+- The command sends the folder to the app beside the declaration report, in the same in-place ScriptWire
+  change as "Version skew". The app refuses a declaration that marks an input file and arrives with no folder, and a folder that
   arrives with no mark.
 - The read runs in the command's process, so it borrows none of uniterm's macOS privacy grants.
-- Under `input-file` version 2, a PDF or a folder may be the input, per UTERM-029 "Input kinds and host functions". A
+- Once the `input-file` kind takes the new inputs, a PDF or a folder may be the input, per UTERM-029 "Input kinds and host functions". A
   folder is not refused as non-regular there. The command passes a PDF's open descriptor to the app instead of reading
   it, and lists a folder through its descriptor. The UTF-8 check and the size cap apply to text input only. Amended
   2026-11-17; see Decision Log.
@@ -213,7 +213,7 @@ holds every approval" sets. Amended 2026-11-26; see Decision Log.
 - Each stored folder records, by stable name, the protected locations inside it that its sheet excluded. A remembered
   folder covers a request only while every recorded name is still on this build's list. A name the build does not know,
   or one the list dropped, makes that folder ask again. A location added to the list later is excluded at once, since
-  coverage reads the current list. The kind's meaning version never changes with the list.
+  coverage reads the current list. The kind's edition never changes with the list.
 - An entry of UTERM-015's list whose extent changes, wider or narrower, takes a new name. A recorded name then never
   covers more than the sheet showed, on a newer build or an older one.
 - A protected location added later that encloses a remembered folder leaves it covering, per UTERM-015's rule for a
@@ -232,8 +232,8 @@ folders would also share one review, so one Trust would admit both. A store of i
 a build that cannot read a folder policy skips that one entry and keeps the rest, and uniterm is pre-v1, so builds
 from before that reader do not constrain the format. A folder file bound to its policy by timestamp can bring back a
 folder an older build revoked, since a policy record has no room for a stronger binding. A per-folder revoke that ends one live grant would be new mechanism
-beside the per-policy revoke. The cap's message names the policy instead. A meaning version raised with the list would
-make a build that lacks the newest version keep every folder policy unread. Every power of every folder policy
+beside the per-policy revoke. The cap's message names the policy instead. An edition raised with the list would
+ask again for every folder policy, and make a build that lacks the newest edition keep every folder policy unread. Every power of every folder policy
 would then stop working there. Recording names instead asks again only for the folders a change touched.
 
 ### What a denial covers
@@ -260,8 +260,7 @@ error says what to do next.
   "Undeclared powers are refused".
 - In a package, it says a package cannot take an input file.
 - In an undeclared file or a REPL, it says only a declared file takes an input file, and names the `input-file`
-  version the call needs: version 1 for `input-text` and `input-folder`, version 2 for UTERM-029's functions. Amended
-  2026-11-17; see Decision Log.
+  kind the call needs. Amended 2026-11-17; see Decision Log.
 
 Rationale: no caller is served by nil. A declared run with an input file always has one, since a missing argument
 refuses the run. Every other run can never have one. A nil would make a forgotten declaration run as if the deck were
@@ -277,18 +276,18 @@ unless refused there.
 
 Decision: a declarable permission kind, two host functions, and a sheet line built from the folder alone.
 
-- A file declares `{:kind :input-file :version 1}`, with no other fields. The app replaces it with the stored folder
+- A file declares `{:kind :input-file}`, with no other fields. The app replaces it with the stored folder
   kind of "The stored approval" when it validates the declaration. The declarable kind never enters a request, a review
   key, or a store.
 - Each permission meaning names where its kind may appear: a package, a file, or a store. One rule in the reader then
   refuses `input-file` in `controller.json`, and the folder kind in any declaration.
 - `(uniterm/input-text)` and `(uniterm/input-folder)` return the text and the folder the grant holds. No function
-  returns the file's own path. Under version 2, UTERM-029 adds `input-kind`, `input-name`, `input-pages`, and
+  returns the file's own path. UTERM-029 adds `input-kind`, `input-name`, `input-pages`, and
   `input-images`. `input-name` returns the canonical base name, which a generated slide needs to name a PDF page.
   Amended 2026-11-17; see Decision Log.
 - The sheet line reads "Let the text viewer show images and PDF pages from /Users/me/talks/demo or a folder inside it,
   in panes it controls", for every input kind. UTERM-015's line naming any protected location the folder lies in
-  follows it. The stored folder kind keeps its version.
+  follows it. The stored folder kind keeps its edition.
 
 Rationale: a permission kind keeps the declared list the whole set of powers, as the lint and UTERM-021's refusal rule
 expect. A header key would grant a folder the list never names. As written, it would also need a boolean, which the
@@ -509,6 +508,17 @@ None.
   "How the text reaches the script" name. This proposal is queued first, so its text stays as written. UTERM-034 M1
   amends both sections and the M1 check on a file that gains the mark before the snapshot, when it lands.
 - 2026-11-23: From UTERM-056's acceptance. "Version skew" said a mismatch "fails at the hello before any effect".
+- 2026-11-27: From UTERM-063. ScriptWire is at 0 and does not bump, and a declarable kind carries no version, so the
+  `input-file` kind is named alone and has an internal edition. The new messages land in place after UTERM-063 M2.
+  - Amended "Version skew". It said "so ScriptWire's version goes up", and that a mismatch "fails at the hello, or, for
+    an old command once UTERM-056 has landed, at its begin".
+  - Amended "How the text reaches the script", "Calls without an input file", and "The declaration and the host
+    functions". They said `input-file` version 2 takes PDF and folder inputs, that the error names "version 1 for
+    `input-text` and `input-folder`, version 2 for UTERM-029's functions", and that a file declares
+    `{:kind :input-file :version 1}`.
+  - Amended "The stored approval". It said "The kind's meaning version never changes with the list", and that "A
+    meaning version raised with the list would make a build that lacks the newest version keep every folder policy
+    unread".
 
 ## References
 

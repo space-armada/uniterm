@@ -420,7 +420,7 @@ extension ScriptHost {
             environmentKeys: approved.environmentKeys)
         else { return nil }
 
-        return ControllerPermission(.hostLaunch(scope), version: permission.version)
+        return ControllerPermission(.hostLaunch(scope), edition: permission.edition)
       })
 
     return PermissionContainment.uncovered([.hostLaunch(scope)], by: standing).isEmpty

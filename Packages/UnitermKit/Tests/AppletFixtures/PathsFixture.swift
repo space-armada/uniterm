@@ -13,7 +13,7 @@ import SourceAccess
     public nonisolated static let typeID = "fixture-paths"
 
     public nonisolated static let schema = AppletCommandSchema(
-      appletType: typeID, version: AppletSchemaVersion(1, 0),
+      appletType: typeID, version: AppletSchemaVersion(0, 0),
       commands: [
         AppletMessageSchema(
           name: "read-file", summary: "Reads a file and answers with its text.",

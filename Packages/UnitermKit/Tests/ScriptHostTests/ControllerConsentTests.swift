@@ -96,7 +96,7 @@ final class ControllerConsentTests: XCTestCase {
   // MARK: Helpers
 
   private func package(
-    _ entry: String, permissions: [String], format: Int = 2,
+    _ entry: String, permissions: [String], format: Int = ControllerDescriptor.format,
     id: String = "dev.uniterm.fixture.consent",
     signedWith key: (any ControllerSigningKey)? = nil
   ) throws -> URL {
@@ -112,12 +112,12 @@ final class ControllerConsentTests: XCTestCase {
       signedWith: key, to: work.appendingPathComponent("package-\(UUID().uuidString.prefix(6))"))
   }
 
-  private static let paneControl = #"{"kind": "pane-control", "version": 1}"#
-  private static let navigation = #"{"kind": "browser-navigation", "version": 1}"#
-  private static let browserRead = #"{"kind": "browser-read", "version": 1}"#
-  private static let read = #"{"kind": "clipboard-read", "version": 1}"#
-  private static let write = #"{"kind": "clipboard-write", "version": 1}"#
-  private static let fsRead = #"{"kind": "capability", "name": "fs-read", "version": 1}"#
+  private static let paneControl = #"{"kind": "pane-control"}"#
+  private static let navigation = #"{"kind": "browser-navigation"}"#
+  private static let browserRead = #"{"kind": "browser-read"}"#
+  private static let read = #"{"kind": "clipboard-read"}"#
+  private static let write = #"{"kind": "clipboard-write"}"#
+  private static let fsRead = #"{"kind": "capability", "name": "fs-read"}"#
 
   /// Runs a plain script, or a package, with the bundle-like command.
   private func run(
@@ -250,7 +250,7 @@ final class ControllerConsentTests: XCTestCase {
 
   private static let browserCommand = """
     (def pane {:window 1 :pane 1})
-    (print (get (protect (uniterm/send-command pane :fixture-slides 1 :status)) 0))
+    (print (get (protect (uniterm/send-command pane :fixture-slides 0 :status)) 0))
     """
 
   /// Catches a browser command that runs on pane control alone, one that asks about a power the
@@ -629,7 +629,7 @@ final class ControllerConsentTests: XCTestCase {
       files: ["main.janet": Data("(import uniterm)\n(print 6)\n".utf8)])
 
     changed.id = "dev.uniterm.fixture.consent"
-    changed.format = 2
+    changed.format = ControllerDescriptor.format
     changed.permissions = [Self.paneControl]
     try changed.write(to: tampered)
 
@@ -759,7 +759,7 @@ final class ControllerConsentTests: XCTestCase {
       "(print \"started\")\n(flush)\n(os/sleep 30)\n",
       permissions: [
         Self.paneControl,
-        #"{"kind": "host-launch", "version": 1, "executable": "/usr/bin/true", "directory": ""#
+        #"{"kind": "host-launch", "executable": "/usr/bin/true", "directory": ""#
           + folder + #"", "environment": ["TOKEN"]}"#,
       ])
 
@@ -815,7 +815,7 @@ final class ControllerConsentTests: XCTestCase {
       "(print \"started\")\n(flush)\n(os/sleep 30)\n",
       permissions: [
         Self.paneControl,
-        #"{"kind": "path-read", "version": 1, "directories": [""# + folder + #""]}"#,
+        #"{"kind": "path-read", "directories": [""# + folder + #""]}"#,
       ])
 
     for answer in [ControllerReviewChoice.allowForSession, .allowOnce, .trustVersion] {
@@ -866,7 +866,7 @@ final class ControllerConsentTests: XCTestCase {
       "(print \"started\")\n(flush)\n(os/sleep 30)\n",
       permissions: [
         Self.paneControl,
-        #"{"kind": "path-read", "version": 1, "directories": [""# + link.path + #""]}"#,
+        #"{"kind": "path-read", "directories": [""# + link.path + #""]}"#,
       ])
 
     reviewAnswer = .allowForSession
@@ -921,7 +921,7 @@ final class ControllerConsentTests: XCTestCase {
       "(print \"started\")\n(flush)\n(os/sleep 30)\n",
       permissions: [
         Self.paneControl,
-        #"{"kind": "host-launch", "version": 1, "executable": "/usr/bin/true", "directory": ""#
+        #"{"kind": "host-launch", "executable": "/usr/bin/true", "directory": ""#
           + approved + #"", "environment": []}"#,
       ])
 

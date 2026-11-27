@@ -380,7 +380,7 @@ final class ScriptAskRunTests: XCTestCase {
           == .hello(version: ScriptProtocol.version)
       else { return false }
 
-      try? socket.send(ScriptAppMessage.hello(version: ScriptProtocol.version - 1).frame())
+      try? socket.send(ScriptAppMessage.hello(version: ScriptProtocol.version + 1).frame())
 
       return (try? socket.readFrame(limit: ScriptHelperMessage.bodyLimit(type:))) == nil
     }

@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-21
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -18,13 +18,15 @@
   that fills the pane, and images.
 - UTERM-024 — "Which panes take a controller's keys": the text viewer's page opts in to controller keys. The arrow keys step
   slides, so a slide's overflow rule cannot rely on scrolling by keyboard.
-- UTERM-007 — "Control levels": the viewer's remote schema gains two minor versions, and a new optional argument
-  counts as a minor bump.
-- UTERM-006 — its remote schema follows the same rule, so a new optional argument counts as a minor bump there too.
+- UTERM-007 — "Control levels": the viewer's remote schema gains a style argument and a base folder argument. The
+  schema is at 0.0 under UTERM-063 and does not bump, so both land in place after UTERM-063 M2. Amended 2026-11-27;
+  see Decision Log.
+- UTERM-006 — its remote schema is at 0.0 as well, so a new optional argument lands in place there too. From schema 1.0
+  a new optional argument counts as a minor bump.
 - UTERM-032 — "Slide images": no reply about slide content carries a landing anchor, which keeps UTERM-032's rule
   that the grant returns nothing to the script.
 - UTERM-029 — "PDF page references": amends "Slide images" and "Version skew". A slide image may name one page of a
-  PDF, drawn in the sandboxed document helper, and the schema gains a minor version for it.
+  PDF, drawn in the sandboxed document helper, and the argument lands in place at schema 0.0.
 - UTERM-004 — "How the grant reaches the viewer": the applet command contract gains a capability that a command's
   schema declares, so dispatch hands an applet more than a name and arguments.
 
@@ -98,11 +100,11 @@ allows for content a program supplied.
 
 ### Version skew
 
-Decision: each milestone adds one minor version to the viewer's remote schema. M1's style argument is 1.1, and M2's
-base folder argument is 1.2. The schema treats a new optional argument as a minor bump, like a new command. A
-controller written for a newer minor that reaches an older viewer is refused before any effect, under the schema's
-major and minor rule. An older controller reaching a newer viewer gets the document style and no images, as today.
-UTERM-029's PDF page references are 1.3. Amended 2026-11-17; see Decision Log.
+Decision: the viewer's remote schema is at 0.0 under UTERM-063 and does not bump. M1's style argument and M2's base
+folder argument land in place, after UTERM-063 M2. A controller that sends an argument an older viewer does not know is
+refused by name before any effect, under the strict decoders. An older controller reaching a newer viewer gets the
+document style and no images, as today. UTERM-029's PDF page references land in place the same way. From schema 1.0 a
+new optional argument is a minor bump. Amended 2026-11-27; see Decision Log.
 
 ### The style's wire shape
 
@@ -174,9 +176,9 @@ None.
 
 ## Risks
 
-- **A schema minor version is a published contract** — likelihood: high, impact: low. Mitigation: the remote schema's
-  major and minor rule covers new commands, and this proposal extends it to new optional arguments. Each milestone
-  advertises its own minor.
+- **The viewer's command arguments are a published contract** — likelihood: high, impact: low. Mitigation: the schema is
+  at 0.0, and an argument an older viewer does not know is refused by name. From schema 1.0 the major and minor rule
+  covers new commands, and this proposal extends it to new optional arguments. Amended 2026-11-27; see Decision Log.
 - **Images widen what a controller can make the viewer read** — likelihood: medium, impact: medium. Mitigation: reads are
   confined to the folder the user granted for that run, under UTERM-015's checks.
 - **UTERM-024 is a draft, and the Markdown page's opt-in rests on its rule for which panes take a controller's keys** —
@@ -213,7 +215,7 @@ None.
 - A slide shown again by Reload after WebKit's content process ends keeps the slide style
 - A slide reopened by undo within the launch shows the slide style
 - A `show-markdown` without the style argument shows the document style, even in a pane that showed a slide
-- The viewer advertises schema 1.1, and the schema's rule names a new optional argument as a minor bump
+- The viewer's schema stays 0.0, and an older viewer refuses the style argument by name before any effect
 - A `show-markdown` style value other than the named slide style is refused before any effect
 - The style rides with the sent text in the undo-only part, and never in the saved layout record
 - A `scroll` or `find` on content sent with the slide style is refused before any effect, and no other reply or `wait`
@@ -240,7 +242,7 @@ None.
 - An image taller than the pane is bounded by the pane, and a heading with a tall screenshot fits without reaching the
   floor
 - Slide images load eagerly in the slide style, and an image that loads late refits the slide
-- The viewer advertises schema 1.2
+- The viewer's schema stays 0.0, and an older viewer refuses the base folder argument by name before any effect
 - The `show-markdown` load reply settles when the slide is placed, and never waits on image loads or on the fit
 - A base folder from a caller that holds no folder grant is refused before any effect
 - The slide-image capability reaches only a command whose schema declares it, and it serves no path outside slide
@@ -311,6 +313,14 @@ None.
   "Version skew" gains schema 1.3 for them. Both decisions carried the marker "Amended 2026-11-16", which this one
   replaces. Their earlier text stands, and the new bullet and sentence are added.
 - 2026-11-21: Scheduled as UTERM-030 M1-M2 in queue.md.
+- 2026-11-27: From UTERM-063. The viewer's schema is at 0.0 and does not bump, so M1's style argument and M2's base
+  folder argument land in place after UTERM-063 M2.
+  - Amended "Version skew". It said "each milestone adds one minor version to the viewer's remote schema. M1's style
+    argument is 1.1, and M2's base folder argument is 1.2", and "UTERM-029's PDF page references are 1.3".
+  - Amended the Impacts lines for UTERM-007, UTERM-006, and UTERM-029, and the risk on a schema minor, which said "Each
+    milestone advertises its own minor."
+  - Amended the M1 check "The viewer advertises schema 1.1" and the M2 check "The viewer advertises schema 1.2". The
+    checks now say an older viewer refuses the argument by name.
 
 ## References
 

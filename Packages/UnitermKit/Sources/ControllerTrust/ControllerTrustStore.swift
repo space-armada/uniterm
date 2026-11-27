@@ -45,9 +45,10 @@ public enum ControllerTrustStoreError: Error, Equatable, Sendable, CustomStringC
 /// first. Writes go through the shared atomic writer.
 ///
 /// A file this version cannot read grants nothing. It is moved aside, numbered, before anything is
-/// written, so a later write never replaces it and it stays for recovery. A file from a newer
-/// version, by its format or by a permission this build does not know, is left where it is,
-/// untouched, and this version neither trusts nor writes it.
+/// written, so a later write never replaces it and it stays for recovery. A file written in an
+/// earlier format is moved aside the same way, with a notice that each approval is given again. A
+/// file from a newer version, by its format or by a permission this build does not know, is left
+/// where it is, untouched, and this version neither trusts nor writes it.
 ///
 /// Calls block on the lock and the disk, so they belong off the main actor.
 public struct ControllerTrustStore: Sendable {
@@ -180,6 +181,16 @@ public struct ControllerTrustStore: Sendable {
           notice:
             "A newer uniterm wrote the \(subject) policy file, with \(what), so this one "
             + "remembers no trust and saves none. The file is left as it is."))
+    } catch .older {
+      let kept = try moveAside()
+
+      return Loaded(
+        state: ControllerTrustState(
+          policies: [], writable: true,
+          notice:
+            "An earlier uniterm wrote the \(subject) policy file, in a format that cannot say what "
+            + "each approval covered. Every \(subject) is approved again once, and the next "
+            + "approval is saved. The old file was kept as \(kept.lastPathComponent)."))
     } catch {
       let kept = try moveAside()
 

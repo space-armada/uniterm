@@ -124,9 +124,13 @@ public struct AppletMessageSchema: Sendable, Equatable {
 
 /// A command schema version, as a major and a minor.
 ///
-/// A new command or a new optional reply field bumps the minor. A change in meaning or a removed
-/// command bumps the major. An applet accepts a caller written for its own major and any minor up
-/// to its own, since a caller never uses what a later minor added.
+/// A schema is an external version. It is 0.0 and stays 0.0 until uniterm's maintainers declare it
+/// 1.0. At 0.0 nothing bumps. A change lands in place, and a caller written for an older shape is
+/// either read with its old meaning or refused, never read under a new meaning.
+///
+/// From 1.0 on, a new command or a new optional reply field bumps the minor. A change in meaning
+/// or a removed command bumps the major. An applet accepts a caller written for its own major and
+/// any minor up to its own, since a caller never uses what a later minor added.
 public struct AppletSchemaVersion: Sendable, Hashable, CustomStringConvertible {
   public let major: Int
   public let minor: Int

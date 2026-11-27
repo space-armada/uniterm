@@ -3,27 +3,34 @@ import ScriptWire
 import SourceAccess
 
 /// The one reader of a permission list. A controller's `controller.json` and a script file's
-/// declaration both hold one, so a package and a file cannot disagree about which kinds, versions,
-/// fields, and scopes are allowed.
+/// declaration both hold one, so a package and a file cannot disagree about which kinds, fields,
+/// and scopes are allowed.
 public enum ControllerPermissionReader {
   /// What declares the permissions. It only changes how a refusal is worded.
   public enum Subject: Sendable {
     case controller
     case file
 
-    func unknownKind(_ kind: String, version: Int, format: Int) -> String {
-      let known = ControllerPermission.meanings.contains { $0.kind == kind }
-
+    func unknownKind(_ kind: String) -> String {
       switch self {
       case .controller:
-        return format >= 2 && known
-          ? "\(kind) version \(version) is not one this uniterm knows"
-          : "the permission kind \"\(kind)\" is not one descriptor format \(format) knows"
+        return "the permission kind \"\(kind)\" is not one this uniterm knows"
 
       case .file:
-        return known
-          ? ":\(kind) version \(version) is not one this uniterm knows"
-          : ":\(kind) is not a permission kind this uniterm knows"
+        return ":\(kind) is not a permission kind this uniterm knows"
+      }
+    }
+
+    /// A permission names its kind alone. The running uniterm decides what the kind means.
+    func namedVersion(_ kind: String) -> String {
+      switch self {
+      case .controller:
+        return "the \(kind) permission names a version. A permission names its kind alone, since "
+          + "it means what the running uniterm says. Remove \"version\""
+
+      case .file:
+        return ":\(kind) names a :version. A permission names its kind alone, since it means "
+          + "what the running uniterm says. Remove :version"
       }
     }
 
@@ -46,23 +53,26 @@ public enum ControllerPermissionReader {
   ///
   /// `allowsCapabilities` is false for a native entry, which declares no Janet capability.
   public static func read(
-    _ value: StrictJSON, allowsCapabilities: Bool, format: Int, subject: Subject = .controller
+    _ value: StrictJSON, allowsCapabilities: Bool, subject: Subject = .controller,
+    editions: ControllerPermissionEditions = .current
   ) throws -> Set<ControllerPermission> {
     var permissions = Set<ControllerPermission>()
     var listed = Set<String>()
 
     for element in try value.array("permissions") {
       let fields = try element.members(
-        of: "a permission", required: format >= 2 ? ["kind", "version"] : ["kind"],
-        optional: ["name", "executable", "directory", "environment", "directories"])
+        of: "a permission", required: ["kind"],
+        optional: [
+          "name", "executable", "directory", "environment", "directories", "version",
+        ])
       let permissionKind = try fields["kind"]!.string("a permission's kind")
-      let version = try fields["version"]?.integer("a permission's version") ?? 1
 
-      guard let meaning = ControllerPermission.meaning(kind: permissionKind, version: version),
-        meaning.format <= format
-      else {
-        throw ControllerPackageError.malformed(
-          subject.unknownKind(permissionKind, version: version, format: format))
+      guard let edition = editions.edition(of: permissionKind) else {
+        throw ControllerPackageError.malformed(subject.unknownKind(permissionKind))
+      }
+
+      guard fields["version"] == nil else {
+        throw ControllerPackageError.malformed(subject.namedVersion(permissionKind))
       }
 
       let launchFields: Set<String> = ["executable", "directory", "environment"]
@@ -156,13 +166,12 @@ public enum ControllerPermissionReader {
         permissionValue = .capability(name)
       }
 
-      // A kind is listed once, or once for each capability name or host launch executable, at
-      // whatever version. Two versions of one permission would leave its meaning unclear.
+      // A kind is listed once, or once for each capability name or host launch executable.
       guard listed.insert(permissionKind + "\u{0}" + permissionValue.scopeName).inserted else {
         throw ControllerPackageError.malformed("\(permissionKind) is listed twice")
       }
 
-      permissions.insert(ControllerPermission(permissionValue, version: version))
+      permissions.insert(ControllerPermission(permissionValue, edition: edition))
     }
 
     return permissions

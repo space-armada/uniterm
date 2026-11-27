@@ -25,7 +25,7 @@ final class PendingRequestsUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Outside Program"}
-        {:kind :pane-control :version 1})
+        {:kind :pane-control})
 
       (import uniterm)
 

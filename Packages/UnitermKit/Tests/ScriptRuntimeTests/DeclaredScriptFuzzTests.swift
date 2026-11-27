@@ -44,17 +44,17 @@ final class DeclaredScriptFuzzTests: XCTestCase {
     #!/usr/bin/env -S uniterm run
     # comment
     (declare-permissions {:id "dev.example.tidy" :name "Tidy"}
-      {:kind :pane-control :version 1}
-      {:kind :capability :version 1 :name :fs-read}
-      {:kind :host-launch :version 1 :executable "/usr/bin/git" :directory "/tmp"
+      {:kind :pane-control}
+      {:kind :capability :name :fs-read}
+      {:kind :host-launch :executable "/usr/bin/git" :directory "/tmp"
        :environment ["HOME" "PATH"]}
-      {:kind :path-read :version 1 :directories ["/tmp" "/tmp/x"]})
+      {:kind :path-read :directories ["/tmp" "/tmp/x"]})
     (print "ok")
     """,
-    "(declare-permissions {:kind :pane-control :kind :pane-control :version 1})\n",
+    "(declare-permissions {:kind :pane-control :kind :pane-control})\n",
     "(declare-permissions {:kind :clipboard-read :version nil})\n(print 1)\n",
     "(print 1)\n(declare-permissions)\n",
-    "(declare-permisions {:kind :pane-control :version 1})\n",
+    "(declare-permisions {:kind :pane-control})\n",
     "(def x {:a 1 :b @[1 2 3] :c @{:d \"e\"}})\n(print x)\n",
     "(declare-permissions {:kynd :pane-control})\n",
   ].map { [UInt8]($0.utf8) }
@@ -81,7 +81,7 @@ final class DeclaredScriptFuzzTests: XCTestCase {
 
   private let lintCorpus = [
     """
-    (declare-permissions {:kind :pane-control :version 1})
+    (declare-permissions {:kind :pane-control})
     (import uniterm :as u)
     (defmacro m [x] ~(do (u/send ,x "a" "b")))
     (use uniterm)

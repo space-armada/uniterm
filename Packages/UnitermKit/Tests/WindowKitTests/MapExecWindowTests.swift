@@ -53,7 +53,7 @@ final class MapExecWindowTests: XCTestCase {
 
   private func run(
     _ fixture: ExecPaneFixture, _ controller: MainWindowController, _ pane: NodeID,
-    mode: String = "script", schema: String = "1.0", _ messages: [String]
+    mode: String = "script", schema: String = "0.0", _ messages: [String]
   ) throws {
     try controller.declareExecDriver(
       ExecDeclaration(
@@ -90,7 +90,8 @@ final class MapExecWindowTests: XCTestCase {
 
     do {
       _ = try await fixture.command(
-        controller, pane, "clear", "{}", type: "map-viewer")
+        controller, pane, "clear", "{}", type: "map-viewer",
+        version: ScriptSchemaVersion(major: 0))
       XCTFail("a disconnected pane took a remote command")
     } catch let error as ScriptCallError {
       XCTAssertEqual(error.kind, .refused)
@@ -101,14 +102,18 @@ final class MapExecWindowTests: XCTestCase {
     let reply = try await fixture.command(
       controller, pane, "add",
       #"{"layer":"trucks","id":"e","coordinate":{"latitude":9,"longitude":10}}"#,
-      type: "map-viewer")
+      type: "map-viewer",
+      version: ScriptSchemaVersion(major: 0))
 
     XCTAssertEqual(
       reply, .record(["layer": .string("trucks"), "pins": .integer(2)]))
     XCTAssertEqual(map.commandLayers.layer(named: "trucks")?.pins.map(\.id), ["c", "e"])
     XCTAssertEqual(map.record.commandLayerCount, 2)
 
-    for version in [ScriptSchemaVersion(major: 2), ScriptSchemaVersion(major: 1, minor: 1)] {
+    for version in [
+      ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 0, minor: 1),
+      ScriptSchemaVersion(major: 2),
+    ] {
       do {
         _ = try await fixture.command(
           controller, pane, "clear", #"{"layer":"trucks"}"#, type: "map-viewer",
@@ -131,8 +136,9 @@ final class MapExecWindowTests: XCTestCase {
 
     let cases: [(mode: String, schema: String, needle: String)] = [
       ("script", "2.0", "schema version 2.0"),
-      ("script", "1.1", "schema version 1.1"),
-      ("refuse", "1.0", "needs exec protocol 9"),
+      ("script", "1.0", "schema version 1.0"),
+      ("script", "0.1", "schema version 0.1"),
+      ("refuse", "0.0", "needs exec protocol 9"),
     ]
 
     for (mode, schema, needle) in cases {
@@ -172,7 +178,9 @@ final class MapExecWindowTests: XCTestCase {
     .prefix(ScriptProtocol.maxCommandArgumentBytes)
 
     do {
-      _ = try await fixture.command(controller, pane, "set-layer", String(cut), type: "map-viewer")
+      _ = try await fixture.command(
+        controller, pane, "set-layer", String(cut), type: "map-viewer",
+        version: ScriptSchemaVersion(major: 0))
       XCTFail("a cut call ran")
     } catch let error as ScriptCallError {
       XCTAssertEqual(error.kind, .badArgument)

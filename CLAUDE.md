@@ -39,6 +39,15 @@ uniterm is UI-heavy, so the user's hands-on reviews produce a steady stream of t
 - A mockup first helps when the change is a new interaction. A Design canvas artifact works for this.
 - Keep proposals for changes to contracts, ADRs, or rules that cut across applets, such as shortcut ownership.
 
+## External Versions
+
+- Every external version stays at 0 until uniterm's maintainers declare it version 1. An external version is one that a
+  program or file uniterm does not build names or checks. See UTERM-063 and "Wires and versions" in `docs/glossary.md`.
+- The declared-stable list is `spec/declared-stable-versions.md`. Only uniterm's maintainers add to it, and an addition
+  is the declaration. A session never adds to it to make `scripts/check-external-versions.sh` pass.
+- A breaking change to an external interface at 0 lands in place, without a new version. An older program's message is
+  read with its old meaning or refused, never reinterpreted.
+
 ## Git
 
 - You may commit without asking first.

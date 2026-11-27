@@ -1,1 +1,0 @@
-{"format": 2, "id": "dev.uniterm.fixture.hello", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": "sha256:ee948b2a8a1d46f583949438cf23a7992c324f053661f7b144823c037f48b8e0"}, "permissions": [{"kind": "everything", "version": 1}]}

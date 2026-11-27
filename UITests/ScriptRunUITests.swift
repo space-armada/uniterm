@@ -41,7 +41,7 @@ final class ScriptRunUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Run"}
-        {:kind :pane-control :version 1})
+        {:kind :pane-control})
 
       (import uniterm)
 

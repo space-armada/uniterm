@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-21
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -36,7 +36,8 @@ A program's `add`, `remove`, `clear`, and `set-layer` edit the map's document, a
 undo, mark the map unsaved, prompt at close, and are written by Save. Command layers retire. Authority gates which
 programs may edit.
 
-The commands move to map command schema 2.0. A new `pins` command lists pin addresses. Three things change for the
+The commands change in place at map command schema 0.0, which UTERM-063 keeps at 0. A command whose meaning changes takes
+a new name, and its old name is retired and refused by name. A new `pins` command lists pin addresses. Three things change for the
 user's own edits. No edit waits on a read. An edit that would pass the map's measured byte bound is refused. While a
 read refuses the document, the user's new edits and Save are refused until the document goes back to a readable map.
 
@@ -209,19 +210,21 @@ Candidates:
 - Keep the command names at 1.0 and add the edits as new commands. Existing drivers are unchanged, and the old commands
   are retired later by their own proposal.
 
-Decision: option C. The new meaning is map command schema 2.0, and a 1.0 command is refused before any effect,
-with text that names 2.0 and why. A 1.0 `set-region` is refused too. UTERM-038 changed `set-region` at 1.0 to save
-the region. It is refused anyway because 1.0 is unpublished and 2.0 replaces the whole schema. (autonomous)
+Decision: option C, as UTERM-063 reshapes it. The map's command schema is at 0.0 and does not bump. The new meaning
+lands in place after UTERM-063 M2. A command whose meaning changes takes a new name, and the old name is retired and
+refused before any effect, with text that says what replaced it. A pre-reset 1.0 program is refused at the schema
+check. `set-region` changed its effect once before, in UTERM-038, and follows the same rule. Amended 2026-11-27; see
+Decision Log. (autonomous)
 
-- This rests on map schema 1.0 being unpublished. Published means merged to the mainline branch. Today the map's
-  commands are not on the mainline. The failing direction, if 1.0 were published first, is a released 1.0 driver
-  against this build: it would be refused. See Risks.
-- Old driver, new app: a 1.0 driver is refused at the exec hello, and a 1.0 script call at dispatch, before any effect.
-- New driver, old app: a 2.0 driver against a branch build at 1.0 is refused the same way. Against a mainline build the
-  map takes no commands, so it is refused as an unsupported applet.
-- The rule is UTERM-008's "A change an older driver cannot rely on adds a new version and never redefines an old one",
-  and AppletKit's "A change in meaning or a removed command bumps the major". ADR-13 leaves an applet's command schema
-  to its own rule, so it does not govern this.
+- This rests on the schema being at 0.0, where no compatibility promise holds. The failing direction is a program
+  written for the layer commands. It is refused by name at its first retired command, and never acts under the new
+  meaning.
+- Old driver, new app: a driver that sends a retired name is refused at dispatch before any effect. A pre-reset 1.0
+  driver is refused at the schema check.
+- New driver, old app: a driver that sends a new name to an older build is refused by that build's strict decoder.
+- The rule is UTERM-063's "A changed meaning is refused, never reinterpreted", and AppletKit's schema contract. At 0.0
+  nothing bumps. From schema 1.0 a change in meaning bumps the major. ADR-13 leaves an applet's command schema to its
+  own rule, so it does not govern this.
 
 Rationale: every refusal comes before any effect in both directions. Redefining 1.0 lets a driver's `clear` silently
 act on the document. Keeping 1.0 alive needs the layer store the settled decision retires. Converged in 2 passes.
@@ -285,13 +288,13 @@ Layers retire, so these need a meaning. Candidates:
   its layers merge.
 - Accept both and refuse any value but the default. A driver that names a layer gets a structured error. Nothing is
   silently merged.
-- Remove both, as a new schema version. See "Wire compatibility".
+- Remove both, in place at schema 0.0. See "Wire compatibility".
 - Keep `layer` as a free-text tag a pin carries in a property of the GeoJSON feature. `set-layer`, `clear`, and `remove`
   then act on pins with that tag.
 
 The tag candidate also decides where a layer's default accent comes from.
 
-Decision: drop `layer` and `source` at schema 2.0. Programs scope their pins through the stored `uniterm:id` they
+Decision: drop `layer` and `source` in M2, in place at schema 0.0. Programs scope their pins through the stored `uniterm:id` they
 already write, by an ID `prefix` that `clear` and `set-layer` take, matched only at a `/` boundary. A program chooses
 IDs such as `trucks/7`. No property is stored beyond `uniterm:id`, and the settled address rule is unchanged.
 (autonomous)
@@ -304,7 +307,7 @@ IDs such as `trucks/7`. No property is stored beyond `uniterm:id`, and the settl
 Rationale: it keeps a rerun's ability to replace its own pins, which UTERM-008 built `set-layer` for, with no second
 stored format in the user's files. A stored tag would amend the settled address rule for no gain, since `trucks/7`
 holds the same information as a tag and an ID. Dropping both with no scope would put every program in one ID space.
-Keeping dead arguments serves no caller, since 1.0 is refused before arguments are checked. Converged in 2 passes.
+Keeping dead arguments serves no caller, since a retired command is refused before arguments are checked. Converged in 2 passes.
 
 ### A command that arrives during an edit
 
@@ -395,8 +398,8 @@ Rationale: the settled address rule needs a source of positions, and no event re
 caller the gate lets edit a map that shows a file. Without a listing, no program could address the user's pins or pins
 already in the file. A driver keeps learning which of its pins the user picked, as UTERM-008's clicks-go-to-the-program
 relies on. A snapshot read page by page under a handle keeps a large document within one frame. An edit between
-pages cannot skip or repeat a pin, since every page reads the same snapshot. `pins` is a new wire command at schema
-2.0. Converged in 1 pass.
+pages cannot skip or repeat a pin, since every page reads the same snapshot. `pins` is a new wire command, in place at
+schema 0.0. Converged in 1 pass. Amended 2026-11-27; see Decision Log.
 
 ### The caps
 
@@ -409,7 +412,7 @@ fits one exec frame, and a script's call stops at 32 KiB. Candidates:
 - Keep only the frame bound per command and use the file's existing bounds for the whole document (UTERM-016 M1).
 - Keep all caps for commands, and leave the user's edits uncapped.
 
-Decision: drop every layer cap. Keep a per-command bound sized to one exec frame, recomputed for the 2.0 command
+Decision: drop every layer cap. Keep a per-command bound sized to one exec frame, recomputed for M2's command
 shapes. Refuse any edit, from any source, whose result would pass the reader's byte bound, before any effect. The bound is
 measured, not guessed: M1 measures the decoder's time and peak memory at several sizes and sets the bound from that.
 32 MiB stays until the measurement replaces it.
@@ -495,9 +498,9 @@ None.
 - **A command rewrites or removes the user's pins** — likelihood: low, impact: high. The prefix rules bound the reach.
   A prefix never reaches a pin with no stored ID. `clear` and `set-layer` require a prefix. An address-based `remove`
   or `add` can still reach a user's pin. Mitigation: one undo step restores it.
-- **Existing drivers change behavior** — likelihood: low, impact: medium. Map schema 1.0 is unpublished on the
-  mainline, so only in-repo tests and the user's branch-build scripts break. Mitigation: the wire compatibility
-  decision names the direction that fails.
+- **Existing drivers change behavior** — likelihood: low, impact: medium. The map's schema is at 0.0, so only in-repo
+  tests and the user's own scripts break. Mitigation: the wire compatibility decision names the direction that fails,
+  and a retired command name is refused by name.
 - **A pin from a program has no mark** — likelihood: medium, impact: low. After this change the user cannot tell which
   pins a program placed. `uniterm:id` is an invisible mark. Accepted: ADR-15 says the user can reproduce a program's
   work by hand.
@@ -505,11 +508,10 @@ None.
   saved, its `uniterm:id` sits in a file other tools read and edit, and later builds must honor it. Accepted: it follows
   the precedent of `uniterm:accent` and `uniterm:glyph`, and a missing or duplicated ID degrades to addressing by
   position, never to a wrong pin. (autonomous)
-- **Map command schema 1.0 is published before this lands** — likelihood: medium, impact: high. The map's commands sit
-  on a branch chunk that is ready to land. If they reach the mainline before this proposal's M2, schema 1.0 is
-  published, and refusing it breaks every released 1.0 driver. A note in this proposal and in UTERM-008's landing is
-  not available to landing tools, so a note cannot enforce the hold. Mitigation: a trigger. If UTERM-008 M3's commits
-  land on the mainline before M2, the milestone that refuses 1.0, the wire decision reopens before any more work.
+- **Map command schema 0.0 is declared stable before this lands** — likelihood: low, impact: high. UTERM-063 keeps the
+  schema at 0.0 until uniterm's maintainers declare it 1.0. If they declare it before M2, the in-place change becomes a
+  breaking change under ADR-13's amended rules, and a driver written against the declared schema is broken. Mitigation:
+  a trigger. If the map's schema is declared stable before M2, the wire decision reopens before any more work.
   (autonomous, addition)
 - **A program leaves panes unsaved** — likelihood: medium, impact: low. A driver that places pins on a map it opened
   leaves the pane unsaved, so quitting asks Save, Don't Save, or Cancel for it, and Save opens a Save As sheet on a map
@@ -567,7 +569,7 @@ None.
 - A burst of 32 edits in one dispatcher turn on a document at the byte bound keeps the longest main-thread gap under
   30 ms, the bound UTERM-007 measured for the host, and the measurement is recorded in the As built block
 
-### M2: Schema 2.0
+### M2: Edit commands
 
 **Status:** NOT STARTED
 
@@ -587,7 +589,8 @@ None.
 - A command after the user's Save As to a path outside the caller's scope is refused, and the refusal names no path
 - A command's gate runs at the effect, including for any command that waited
 - A command on a pane whose file failed to open requires `mayShow` on that file's path
-- A 1.0 map command is refused before any effect, with text that names 2.0 and why
+- A retired command name is refused before any effect, with text that says what replaced it, and a pre-reset 1.0
+  program is refused at the schema check
 - An edit refused while a file opens gets `refused`, with text that says to retry, and a test proves it
 - A version 1 payload holding `commandLayerCount` decodes, and the writer omits the field
 - A `set-layer` whose pins include an ID outside its prefix is refused whole before any effect
@@ -598,15 +601,15 @@ None.
   holder of an ID it wrote
 - A `clear` or `set-layer` is one document replacement and one undo step, and one that changes nothing leaves no undo
   step and no unsaved mark
-- The per-command bound is recomputed for the 2.0 `set-layer` shape, with `prefix` added and `layer` removed
+- The per-command bound is recomputed for the new `set-layer` shape, with `prefix` added and `layer` removed
 - A program's `add` past the 10,000-point display bound gets the past-limit notice in its reply
 
 ### M3: The listing
 
 **Status:** NOT STARTED
 
-M3 ships with M2, or before M2 lands on the mainline. The 2.0 shape of `pin-selected` must not change once it is
-published.
+M3 ships with M2, or before M2 lands on the mainline. The shape of `pin-selected` must not change once the map's
+schema is declared stable.
 
 - A listing always finishes under a stream of edits, each caller holds one live listing per pane, and each page read
   checks the gate again against the pane's current file
@@ -689,6 +692,19 @@ UTERM-040`, and UTERM-016 becomes `implemented`. UTERM-008 carries the markers f
 - 2026-11-26: From UTERM-062, which gives the map viewer tabs. A pin command names the tab it edits and edits that
   tab's document, so the question UTERM-062 raised of which tab a pin edit lands in has one answer. Undo stays per tab
   under UTERM-062 M5.
+- 2026-11-27: From UTERM-063. The map's command schema is at 0.0 and does not bump, so there is no schema 2.0. M2's
+  changes land in place after UTERM-063 M2. A command whose meaning changes takes a new name, its old name is retired
+  and refused by name, and a pre-reset 1.0 program is refused at the schema check. M2 chooses the new names.
+  - Amended the Summary. It said "The commands move to map command schema 2.0."
+  - Amended "Wire compatibility for existing drivers". It said "The new meaning is map command schema 2.0, and a 1.0
+    command is refused before any effect, with text that names 2.0 and why. A 1.0 `set-region` is refused too."
+  - Amended "Layers" (the dropped `layer` and `source`) and "Bounds". They said "at schema 2.0" and "the 2.0 command
+    shapes".
+  - Amended the risk "Map command schema 1.0 is published before this lands". It becomes a risk that the schema is
+    declared stable before M2. The risk on existing drivers said "Map schema 1.0 is unpublished on the mainline".
+  - Amended M2, renamed from "Schema 2.0" to "Edit commands", and M3. The M2 check said "A 1.0 map command is refused
+    before any effect, with text that names 2.0 and why". M3 said "The 2.0 shape of `pin-selected` must not change once
+    it is published."
 
 ## References
 

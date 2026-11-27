@@ -497,7 +497,7 @@ final class UndeclaredFileTests: XCTestCase {
     settings.set(.unsafe)
     try startCommandHost()
 
-    let file = try script("(print :ran)\n(declare-permissions {:kind :pane-control :version 1})\n")
+    let file = try script("(print :ran)\n(declare-permissions {:kind :pane-control})\n")
     let run = try await ScriptFixtures.finish(try runCommand(file))
 
     XCTAssertEqual(run.status, 65, run.standardError)

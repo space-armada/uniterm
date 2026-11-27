@@ -26,7 +26,7 @@ final class ControlDispatcherPermissionTests: XCTestCase {
 
   private func submission(_ name: String) -> AppletCommandSubmission {
     AppletCommandSubmission(
-      appletType: PoweredFixture.typeID, schemaVersion: AppletSchemaVersion(1, 0), name: name,
+      appletType: PoweredFixture.typeID, schemaVersion: AppletSchemaVersion(0, 0), name: name,
       arguments: .object([:]))
   }
 

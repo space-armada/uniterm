@@ -93,7 +93,7 @@ final class BrowserWindowTests: XCTestCase {
     let held = powers ?? both
 
     return try await fixture.scripting.sendCommand(
-      to: .pane(reference), appletType: "browser", schemaVersion: ScriptSchemaVersion(major: 1),
+      to: .pane(reference), appletType: "browser", schemaVersion: ScriptSchemaVersion(major: 0),
       command: name, arguments: arguments, caller: caller ?? fixture.caller,
       powers: { held }, stillAllowed: {})
   }
@@ -248,7 +248,7 @@ final class BrowserWindowTests: XCTestCase {
       let error = await failure {
         try await fixture.scripting.sendCommand(
           to: .pane(reference), appletType: "fixture-powered",
-          schemaVersion: ScriptSchemaVersion(major: 1), command: "fail",
+          schemaVersion: ScriptSchemaVersion(major: 0), command: "fail",
           arguments: #"{"code":"\#(code)"}"#, caller: fixture.caller, powers: { [] },
           stillAllowed: {})
       }
@@ -290,7 +290,7 @@ final class BrowserWindowTests: XCTestCase {
     func power(_ name: String) -> ControllerPermission? {
       fixture.scripting.extraPower(
         for: .sendCommand(
-          pane: target, appletType: "browser", schemaVersion: ScriptSchemaVersion(major: 1),
+          pane: target, appletType: "browser", schemaVersion: ScriptSchemaVersion(major: 0),
           command: name, arguments: "{}"), caller: caller)
     }
 

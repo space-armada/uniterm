@@ -7,6 +7,13 @@ import Foundation
 /// Each expected value here was computed outside the code under test: the digests by `shasum -a
 /// 256` over the fixture files, and the signature and fingerprint once by a separate CryptoKit
 /// program from the seed below. A reader that changes its interpretation fails all three suites.
+///
+/// To sign `janet-hello` again after a change to its `controller.json`, run a throwaway program
+/// outside the repository. It builds `Curve25519.Signing.PrivateKey(rawRepresentation: seed)`,
+/// signs the bytes `"uniterm controller descriptor 1\n"` followed by the descriptor, and prints
+/// the SHA-256 of the descriptor, the SHA-256 of the public key, and the base64 of the signature.
+/// An Ed25519 signature from CryptoKit differs on every run, so a new signature is a new value.
+/// The version and the fingerprint reproduce on every run.
 public enum ControllerFixtures {
   public static var root: URL {
     Bundle.module.resourceURL!.appendingPathComponent("Fixtures", isDirectory: true)
@@ -43,7 +50,7 @@ public enum ControllerFixtures {
     ]
 
     /// SHA-256 over `controller.json`.
-    public static let version = "e9221a810f51489d1a48c340eb1e1ffd994222703730b6eedaa748ce0c8bc970"
+    public static let version = "02b667a076528054cb7e51694a75bec0f40f36638dc152b91d7962427ed435b1"
 
     /// SHA-256 over the test key's public key.
     public static let keyFingerprint =
@@ -55,11 +62,12 @@ public enum ControllerFixtures {
     public static let output = "hello from the fixture controller\n"
   }
 
-  /// A format 2 descriptor with every permission kind at version 1, which every reader accepts.
-  public static let formatTwo = "format-two"
+  /// A format 0 descriptor with every permission kind that takes no browser scope, which every
+  /// reader accepts.
+  public static let formatZero = "format-zero"
 
-  /// A format 2 descriptor that holds the two browser kinds at version 1.
-  public static let formatTwoBrowser = "format-two-browser"
+  /// A format 0 descriptor that holds the two browser kinds.
+  public static let formatZeroBrowser = "format-zero-browser"
 
   /// Descriptors every reader refuses, with a fragment of the reason each one gives.
   public static let rejected: [(name: String, reason: String)] = [
@@ -71,17 +79,12 @@ public enum ControllerFixtures {
     ("escape-absolute", "not a plain relative path"),
     ("dot-alias", "not a plain relative path"),
     ("unicode-alias", "not a plain relative path"),
-    ("unknown-permission", "not one descriptor format 1 knows"),
-    ("format-one-clipboard", "\"clipboard-read\" is not one descriptor format 1 knows"),
-    (
-      "format-one-browser-navigation", "\"browser-navigation\" is not one descriptor format 1 knows"
-    ),
-    ("browser-read-version-two", "browser-read version 2 is not one this uniterm knows"),
+    ("unknown-permission", "\"everything\" is not one this uniterm knows"),
+    ("format-one-pane-control", "format 1 is not one this uniterm reads"),
+    ("format-two-versioned", "format 2 is not one this uniterm reads"),
+    ("versioned-permission", "the pane-control permission names a version"),
     ("browser-navigation-with-field", "only path-read takes directories"),
     ("host-launch-relative", "executable must be an absolute path"),
-    ("missing-version", "a permission is missing \"version\""),
-    ("unknown-version", "clipboard-read version 2 is not one this uniterm knows"),
-    ("unknown-kind-versioned", "\"everything\" is not one descriptor format 2 knows"),
     ("duplicate-kind", "pane-control is listed twice"),
     ("native-module-capability", "loads native code"),
     ("newer-format", "format 3 is not one this uniterm reads"),
@@ -123,8 +126,8 @@ public struct ControllerPackageBuilder {
   public var entry = "main.janet"
   public var files: [String: Data] = [:]
 
-  /// The descriptor format. Format 2 permissions must carry their version.
-  public var format = 1
+  /// The descriptor format.
+  public var format = ControllerDescriptor.format
 
   /// Each permission as its JSON object text, such as `{"kind": "pane-control"}`.
   public var permissions: [String] = [#"{"kind": "pane-control"}"#]

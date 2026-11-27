@@ -646,8 +646,8 @@ final class ImageViewerUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Images"}
-        {:kind :pane-control :version 1}
-        {:kind :path-read :version 1 :directories ["\(folder.path)"]})
+        {:kind :pane-control}
+        {:kind :path-read :directories ["\(folder.path)"]})
 
       (import uniterm)
 
@@ -662,7 +662,7 @@ final class ImageViewerUITests: UnitermUITestCase {
       (def [_ viewer] (layout :panes))
 
       (defn send [name arguments]
-        (def [ok result] (protect (uniterm/send-command viewer :image-viewer [1 0] name arguments)))
+        (def [ok result] (protect (uniterm/send-command viewer :image-viewer [0 0] name arguments)))
 
         (unless ok
           (error (if (struct? result)

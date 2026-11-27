@@ -32,7 +32,7 @@ final class PresentationUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Presentation"}
-        {:kind :pane-control :version 1})
+        {:kind :pane-control})
 
       (import uniterm)
 
@@ -51,11 +51,11 @@ final class PresentationUITests: UnitermUITestCase {
 
       (def [_ slides notes chart] (layout :panes))
 
-      (uniterm/send-command slides :fixture-slides 1 :set-deck {:titles ["Intro" "Results"]})
-      (uniterm/send-command slides :fixture-slides 1 :show-slide {:index 1})
-      (uniterm/send-command notes :fixture-notes 1 :set-notes {:text "Mention the deadline."})
-      (uniterm/send-command chart :fixture-chart 1 :set-series {:values [1.5 -2 4]})
-      (uniterm/send-command chart :fixture-chart 1 :select-point {:index 2})
+      (uniterm/send-command slides :fixture-slides 0 :set-deck {:titles ["Intro" "Results"]})
+      (uniterm/send-command slides :fixture-slides 0 :show-slide {:index 1})
+      (uniterm/send-command notes :fixture-notes 0 :set-notes {:text "Mention the deadline."})
+      (uniterm/send-command chart :fixture-chart 0 :set-series {:values [1.5 -2 4]})
+      (uniterm/send-command chart :fixture-chart 0 :select-point {:index 2})
       (print (string/join (map |(string ($ :pane)) [slides notes chart]) " "))
       """, to: script)
 

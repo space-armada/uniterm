@@ -43,6 +43,14 @@ STARTED and the proposal is not edited. This follows the first run's report,
 - Three pull request runs were still going: 46052402044 (18:50:25), 46053190319 (18:57:11), and 46054005885
   (19:03:58). They come from the peer's landing.
 - No shard has failed. M3 stays NOT STARTED for now. The run checks the three open runs again before it finishes.
+- At 19:52 the first of the three had finished. Run 46052402044, "Polish the data viewer's columns, filter, and long
+  cells", failed its `app (0)` shard at 19:05:16, on
+  `DataViewerUITests.testTheColumnArrowsReachTheFarEdgeOfAWideTable`. Shards 1 and 2 passed. The `ci` job failed after
+  it. This is the first failed shard on CI.
+- The run is at attempt 1. Nobody has used "Re-run failed jobs" on it. The peer pushed a new commit for that batch
+  instead, as run 46056825129. M3's check needs the rerun of this run's failed job, which only a rerun on GitHub can
+  give. The run never reruns upstream CI, so M3 stays NOT STARTED. A rerun of 46052402044's failed jobs would now give
+  M3 its proof.
 
 ### Checks
 

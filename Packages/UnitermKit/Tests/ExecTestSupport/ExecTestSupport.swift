@@ -15,9 +15,10 @@ public enum ExecTestDriver {
   }
 
   /// The argv for one mode, for the applet type and schema version the driver says hello with. The
-  /// version is "major.minor".
+  /// version is "major.minor". The default is the schema of the fixture applets and of every registered
+  /// viewer. A test whose subject is the 1.0 major and minor rule names its own version.
   public static func arguments(
-    _ mode: String, type: String, schema: String = "1.0", _ rest: [String] = []
+    _ mode: String, type: String, schema: String = "0.0", _ rest: [String] = []
   ) -> [String] {
     [perl, script, mode, type, schema] + rest
   }

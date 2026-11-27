@@ -12,7 +12,7 @@ import XCTest
 /// file the lint calls clean is accepted at run time. The call boundary decides that.
 final class ScriptLintTests: XCTestCase {
   private func declaration(_ kinds: [String]) -> String {
-    let permissions = kinds.map { "{:kind :\($0) :version 1}" }.joined(separator: "\n  ")
+    let permissions = kinds.map { "{:kind :\($0)}" }.joined(separator: "\n  ")
 
     return "(declare-permissions\n  \(permissions))\n"
   }
@@ -135,7 +135,7 @@ final class ScriptLintTests: XCTestCase {
   /// does not see.
   func testADeclaredCapabilityIsNeverReportedUnused() {
     let source =
-      "(declare-permissions {:kind :capability :version 1 :name :fs-read})\n(print \"hi\")\n"
+      "(declare-permissions {:kind :capability :name :fs-read})\n(print \"hi\")\n"
 
     XCTAssertEqual(summary(findings(source)), [])
   }
@@ -313,10 +313,10 @@ final class ScriptLintTests: XCTestCase {
   /// that sends none going unreported. A command is the only call whose argument can name a path.
   func testPathReadIsUsedByASentCommandAndUnusedOtherwise() {
     let declared =
-      "(declare-permissions {:kind :pane-control :version 1}\n"
-      + "  {:kind :path-read :version 1 :directories [\"/tmp\"]})\n"
+      "(declare-permissions {:kind :pane-control}\n"
+      + "  {:kind :path-read :directories [\"/tmp\"]})\n"
     let sends =
-      "(import uniterm)\n(uniterm/send-command p \"fixture-paths\" [1 0] \"read-file\" {})\n"
+      "(import uniterm)\n(uniterm/send-command p \"fixture-paths\" [0 0] \"read-file\" {})\n"
 
     XCTAssertEqual(summary(findings(declared + sends)), [])
 
@@ -332,7 +332,7 @@ final class ScriptLintTests: XCTestCase {
   /// that opens a form, and one that never asks going unreported. Each form call needs ask-user,
   /// and holding it gives no pane control, so a file that only asks declares nothing else.
   func testAskUserIsUsedByTheFormCallsAndNeededByThem() {
-    let declared = "(declare-permissions {:kind :ask-user :version 1})\n"
+    let declared = "(declare-permissions {:kind :ask-user})\n"
 
     for call in [
       "(uniterm/open-form \"{}\")", "(uniterm/wait-form 1)", "(uniterm/discard-form 1)",
@@ -357,10 +357,10 @@ final class ScriptLintTests: XCTestCase {
   /// neither going unreported. Navigation is used by a command or a layout, and read by a command.
   func testBrowserPowersAreUsedByCommandsAndLayoutsAndUnusedOtherwise() {
     let declared =
-      "(declare-permissions {:kind :pane-control :version 1}\n"
-      + "  {:kind :browser-navigation :version 1} {:kind :browser-read :version 1})\n"
+      "(declare-permissions {:kind :pane-control}\n"
+      + "  {:kind :browser-navigation} {:kind :browser-read})\n"
     let sends =
-      "(import uniterm)\n(uniterm/send-command p \"browser\" [1 0] \"open\" {})\n"
+      "(import uniterm)\n(uniterm/send-command p \"browser\" [0 0] \"open\" {})\n"
     let lays = "(import uniterm)\n(uniterm/request-layout p {:open :browser})\n"
 
     XCTAssertEqual(summary(findings(declared + sends)), [])
@@ -390,8 +390,8 @@ final class ScriptLintTests: XCTestCase {
       findings(declaration(["pane-control"]) + layout)[0].message.contains("host-launch"))
 
     let declared =
-      "(declare-permissions {:kind :pane-control :version 1}\n"
-      + "  {:kind :host-launch :version 1 :executable \"/bin/ls\" :directory \"/tmp\" :environment []})\n"
+      "(declare-permissions {:kind :pane-control}\n"
+      + "  {:kind :host-launch :executable \"/bin/ls\" :directory \"/tmp\" :environment []})\n"
 
     XCTAssertEqual(summary(findings(declared + layout)), [])
 
@@ -404,7 +404,7 @@ final class ScriptLintTests: XCTestCase {
   /// value that is only the word `:exec` being taken for a launch.
   func testExecIsFoundAsAStructKeyInEitherSpellingAndNotAsAValue() {
     let call = { (layout: String) in
-      "(declare-permissions {:kind :pane-control :version 1})\n(import uniterm)\n"
+      "(declare-permissions {:kind :pane-control})\n(import uniterm)\n"
         + "(uniterm/request-layout p \(layout))\n"
     }
 
@@ -468,8 +468,8 @@ final class ScriptLintTests: XCTestCase {
     XCTAssertTrue(found.allSatisfy { $0.message.contains("declares nothing") })
     XCTAssertEqual(
       suggestion,
-      "add (declare-permissions {:kind :clipboard-read :version 1} "
-        + "{:kind :pane-control :version 1}) as the file's first form")
+      "add (declare-permissions {:kind :clipboard-read} "
+        + "{:kind :pane-control}) as the file's first form")
 
     guard case .report(let none, let noSuggestion) = ScriptLint.lint(Data("(print 1)\n".utf8))
     else { return XCTFail() }
@@ -485,12 +485,12 @@ final class ScriptLintTests: XCTestCase {
     let cases: [(String, String)] = [
       ("(print 1", "line"),
       (
-        "(declare-permissions {:kind :pane-control :version 1 :kind :pane-control})",
+        "(declare-permissions {:kind :pane-control :kind :pane-control})",
         "repeats a key"
       ),
-      ("(declare-permissions {:kind :nope :version 1})", "not a permission kind"),
+      ("(declare-permissions {:kind :nope})", "not a permission kind"),
       ("(print 1)\n(declare-permissions)\n", "must be the first form"),
-      ("(declare-permissions {:kind :capability :version 1 :name :ffi})", "ffi"),
+      ("(declare-permissions {:kind :capability :name :ffi})", "ffi"),
     ]
 
     for (source, fragment) in cases {

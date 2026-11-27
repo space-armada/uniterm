@@ -35,7 +35,7 @@ final class TextViewerRemoteWindowTests: XCTestCase {
   private func command(
     _ fixture: ExecPaneFixture, _ controller: MainWindowController, _ pane: NodeID,
     _ name: String, _ arguments: String,
-    version: ScriptSchemaVersion = ScriptSchemaVersion(major: 1)
+    version: ScriptSchemaVersion = ScriptSchemaVersion(major: 0)
   ) async throws -> ScriptValue {
     try await fixture.command(
       controller, pane, name, arguments, type: "text-viewer", version: version)
@@ -62,14 +62,18 @@ final class TextViewerRemoteWindowTests: XCTestCase {
   }
 
   /// Catches a show whose effect never reaches the page, a wait that is not the answer to the
-  /// handle, and a viewer that takes a version it does not speak. The viewer is at 1.0, so 1.0
-  /// works, and a minor above it or another major is refused before any effect.
+  /// handle, and a viewer that takes a version it does not speak. The viewer is at 0.0, so 0.0
+  /// works. A caller written for 1.0 before the reset, a minor above 0.0, and another major are
+  /// refused before any effect.
   func testAScriptShowsMarkdownWaitsForItAndIsRefusedOnOtherVersions() async throws {
     let fixture = try makeFixture()
     let controller = try fixture.openWindow()
     let (pane, viewer) = try viewerPane(fixture, controller)
 
-    for version in [ScriptSchemaVersion(major: 2), ScriptSchemaVersion(major: 1, minor: 1)] {
+    for version in [
+      ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 0, minor: 1),
+      ScriptSchemaVersion(major: 2),
+    ] {
       let refused = await settled("a command on \(version)") {
         try await self.command(
           fixture, controller, pane, "show-markdown", ##"{"text":"# Nope"}"##, version: version)
@@ -239,7 +243,7 @@ final class TextViewerRemoteWindowTests: XCTestCase {
 
       let shown = await settled("the show") {
         try await fixture.scripting.sendCommand(
-          to: target, appletType: "text-viewer", schemaVersion: ScriptSchemaVersion(major: 1),
+          to: target, appletType: "text-viewer", schemaVersion: ScriptSchemaVersion(major: 0),
           command: "show-markdown", arguments: ##"{"text":"# Owned"}"##, caller: caller,
           stillAllowed: {})
       }

@@ -17,7 +17,7 @@ my $json = JSON::PP->new->canonical->allow_nonref;
 my $next_id = 1;
 
 # The exec protocol version this driver speaks.
-my $protocol = 4;
+my $protocol = 0;
 
 sub send_message { print $json->encode($_[0]), "\n"; }
 

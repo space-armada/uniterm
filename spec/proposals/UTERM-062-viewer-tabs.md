@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-26
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -32,7 +32,8 @@
   rule that a caller learns nothing about a user's file outside its read scope must hold per tab. See "Read scope
   applies to each tab".
 - UTERM-040 — accepted, not started. It retires the map's command layers and moves program pins into the document under
-  schema 2.0. Which tab a program's pin edit lands in is a question either way.
+  the document, in place at the map's schema 0.0. Which tab a program's pin edit lands in is a question either way.
+  Amended 2026-11-27; see Decision Log.
 - UTERM-042 — its tab action menu reaches viewer tabs. Its "Panes with no tab bar" rationale says drivers attach only to
   the image and map viewers, "which have one tab each", so a driver's chip shows at the pane level. That no longer holds.
   Its single close for a set of tabs asks one Close-or-Cancel question for the set. When the set holds a map tab with
@@ -658,6 +659,8 @@ Amended 2026-11-27; see Decision Log.
   - Amended M3. It said a hidden tab holds its file-watch changes "as a detached pane does".
   - Amended M4. It said a hidden tab releases "through detach's code", and that every gate tests "on screen", "attached
     and selected, not detach alone".
+- 2026-11-27: Amended the UTERM-040 Impacts line for UTERM-040's amendment under UTERM-063. It said UTERM-040 "moves
+  program pins into the document under schema 2.0". The map's schema stays 0.0, and the change lands in place.
 
 ## References
 
@@ -670,7 +673,7 @@ Amended 2026-11-27; see Decision Log.
 - ADR-08: the main thread never waits on outside work
 - ADR-10: helpers run sandboxed
 - ADR-11: a command with an effect replies at once
-- ADR-13: outside wires stay compatible
+- ADR-13: external wires stay compatible
 - ADR-14: a controller controls what it opened
 - ADR-15 (proposed): an action means one thing, whoever starts it
 - [ADR-16](../adr/ADR-16-a-program-can-name-what-it-made.md) (proposed): a program can name what it made

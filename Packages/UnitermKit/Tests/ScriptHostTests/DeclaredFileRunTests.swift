@@ -95,7 +95,7 @@ final class DeclaredFileRunTests: XCTestCase {
   /// A file whose first form declares `permissions` under `header`, followed by `body`.
   private func declared(
     _ body: String, header: String = #"{:name "Tidy"}"#,
-    permissions: [String] = ["{:kind :pane-control :version 1}"], named name: String = "tidy"
+    permissions: [String] = ["{:kind :pane-control}"], named name: String = "tidy"
   ) throws -> URL {
     try source(
       "(declare-permissions \(header)\n  \(permissions.joined(separator: "\n  ")))\n\n\(body)\n",
@@ -158,7 +158,7 @@ final class DeclaredFileRunTests: XCTestCase {
     let file = try declared(
       #"(print "ran")"#,
       permissions: [
-        "{:kind :pane-control :version 1}", "{:kind :clipboard-read :version 1}",
+        "{:kind :pane-control}", "{:kind :clipboard-read}",
       ])
     let started = try start(file)
 
@@ -190,7 +190,7 @@ final class DeclaredFileRunTests: XCTestCase {
     reviewAnswer = nil
 
     let file = try source(
-      "(declare-permissions {:kind :pane-control :version 1})\n(print :ran)\n", named: "plain-name")
+      "(declare-permissions {:kind :pane-control})\n(print :ran)\n", named: "plain-name")
     let started = try start(file)
 
     defer { started.process.signal(SIGTERM) }
@@ -216,7 +216,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     let file = work.appendingPathComponent("evil\u{202E}\nVersion: forged.janet")
 
-    try Data("(declare-permissions {:kind :pane-control :version 1})\n(print :ran)\n".utf8)
+    try Data("(declare-permissions {:kind :pane-control})\n(print :ran)\n".utf8)
       .write(to: file)
 
     let started = try start(file)
@@ -268,7 +268,7 @@ final class DeclaredFileRunTests: XCTestCase {
     expect(await waitUntil { !self.host.controllerReviews.isEmpty }, "no review was queued")
 
     try Data(
-      "(declare-permissions {:kind :pane-control :version 1})\n(print \"edited\")\n".utf8
+      "(declare-permissions {:kind :pane-control})\n(print \"edited\")\n".utf8
     ).write(to: file)
 
     let review = try XCTUnwrap(host.controllerReviews.first)
@@ -297,7 +297,7 @@ final class DeclaredFileRunTests: XCTestCase {
     XCTAssertEqual(seenRuns.last?.approval.displayText, "Trusted version")
 
     try Data(
-      "(declare-permissions {:name \"Tidy\"} {:kind :pane-control :version 1})\n(print \"two\")\n"
+      "(declare-permissions {:name \"Tidy\"} {:kind :pane-control})\n(print \"two\")\n"
         .utf8
     ).write(to: file)
 
@@ -330,8 +330,8 @@ final class DeclaredFileRunTests: XCTestCase {
     reviewAnswer = nil
 
     let fromTheReader = try source(
-      "(declare-permissions {:kind :pane-control :version 1})\n(print :ran)\n"
-        + "(declare-permissions {:kind :pane-control :version 1})\n")
+      "(declare-permissions {:kind :pane-control})\n(print :ran)\n"
+        + "(declare-permissions {:kind :pane-control})\n")
     let reader = try await run(fromTheReader)
 
     XCTAssertNotEqual(reader.status, 0)
@@ -345,11 +345,11 @@ final class DeclaredFileRunTests: XCTestCase {
     XCTAssertNotEqual(app.status, 0)
     XCTAssertEqual(app.standardOutput, "")
     XCTAssertTrue(
-      app.standardError.contains("pane-control version 2 is not one this uniterm knows"),
+      app.standardError.contains(":pane-control names a :version"),
       app.standardError)
 
     let native = try declared(
-      #"(print :ran)"#, permissions: [#"{:kind :capability :version 1 :name :ffi}"#])
+      #"(print :ran)"#, permissions: [#"{:kind :capability :name :ffi}"#])
     let refused = try await run(native)
 
     XCTAssertNotEqual(refused.status, 0)
@@ -364,7 +364,7 @@ final class DeclaredFileRunTests: XCTestCase {
   /// for the exact name, so another spelling fails as an unbound symbol.
   func testAMisspelledFormFailsAsAnUnboundSymbol() async throws {
     let file = try declared(
-      "(print :before)\n(declare-permisions {:kind :pane-control :version 1})\n(print :after)")
+      "(print :before)\n(declare-permisions {:kind :pane-control})\n(print :after)")
     let result = try await run(file)
 
     XCTAssertNotEqual(result.status, 0)
@@ -407,7 +407,7 @@ final class DeclaredFileRunTests: XCTestCase {
       (show (fn [] (uniterm/list-windows)))
       (show (fn [] (uniterm/write-clipboard "x")))
       """,
-      permissions: ["{:kind :clipboard-read :version 1}"])
+      permissions: ["{:kind :clipboard-read}"])
     let result = try await run(file)
 
     XCTAssertEqual(result.status, 0, result.standardError)
@@ -448,7 +448,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     let file = try declared(
       "(print (length (slurp \"\(note.path)\")))",
-      permissions: [#"{:kind :capability :version 1 :name :fs-read}"#])
+      permissions: [#"{:kind :capability :name :fs-read}"#])
     let undeclared = try await run(file, allow: ["net-connect"])
 
     XCTAssertNotEqual(undeclared.status, 0)
@@ -488,7 +488,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
   private func signed(
     _ body: String, header: String = signedHeader,
-    permissions: [String] = ["{:kind :pane-control :version 1}"], key: InMemorySigningKey? = nil
+    permissions: [String] = ["{:kind :pane-control}"], key: InMemorySigningKey? = nil
   ) throws -> URL {
     let file = try declared(body, header: header, permissions: permissions)
 
@@ -565,7 +565,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     let wider = try signed(
       #"(print "three")"#,
-      permissions: ["{:kind :pane-control :version 1}", "{:kind :clipboard-read :version 1}"])
+      permissions: ["{:kind :pane-control}", "{:kind :clipboard-read}"])
     let refused = try await run(wider)
 
     XCTAssertNotEqual(refused.status, 0)
@@ -656,7 +656,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     let named = try signed(#"(print "ran")"#, header: #"{:name "Tidy"}"#)
     let noHeader = try source(
-      "(declare-permissions {:kind :pane-control :version 1})\n(print :ran)\n", named: "bare")
+      "(declare-permissions {:kind :pane-control})\n(print :ran)\n", named: "bare")
 
     try sign(noHeader)
 

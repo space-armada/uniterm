@@ -55,10 +55,10 @@ final class DeclaredScriptTests: XCTestCase {
       # a comment with (declare-permissions) and a } in it
 
       (declare-permissions {:id "dev.example.tidy" :name "Tidy"}
-        {:kind :pane-control :version 1}
-        {:kind :clipboard-read :version 1}
-        {:kind :capability :version 1 :name :fs-read}
-        {:kind :host-launch :version 1 :executable "/usr/bin/git" :directory "/Users/me/src"
+        {:kind :pane-control}
+        {:kind :clipboard-read}
+        {:kind :capability :name :fs-read}
+        {:kind :host-launch :executable "/usr/bin/git" :directory "/Users/me/src"
          :environment ["HOME" "PATH"]})
 
       (print "declare-permissions in a string")
@@ -75,7 +75,7 @@ final class DeclaredScriptTests: XCTestCase {
   func testAPathReadDeclarationCarriesItsDirectories() throws {
     let declared = try declaration(
       """
-      (declare-permissions {:kind :path-read :version 1 :directories ["/tmp/b" "/tmp/a"]})
+      (declare-permissions {:kind :path-read :directories ["/tmp/b" "/tmp/a"]})
       """)
 
     XCTAssertEqual(
@@ -87,7 +87,7 @@ final class DeclaredScriptTests: XCTestCase {
   func testBrowserDeclarationsAreReadAtVersionOneAndTakeNoField() throws {
     let declared = try declaration(
       """
-      (declare-permissions {:kind :browser-navigation :version 1} {:kind :browser-read :version 1})
+      (declare-permissions {:kind :browser-navigation} {:kind :browser-read})
       """)
 
     XCTAssertEqual(declared.permissions, [.browserNavigation, .browserRead])
@@ -97,21 +97,21 @@ final class DeclaredScriptTests: XCTestCase {
         "(declare-permissions {:kind :browser-read :version 2})"))
     XCTAssertThrowsError(
       try declaration(
-        "(declare-permissions {:kind :browser-navigation :version 1 :directories [\"/tmp\"]})"))
+        "(declare-permissions {:kind :browser-navigation :directories [\"/tmp\"]})"))
   }
 
-  /// Catches the ask power refused or changed on the way from Janet: it reads at version 1 and
+  /// Catches the ask power refused or changed on the way from Janet: it reads at edition 0 and
   /// takes no field.
-  func testAnAskUserDeclarationIsReadAtVersionOneAndTakesNoField() throws {
+  func testAnAskUserDeclarationIsReadAtEditionZeroAndTakesNoField() throws {
     let declared = try declaration(
-      "(declare-permissions {:kind :pane-control :version 1} {:kind :ask-user :version 1})")
+      "(declare-permissions {:kind :pane-control} {:kind :ask-user})")
 
     XCTAssertEqual(declared.permissions, [.paneControl, .askUser])
 
     for refused in [
       "(declare-permissions {:kind :ask-user :version 2})",
-      "(declare-permissions {:kind :ask-user :version 1 :name \"x\"})",
-      "(declare-permissions {:kind :ask-user :version 1 :directories [\"/tmp\"]})",
+      "(declare-permissions {:kind :ask-user :name \"x\"})",
+      "(declare-permissions {:kind :ask-user :directories [\"/tmp\"]})",
     ] {
       switch read(refused) {
       case .invalid: break
@@ -151,7 +151,7 @@ final class DeclaredScriptTests: XCTestCase {
     assertInvalid(
       "(declare-permissions)\n(print 1)\n(declare-permissions)\n", saying: "appears again")
     assertInvalid(
-      "(print 1)\n(declare-permissions {:kind :pane-control :version 1})\n",
+      "(print 1)\n(declare-permissions {:kind :pane-control})\n",
       saying: "must be the first form of the file")
     assertInvalid(
       "(do (declare-permissions))\n", saying: "must be the first form of the file")
@@ -168,7 +168,7 @@ final class DeclaredScriptTests: XCTestCase {
   func testMentioningTheNameIsNotADeclaration() {
     for source in [
       "(defn f [declare-permissions] declare-permissions)\n(print 1)\n",
-      "(print 1)\n(def data '(declare-permissions {:kind :pane-control :version 1}))\n",
+      "(print 1)\n(def data '(declare-permissions {:kind :pane-control}))\n",
       "(print 1)\n(def data ~(declare-permissions ,(+ 1 2)))\n",
       "(defn f \"Call (declare-permissions) never.\" [] 1)\n",
       "(print 1)\n(def data [declare-permissions {:kind :pane-control}])\n",
@@ -177,7 +177,7 @@ final class DeclaredScriptTests: XCTestCase {
     }
 
     assertInvalid(
-      "(print 1)\n(defn f [] (declare-permissions {:kind :pane-control :version 1}))\n",
+      "(print 1)\n(defn f [] (declare-permissions {:kind :pane-control}))\n",
       saying: "must be the first form of the file")
   }
 
@@ -188,7 +188,7 @@ final class DeclaredScriptTests: XCTestCase {
       "declare-permission", "declare-permisions", "declare-permissons", "Declare-Permissions",
       "declare_permissions", "declare-perms", "declare-permissionz",
     ] {
-      assertInvalid("(\(typo) {:kind :pane-control :version 1})\n", saying: "must come first")
+      assertInvalid("(\(typo) {:kind :pane-control})\n", saying: "must come first")
     }
 
     XCTAssertEqual(read("(declare (print 1))"), .undeclared)
@@ -197,7 +197,7 @@ final class DeclaredScriptTests: XCTestCase {
 
   /// Catches a bracketed form read as the declaration.
   func testABracketedDeclarationIsRefused() {
-    assertInvalid("[declare-permissions {:kind :pane-control :version 1}]", saying: "parenthesized")
+    assertInvalid("[declare-permissions {:kind :pane-control}]", saying: "parenthesized")
   }
 
   // MARK: Literal data
@@ -206,7 +206,7 @@ final class DeclaredScriptTests: XCTestCase {
   /// unquote, a quote, and the words nil, true, and false.
   func testAValueThatIsNotLiteralDataIsRefused() {
     for (source, fragment) in [
-      ("{:kind pane-control :version 1}", "the symbol pane-control"),
+      ("{:kind pane-control}", "the symbol pane-control"),
       ("{:kind :pane-control :version (+ 1 0)}", "parenthesized form"),
       ("{:kind :pane-control :version ~1}", "parenthesized form"),
       ("{:kind :pane-control :version ,x}", "parenthesized form"),
@@ -272,38 +272,37 @@ final class DeclaredScriptTests: XCTestCase {
     assertInvalid(
       "(declare-permissions {:kind :pane-control :version 1e12})", saying: "whole number")
     assertInvalid(
-      #"(declare-permissions {:kind "pane-control" :version 1})"#,
+      #"(declare-permissions {:kind "pane-control"})"#,
       saying: ":kind takes a keyword")
     assertInvalid(
       "(declare-permissions {:id :dev.example.tidy})", saying: ":id takes a string")
     assertInvalid(
-      #"(declare-permissions {:kind :capability :version 1 :name "fs-read"})"#,
+      #"(declare-permissions {:kind :capability :name "fs-read"})"#,
       saying: ":name takes a keyword")
     assertInvalid(
-      #"(declare-permissions {:kind :host-launch :version 1 :executable "/a" :directory "/b" :environment ("HOME")})"#,
+      #"(declare-permissions {:kind :host-launch :executable "/a" :directory "/b" :environment ("HOME")})"#,
       saying: "parenthesized form")
     assertInvalid(
-      #"(declare-permissions {:kind :host-launch :version 1 :executable "/a" :directory "/b" :environment [:HOME]})"#,
+      #"(declare-permissions {:kind :host-launch :executable "/a" :directory "/b" :environment [:HOME]})"#,
       saying: "a list of strings")
-    XCTAssertEqual(
-      (try? declaration("(declare-permissions {:kind :pane-control :version 1.0})"))?.permissions,
-      [.paneControl])
+    assertInvalid(
+      "(declare-permissions {:kind :pane-control :version 1.0})", saying: "names a :version")
   }
 
-  /// Catches kinds and versions this version does not know being read, which the app refuses
-  /// with the same words.
-  func testUnknownKindsVersionsAndRepeatsReachTheSharedReader() {
+  /// Catches kinds this version does not know and a named version being read, which the app
+  /// refuses with the same words.
+  func testUnknownKindsNamedVersionsAndRepeatsReachTheSharedReader() {
     assertInvalid(
-      "(declare-permissions {:kind :everything :version 1})", saying: "not a permission kind")
+      "(declare-permissions {:kind :everything})", saying: "not a permission kind")
     assertInvalid(
-      "(declare-permissions {:kind :pane-control :version 2})", saying: "version 2")
+      "(declare-permissions {:kind :pane-control :version 2})", saying: "names a :version")
     assertInvalid(
-      "(declare-permissions {:kind :pane-control :version 1} {:kind :pane-control :version 1})",
+      "(declare-permissions {:kind :pane-control} {:kind :pane-control})",
       saying: "listed twice")
 
     for native in ["ffi", "ffi-define", "ffi-jit", "ffi-use", "modules"] {
       assertInvalid(
-        "(declare-permissions {:kind :capability :version 1 :name :\(native)})",
+        "(declare-permissions {:kind :capability :name :\(native)})",
         saying: "cannot declare \(native)")
     }
   }
@@ -322,11 +321,11 @@ final class DeclaredScriptTests: XCTestCase {
   /// is a header's own key and is never taken for a misspelled :kind.
   func testAMisspelledKindOnACapabilityIsNamedBeforeTheHeaderTypesAreChecked() throws {
     assertInvalid(
-      "(declare-permissions {:kynd :capability :version 1 :name :fs-read})",
+      "(declare-permissions {:kynd :capability :name :fs-read})",
       saying: "misspelled :kind")
 
     let named = try declaration(
-      #"(declare-permissions {:id "dev.example.tidy" :name "Tidy"} {:kind :pane-control :version 1})"#
+      #"(declare-permissions {:id "dev.example.tidy" :name "Tidy"} {:kind :pane-control})"#
     )
 
     XCTAssertEqual(named.id, "dev.example.tidy")
@@ -337,9 +336,9 @@ final class DeclaredScriptTests: XCTestCase {
   /// Catches a permission whose misspelled :kind is read as the header.
   func testAMisspelledKindReadsAsTheHeaderAndIsNamed() {
     assertInvalid(
-      "(declare-permissions {:kynd :pane-control :version 1})", saying: "misspelled :kind")
+      "(declare-permissions {:kynd :pane-control})", saying: "misspelled :kind")
     assertInvalid(
-      "(declare-permissions {:kind :clipboard-read :version 1} {:kidn :pane-control :version 1})",
+      "(declare-permissions {:kind :clipboard-read} {:kidn :pane-control})",
       saying: "permission 2 has no :kind")
   }
 
@@ -366,7 +365,7 @@ final class DeclaredScriptTests: XCTestCase {
   /// Catches a declaration too large for the wire being truncated and read.
   func testADeclarationOverTheWireBoundIsRefused() {
     let permissions = [String](
-      repeating: "{:kind :capability :version 1 :name :fs-read}", count: 2000)
+      repeating: "{:kind :capability :name :fs-read}", count: 2000)
     let source = "(declare-permissions \(permissions.joined(separator: " ")))"
 
     guard case .invalid(let text) = read(source) else {

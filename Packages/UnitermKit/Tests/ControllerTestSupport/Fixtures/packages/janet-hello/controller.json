@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 0,
   "id": "dev.uniterm.fixture.hello",
   "name": "Hello Fixture",
   "entry": {"kind": "janet", "path": "main.janet"},

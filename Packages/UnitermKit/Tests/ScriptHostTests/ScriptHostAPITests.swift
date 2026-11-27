@@ -198,10 +198,10 @@ final class ScriptHostAPITests: XCTestCase {
     XCTAssertEqual(
       sent.map(\.2),
       [
-        ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 1),
-        ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 1),
-        ScriptSchemaVersion(major: 2), ScriptSchemaVersion(major: 1, minor: 1),
-        ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 1), ScriptSchemaVersion(major: 1),
+        ScriptSchemaVersion(major: 0), ScriptSchemaVersion(major: 0), ScriptSchemaVersion(major: 0),
+        ScriptSchemaVersion(major: 0), ScriptSchemaVersion(major: 0), ScriptSchemaVersion(major: 0),
+        ScriptSchemaVersion(major: 2), ScriptSchemaVersion(major: 0, minor: 1),
+        ScriptSchemaVersion(major: 0), ScriptSchemaVersion(major: 0), ScriptSchemaVersion(major: 0),
       ])
     XCTAssertEqual(sent[1].0, .nearest(kind: "fixture-slides"))
     XCTAssertEqual(sent[1].3, "status")

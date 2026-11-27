@@ -7,11 +7,13 @@ import Foundation
 /// The hello is one message with one field, in every version. A peer built against another
 /// version can therefore always read the other's hello, and the refusal names the version.
 ///
-/// Version 12 writes an applet command's schema version as a major and a minor. Version 13 adds the
-/// begin of a `uniterm open` command and the reply to it. Version 14 adds the three form calls, the
-/// begin of a question-only session and the reply to it, and the `ended` failure kind.
+/// The protocol is an external version. It is 0 and stays 0 until uniterm's maintainers declare it
+/// version 1. At 0 a change lands in place, and nothing promises that an older program still
+/// runs. A program's message is read with its old meaning or refused, never read under a new
+/// meaning. Programs built for the versions that counted breaking revisions before this reset, 1
+/// through 14, are refused at the hello.
 public enum ScriptProtocol {
-  public static let version: UInt16 = 14
+  public static let version: UInt16 = 0
 
   /// What the user is told when the two sides disagree. The app and its command are two binaries
   /// in one bundle, so replacing the bundle under a running app pairs an old app with a new one.

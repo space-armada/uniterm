@@ -66,7 +66,7 @@ final class PathReadWindowTests: XCTestCase {
 
     return try await fixture.scripting.sendCommand(
       to: .pane(ScriptPaneReference(window: controller.scriptWindowID, pane: pane.rawValue)),
-      appletType: PathsFixture.typeID, schemaVersion: ScriptSchemaVersion(major: 1),
+      appletType: PathsFixture.typeID, schemaVersion: ScriptSchemaVersion(major: 0),
       command: "read-file", arguments: #"{"path":\#(try Self.json(path))}"#, caller: caller,
       access: access, stillAllowed: {})
   }
@@ -229,7 +229,7 @@ final class PathReadWindowTests: XCTestCase {
 
     let value = try await fixture.scripting.sendCommand(
       to: .pane(ScriptPaneReference(window: controller.scriptWindowID, pane: pane.rawValue)),
-      appletType: PathsFixture.typeID, schemaVersion: ScriptSchemaVersion(major: 1),
+      appletType: PathsFixture.typeID, schemaVersion: ScriptSchemaVersion(major: 0),
       command: "read-folder", arguments: #"{"path":\#(try Self.json(base.path + "/scope"))}"#,
       caller: caller, access: { access }, stillAllowed: {})
 
@@ -278,7 +278,7 @@ final class PathReadWindowTests: XCTestCase {
     func read(connection: UInt64) async throws -> ScriptValue {
       try await scripting.sendCommand(
         to: .pane(ScriptPaneReference(window: window, pane: pane.rawValue)),
-        appletType: PathsFixture.typeID, schemaVersion: ScriptSchemaVersion(major: 1),
+        appletType: PathsFixture.typeID, schemaVersion: ScriptSchemaVersion(major: 0),
         command: "read-file", arguments: #"{"path":\#(try Self.json(path))}"#,
         caller: ScriptCaller(connection: connection, window: window, pane: controller.focusedPane),
         access: { access }, stillAllowed: {})

@@ -98,7 +98,7 @@ final class RemoteRig {
   @discardableResult
   func send(
     _ name: String, _ arguments: JSONValue = .object([:]),
-    version: AppletSchemaVersion = AppletSchemaVersion(1, 0),
+    version: AppletSchemaVersion = AppletSchemaVersion(0, 0),
     onReply: (@MainActor () -> Void)? = nil
   ) -> Box {
     let box = Box()
@@ -1209,12 +1209,13 @@ final class TextViewerRemoteTests: XCTestCase {
   // MARK: Versions
 
   /// Catches a command naming a version the viewer does not speak that takes effect. The viewer is
-  /// at 1.0, so 1.0 works and 2.0 and 1.1 are refused with nothing changed.
-  func testOnlyVersionOnePointZeroReachesTheViewer() async throws {
+  /// at 0.0, so 0.0 works. A caller written for 1.0 before the reset, a minor above 0.0, and 2.0
+  /// are refused with nothing changed.
+  func testOnlyVersionZeroReachesTheViewer() async throws {
     let rig = RemoteRig()
 
     for version in [
-      AppletSchemaVersion(2, 0), AppletSchemaVersion(1, 1), AppletSchemaVersion(0, 0),
+      AppletSchemaVersion(1, 0), AppletSchemaVersion(0, 1), AppletSchemaVersion(2, 0),
     ] {
       let box = rig.send(
         "show-markdown", .object(["text": .string("# no\n")]), version: version)

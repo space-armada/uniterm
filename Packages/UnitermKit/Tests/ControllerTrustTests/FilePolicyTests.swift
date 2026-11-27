@@ -215,7 +215,7 @@ final class FilePolicyTests: XCTestCase {
     try packages().update { _ in [Self.packagePolicy()] }
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-    let newer = Data("{\"format\": 2, \"policies\": []}".utf8)
+    let newer = Data("{\"format\": 3, \"policies\": []}".utf8)
 
     try newer.write(to: files().fileURL)
 

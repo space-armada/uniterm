@@ -65,7 +65,7 @@ final class DeclaredFileProtocolTests: XCTestCase {
   private func declaredFile(_ body: String = "(print :ran)") throws -> URL {
     let file = work.appendingPathComponent("f-\(UUID().uuidString.prefix(6)).janet")
 
-    try Data("(declare-permissions {:kind :pane-control :version 1})\n\(body)\n".utf8)
+    try Data("(declare-permissions {:kind :pane-control})\n\(body)\n".utf8)
       .write(to: file)
 
     return file
@@ -217,7 +217,7 @@ final class DeclaredFileProtocolTests: XCTestCase {
 
     let bad = [
       (
-        #"{"permissions":[{"kind":"pane-control","version":1},{"kind":"pane-control","version":1}]}"#,
+        #"{"permissions":[{"kind":"pane-control"},{"kind":"pane-control"}]}"#,
         "pane-control is listed twice"
       ),
       (#"{"permissions":[],"extra":1}"#, "unknown field"),
@@ -606,7 +606,7 @@ final class DeclaredFileProtocolTests: XCTestCase {
   /// copy, names the problem, and sends nothing.
   func testACopyWithAnInvalidDeclarationIsRefusedByTheCommandItself() async throws {
     let outcome = try await runAgainstFakeApp(
-      copy: "(declare-permissions {:kind :pane-control :kind :pane-control :version 1})\n",
+      copy: "(declare-permissions {:kind :pane-control :kind :pane-control})\n",
       claimed: nil)
 
     XCTAssertNotEqual(outcome.result.status, 0)
@@ -617,14 +617,14 @@ final class DeclaredFileProtocolTests: XCTestCase {
 
   /// Catches an older command and a newer app that go on to talk. Version 9 knows no file begin,
   /// so the app answers its hello and refuses it before any effect.
-  func testAnOlderCommandIsRefusedAtTheHello() async throws {
+  func testACommandOfAnotherVersionIsRefusedAtTheHello() async throws {
     try startHost(helper: AcceptingHelper())
 
     let peer = try ScriptFixtures.connectPeer(path: host.instanceAddress)
 
     defer { peer.shutdownAndClose() }
 
-    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version - 1).frame())
+    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version + 1).frame())
 
     guard case .hello(let version) = try await read(peer) else {
       return XCTFail("the app did not answer the hello")
@@ -634,7 +634,7 @@ final class DeclaredFileProtocolTests: XCTestCase {
     expect(await isClosed(peer), "the app went on after a version mismatch")
     expect(
       await waitUntil {
-        self.refusals.contains(.versionMismatch(found: ScriptProtocol.version - 1))
+        self.refusals.contains(.versionMismatch(found: ScriptProtocol.version + 1))
       },
       "the mismatch was not reported")
   }

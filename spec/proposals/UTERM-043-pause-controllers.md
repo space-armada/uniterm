@@ -545,6 +545,6 @@ landed waits for it.
 - UTERM-041: the markers
 - UTERM-042: tab actions, per-controller badge items, and palette commands
 - [ADR-04](../adr/ADR-04-uniterm-owns-key-bindings-and-terminal-config.md): key bindings
-- [ADR-13](../adr/ADR-13-outside-wires-stay-compatible-across-versions.md): outside wires stay compatible
+- [ADR-13](../adr/ADR-13-outside-wires-stay-compatible-across-versions.md): external wires stay compatible
 - [ADR-14](../adr/ADR-14-a-controller-controls-what-it-opened.md): grants and revocation
 - [ADR-15](../adr/ADR-15-a-programs-operation-is-the-users.md): a program's operation is the user's

@@ -312,6 +312,6 @@ None.
 ## References
 
 - ADR-11: deferred replies never hide effects
-- ADR-13: outside wires stay compatible
+- ADR-13: external wires stay compatible
 - ADR-14: a controller controls what it opened, within authenticated identity and explicit scope
 - `spec/ideas.md`, "Exec driver path-read power"

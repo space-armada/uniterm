@@ -77,9 +77,9 @@ final class BrowserRemoteUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Browser Controller"}
-        {:kind :pane-control :version 1}
-        {:kind :browser-navigation :version 1}
-        {:kind :browser-read :version 1})
+        {:kind :pane-control}
+        {:kind :browser-navigation}
+        {:kind :browser-read})
 
       (import uniterm)
 
@@ -96,8 +96,8 @@ final class BrowserRemoteUITests: UnitermUITestCase {
 
       (def [_ browser] (layout :panes))
       (def opened
-        (uniterm/send-command browser :browser 1 :open {:url "http://127.0.0.1:__PORT__/second"}))
-      (def page (uniterm/send-command opened :browser 1 :read {}))
+        (uniterm/send-command browser :browser 0 :open {:url "http://127.0.0.1:__PORT__/second"}))
+      (def page (uniterm/send-command opened :browser 0 :read {}))
 
       (print (browser :pane) " " (page :url))
       """, to: template)

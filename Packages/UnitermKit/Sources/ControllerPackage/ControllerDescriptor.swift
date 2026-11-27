@@ -46,7 +46,7 @@ public enum ControllerEntryKind: String, Sendable, Equatable {
   case native
 }
 
-/// What a permission grants, apart from its version: its kind and, for kinds that take one, its
+/// What a permission grants, apart from its edition: its kind and, for kinds that take one, its
 /// scope.
 public enum ControllerPermissionKind: Hashable, Sendable {
   /// The controller acts on the panes its run may address, within the pane rules.
@@ -101,7 +101,7 @@ public enum ControllerPermissionKind: Hashable, Sendable {
   /// What tells two permissions of one kind apart: a capability's name or a host launch's
   /// executable. A descriptor lists each kind at most once for each of these, so it lists
   /// path-read once, with every directory in one scope.
-  var scopeName: String {
+  public var scopeName: String {
     switch self {
     case .paneControl, .clipboardRead, .clipboardWrite, .pathRead, .browserNavigation,
       .browserRead, .askUser:
@@ -112,33 +112,45 @@ public enum ControllerPermissionKind: Hashable, Sendable {
   }
 }
 
-/// One meaning of one permission kind: the kind, its version, and the versions of that kind it
-/// covers. Each (kind, version) pair this build knows has exactly one entry, and a pair it does not
-/// know is refused wherever it appears, so a meaning a later build adds never authorizes anything
-/// here.
-public struct ControllerPermissionMeaning: Hashable, Sendable {
-  public let kind: String
-  public let version: Int
+/// The edition of each permission kind this build knows. An edition is internal: only uniterm
+/// reads it. It moves when a kind's meaning grows, so an approval made at an older edition no
+/// longer covers the kind and the user is asked again. A descriptor never names one.
+public struct ControllerPermissionEditions: Hashable, Sendable {
+  private let table: [String: Int]
 
-  /// The versions of the same kind an approval of this one covers. It always holds `version`.
-  public let covers: Set<Int>
+  public init(_ table: [String: Int]) {
+    self.table = table
+  }
 
-  /// The format that first knows this pair. An older format refuses it.
-  public let format: Int
+  /// Every kind this build knows, at edition 0.
+  public static let current = ControllerPermissionEditions([
+    "pane-control": 0, "capability": 0, "clipboard-read": 0, "clipboard-write": 0,
+    "host-launch": 0, "path-read": 0, "browser-navigation": 0, "browser-read": 0, "ask-user": 0,
+  ])
+
+  /// The kind's edition, or nil when this build does not know the kind.
+  public func edition(of kind: String) -> Int? { table[kind] }
+
+  public var kinds: Set<String> { Set(table.keys) }
 }
 
-/// A power a controller declares: a kind, with its scope, at one version of its meaning.
+/// A power a controller declares: a kind, with its scope, at one edition of its meaning.
 ///
-/// Format 1 permissions carry no version, and read as version 1. Format 2 permissions carry a
-/// required version. Approvals record the version too, so a request at a version the approval
-/// covers needs no new review, and a higher version needs one.
+/// A descriptor names a kind alone, and a permission always means what the running uniterm says.
+/// The edition is recorded with each approval. An approval covers only the edition it was made
+/// at, so a kind whose meaning grew asks the user again.
 public struct ControllerPermission: Hashable, Sendable, Comparable {
   public let kind: ControllerPermissionKind
-  public let version: Int
+  public let edition: Int
 
-  public init(_ kind: ControllerPermissionKind, version: Int = 1) {
+  public init(_ kind: ControllerPermissionKind, edition: Int) {
     self.kind = kind
-    self.version = version
+    self.edition = edition
+  }
+
+  /// A permission at the edition this build knows for `kind`.
+  public init(_ kind: ControllerPermissionKind) {
+    self.init(kind, edition: ControllerPermissionEditions.current.edition(of: kind.name) ?? 0)
   }
 
   public static let paneControl = ControllerPermission(.paneControl)
@@ -160,29 +172,6 @@ public struct ControllerPermission: Hashable, Sendable, Comparable {
     ControllerPermission(.pathRead(scope))
   }
 
-  /// Every (kind, version) pair this build knows.
-  public static let meanings: [ControllerPermissionMeaning] = [
-    ControllerPermissionMeaning(kind: "pane-control", version: 1, covers: [1], format: 1),
-    ControllerPermissionMeaning(kind: "capability", version: 1, covers: [1], format: 1),
-    ControllerPermissionMeaning(kind: "clipboard-read", version: 1, covers: [1], format: 2),
-    ControllerPermissionMeaning(kind: "clipboard-write", version: 1, covers: [1], format: 2),
-    ControllerPermissionMeaning(kind: "host-launch", version: 1, covers: [1], format: 2),
-    ControllerPermissionMeaning(kind: "path-read", version: 1, covers: [1], format: 2),
-    ControllerPermissionMeaning(kind: "browser-navigation", version: 1, covers: [1], format: 2),
-    ControllerPermissionMeaning(kind: "browser-read", version: 1, covers: [1], format: 2),
-    ControllerPermissionMeaning(kind: "ask-user", version: 1, covers: [1], format: 2),
-  ]
-
-  /// The meaning of a pair, or nil when this build does not know it.
-  public static func meaning(kind: String, version: Int) -> ControllerPermissionMeaning? {
-    meanings.first { $0.kind == kind && $0.version == version }
-  }
-
-  /// This permission's meaning, or nil when this build does not know its version.
-  public var meaning: ControllerPermissionMeaning? {
-    Self.meaning(kind: kind.name, version: version)
-  }
-
   /// The kind's name, as the descriptor spells it.
   public var kindName: String { kind.name }
 
@@ -194,7 +183,7 @@ public struct ControllerPermission: Hashable, Sendable, Comparable {
   }
 
   public static func < (lhs: ControllerPermission, rhs: ControllerPermission) -> Bool {
-    (lhs.sortKey, lhs.version) < (rhs.sortKey, rhs.version)
+    (lhs.sortKey, lhs.edition) < (rhs.sortKey, rhs.edition)
   }
 
   private var sortKey: String {
@@ -314,17 +303,13 @@ public struct HostLaunchScope: Hashable, Sendable {
 /// cannot disagree about what a file means. The version digest is SHA-256 over those bytes. The
 /// descriptor lists the digest of every packaged file, so the version digest covers the code too.
 public struct ControllerDescriptor: Equatable, Sendable {
-  /// The newest descriptor format this version reads. Format 2 gives every permission a required
-  /// version, and adds the clipboard and host launch kinds at version 1. Format 1 knows two kinds,
-  /// with no version, and refuses every other kind. Any other format is refused.
-  ///
-  /// The path-read kind joined format 2 without a new format. A build that predates it already
-  /// refuses a kind it does not know, in a descriptor and in a policy file, so it authorizes
-  /// nothing from one.
-  public static let format = 2
+  /// The descriptor format this version reads. It is an external version, so it stays 0 until
+  /// uniterm's maintainers declare it version 1. A descriptor names each permission by kind alone.
+  /// Any other format is refused.
+  public static let format = 0
 
   /// Every format this version reads.
-  public static let formats = 1...format
+  public static let formats = 0...format
 
   /// The descriptor's name inside a package.
   public static let fileName = "controller.json"
@@ -381,7 +366,8 @@ public struct ControllerDescriptor: Equatable, Sendable {
 
     guard Self.formats.contains(format) else {
       throw ControllerPackageError.malformed(
-        "format \(format) is not one this uniterm reads. It reads formats 1 to \(Self.format).")
+        "format \(format) is not one this uniterm reads. It reads format \(Self.format) only, so "
+          + "rewrite the descriptor for this uniterm or update uniterm.")
     }
 
     let id = try fields["id"]!.string("id")
@@ -417,7 +403,7 @@ public struct ControllerDescriptor: Equatable, Sendable {
     }
 
     let permissions = try ControllerPermissionReader.read(
-      fields["permissions"]!, allowsCapabilities: kind == .janet, format: format)
+      fields["permissions"]!, allowsCapabilities: kind == .janet)
 
     return ControllerDescriptor(
       id: id, name: name, entryKind: kind, entryPath: entryPath, files: files,

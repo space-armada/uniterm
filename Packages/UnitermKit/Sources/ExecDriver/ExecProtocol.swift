@@ -5,15 +5,16 @@ import Foundation
 ///
 /// The wire is UTF-8 JSON, one object per LF-terminated line, on the driver's stdin and stdout.
 /// Both sides start with a hello that names the protocol version, the applet type, and its command
-/// schema version. No command or event flows until both sides accept the other's hello.
+/// schema version. No command or event flows until both sides accept the other's hello. Each side
+/// refuses any protocol version but its own at the hello.
 ///
-/// Version 2 adds a driver's layout request and its commands to the members of a group it owns.
-/// Version 3 adds the typed clipboard read and write. Version 4 writes the command schema version
-/// as `[major, minor]` in place of one whole number, and lets a reply arrive in any order, since
-/// an applet may answer a waiting command long after a later one. Each side refuses any version
-/// but its own at the hello, so an old driver with a new app, or the reverse, runs no command.
+/// The protocol is an external version. It is 0 and stays 0 until uniterm's maintainers declare it
+/// version 1. At 0 a change lands in place, and nothing promises that an older driver still runs.
+/// A driver's message is read with its old meaning or refused, never read under a new meaning.
+/// Drivers written for the versions that counted breaking revisions before this reset, 1 through
+/// 4, are refused at the hello.
 public enum ExecProtocol {
-  public static let version = 4
+  public static let version = 0
 
   /// The most clipboard text one typed clipboard request reads or writes, in UTF-8 bytes. A larger
   /// clipboard is refused, never cut. A longer write is refused as that one call while its line
@@ -81,7 +82,14 @@ public enum ExecWireError: Error, Sendable, Equatable, CustomStringConvertible {
 
 /// A message from a driver. The app validates each one and trusts none of them.
 public enum ExecDriverMessage: Sendable, Equatable {
+  /// A hello at this protocol version, whose applet type and schema version are read in this
+  /// protocol's shape.
   case hello(protocolVersion: Int, appletType: String, schemaVersion: AppletSchemaVersion)
+
+  /// A hello at another protocol version. Its other fields may be in another shape, so none is
+  /// read. The case carries no schema version, so a hello that never matched this protocol cannot
+  /// reach the check of a schema version, whatever version the schemas are at.
+  case helloOfAnotherVersion(protocolVersion: Int)
 
   /// A command for the applet. The ID is the driver's own, and the reply carries it back.
   case command(id: JSONValue, name: String, arguments: JSONValue)
@@ -173,14 +181,11 @@ public enum ExecWire {
     case "hello":
       let protocolVersion = try integer(fields["protocol"], "protocol")
 
-      // A driver of another protocol may write its schema in another shape. Protocol 3 wrote one
-      // whole number. The hello then still decodes, so the refusal names the protocol versions
-      // and says to update, instead of calling the line malformed.
+      // A driver of another protocol may write its other fields in another shape. The hello then
+      // still decodes, so the refusal names the protocol versions and says to update, instead of
+      // calling the line malformed.
       guard protocolVersion == ExecProtocol.version else {
-        return .hello(
-          protocolVersion: protocolVersion,
-          appletType: (try? name(fields["applet"], "applet")) ?? "",
-          schemaVersion: (try? schemaVersion(fields["schema"])) ?? AppletSchemaVersion(0, 0))
+        return .helloOfAnotherVersion(protocolVersion: protocolVersion)
       }
 
       return .hello(

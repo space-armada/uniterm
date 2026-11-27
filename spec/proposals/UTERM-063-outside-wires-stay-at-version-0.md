@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-26
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Impacts
 
@@ -280,7 +280,7 @@ None. Every question is settled.
 
 ### M1: Reset to version 0 and freeze
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 No external interface changes shape in this milestone, so a pre-reset program is refused at the hello, and two builds at
 0
@@ -327,6 +327,24 @@ agree on every message.
 - UTERM-056 is deferred until ScriptWire's declaration. UTERM-028 and UTERM-055 land their frames in place
   at 0, with no version offer
 - The impacted proposals that plan a version bump say the change lands in place while the wire is at 0, after M2
+
+**As built:**
+
+- The policy file's format moved from 1 to 2 and a scope stores its edition. A file in an earlier format is set aside
+  with a notice. See the Decision Log entry for 2026-11-27 (run best guess).
+- An approval covers a request only at the edition it was made at. An older edition reads and covers nothing, and an
+  edition above the build's reads as newer. UTERM-067 M2 narrows the newer case to one entry. Not built here.
+- A hello at another exec protocol version decodes to its own case that carries no schema. The channel refuses it
+  before any schema check, so the placeholder schema 0.0 can never admit a hello. The refusal text names both versions.
+- The descriptor reader refuses a permission that names a version, by name, in a package and in a script file.
+- `controller.sig`'s own format number stays 1. It is not in the freeze list, and the check does not read it. It names
+  the signature file format that controller authors' tools write, so it may belong on the list. That is the maintainers'
+  call.
+- The `janet-hello` fixture is signed again. An Ed25519 signature from CryptoKit differs on every run, so the new
+  signature is a new value. The descriptor digest and the key fingerprint reproduce on every run. The method is in
+  `ControllerFixtures.swift`.
+- ADR-18 also said "outside wires", and now says "external wires". No other live prose in docs, ADRs, or the README
+  used the old term.
 
 ### M2: Refuse stale programs by name
 
@@ -433,6 +451,16 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   version this build does not know. It is now told apart by the store's format number, which the later of M1 and
   UTERM-067 moves. Otherwise a pre-reset scope at version 1 could later be read as edition 1 of its kind. The M1 check
   said before: "A policy file written before the reset is set aside with a notice, and the next approval is saved".
+- 2026-11-27 (run best guess): The policy file format moves from 1 to 2 in M1, for both `policy.json` and `files.json`,
+  and a scope stores its edition in place of a permission version. A file in an earlier format is set aside with a
+  notice that each controller or script file is approved again once, and the next approval is saved. A newer format
+  stays untouched. The text said before only that the reset tells a pre-reset file apart by the store's format number,
+  which the later of M1 and UTERM-067 M2 moves. The number 2 follows from M1 landing before UTERM-067 M2, which then
+  moves it to 3. Either order breaks the file twice, as UTERM-067's risk "Every approval is given again once" says.
+- 2026-11-27: M1 built. Each impacted proposal that plans a version change was amended to land in place, and each
+  carries its own Decision Log entry. UTERM-019 and UTERM-050 hold a decision the user made, so each keeps its text and
+  carries a pending override that cites this proposal's user decisions of 2026-11-26. UTERM-028, UTERM-055, UTERM-062,
+  UTERM-064, and UTERM-056 already said so.
 
 ## References
 
