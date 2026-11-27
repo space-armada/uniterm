@@ -81,6 +81,23 @@ DONE. It has no `Live after` line.
   - The terminal teardown's path choice leans on one test. Dismissed: that test signals every tree member and asserts
     each path, so the choice is checked.
 
+### Row review
+
+- adr-impact over the range: no conflict. ADR-07, ADR-08, ADR-10, and ADR-14 are consistent. No uncovered decision.
+- The reviewer found the handle, the sender, and the guarded call one coherent design, with no leftover duplicates.
+  Its findings:
+  - The 2026-11-27 Decision Log entry sat under References. Moved to the end of the Decision Log.
+  - The `**Updated:**` header was stale. Fixed.
+  - The sender's failure arms were proven only by the live sites. Fixed: `ProcessSenderTests` pins them, in a new
+    `ProcessTestSupportTests` target. Mutations made the wrong-path arm, refused, and unreached accept, and each
+    failed its test. The arm for a pid path where a token was expected stays unpinned. It needs a process that gives
+    no token, such as `login`, and the terminal tree test covers it live.
+  - The milestone commit also carried the UTERM-060 M6 report. Dismissed: the plan approved committing a row's report
+    with the next commit when the row changes no files.
+- The first fix agent stalled on a script run that never started. It was stopped after a nudge, and a fresh agent
+  finished from its partial work. `ProcessSender.swift` was confirmed unchanged.
+- Checks after the fixes: `make fmt-check lint check` pass. `ProcessSenderTests`: 6 of 6 pass.
+
 ### Unowned failure
 
 `make test-package-select PACKAGE_TESTS=TerminalSessionIntegrationTests/testShellSeesTheScrubbedEnvironmentAndUnitermsIdentity`

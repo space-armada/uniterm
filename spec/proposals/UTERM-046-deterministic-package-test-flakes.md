@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-21
-**Updated:** 2026-11-25
+**Updated:** 2026-11-27
 
 ## Impacts
 
@@ -565,8 +565,9 @@ No package test signals a process by an id that the process may no longer hold.
   one raw SIGKILL in `ScriptBindingTests`, to the relay's forked child. Its parent never reaps it, so no handle holds
   it.
 - The package suite passed: 3296 tests, 10 skipped, 0 failures, in 281 s. M3 pins the fix and not the bug, since no test
-  can force a process id's reuse. No mutation of the sender was run, so a wrong-path result is shown only by the passing
-  path checks above.
+  can force a process id's reuse. `ProcessSenderTests` pins the sender's arms. Accepting a token signal where the pid path is expected failed
+  the wrong-path test, accepting a refusal failed the pid 1 and own-pid tests, and accepting an unreached signal failed
+  the signal 0 probe test. Each mutation was restored.
 
 ### M4: The product's kills signal by audit token
 
@@ -840,13 +841,6 @@ Needs nothing from M1 to M3. It lands before M3, since M3's sender wraps its gua
   answers EINVAL for it. So a signal 0 probe through the call reports unreached with a token, and without one the
   pid path sends it. The decision now says so, and signal 0 probes stay outside the call. (run best guess)
 
-## References
-
-- ADR-07: Failure isolation
-- ADR-08: UI responsiveness
-- `spec/flaky-tests.md`
-- UTERM-045, whose closing rule in the `spec/flaky-tests.md` Rule section decides when this proposal's entries move to
-  Fixed
 - 2026-11-27: M3's mechanisms were chosen in the work-queue run. The fixture moved to `ScriptTestSupport` with a public
   API, and `ProcessTestSupport` holds `ProcessRecord`, `ProcessSender.signal`, `ProcessSender.send`, and the stopped-state
   reader. `ProcessSender.send` exists because `BrowserHungProcessTests`' injected signal closure must return what the
@@ -856,3 +850,11 @@ Needs nothing from M1 to M3. It lands before M3, since M3's sender wraps its gua
   names them. `WebContent.kill` is renamed `crash`, so the search finds no `kill(` on a content process. `login` takes the
   pid path and every other tree member the token path, so the terminal tests pick the expected path from the
   executable's name. A new terminal test sends SIGCONT to each live member through that path. (run best guess)
+
+## References
+
+- ADR-07: Failure isolation
+- ADR-08: UI responsiveness
+- `spec/flaky-tests.md`
+- UTERM-045, whose closing rule in the `spec/flaky-tests.md` Rule section decides when this proposal's entries move to
+  Fixed

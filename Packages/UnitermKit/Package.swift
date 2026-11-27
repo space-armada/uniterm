@@ -419,6 +419,9 @@ let package = Package(
     .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
     .testTarget(name: "ProcessInspectionTests", dependencies: ["ProcessInspection"]),
     .testTarget(
+      name: "ProcessTestSupportTests",
+      dependencies: ["ProcessTestSupport", "ProcessInspection"]),
+    .testTarget(
       name: "AppletKitTests",
       dependencies: ["AppletKit", "AppletTestSupport", "AppletFixtures", "SourceAccess"]),
     .testTarget(
