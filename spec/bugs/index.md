@@ -63,3 +63,4 @@
 | [20261126-file-menu-shows-two-open-items-for-viewers](20261126-file-menu-shows-two-open-items-for-viewers.md) | The File menu shows two items titled "Open…" while a viewer is focused | fixed |
 | [20261126-palette-filter-rows-read-empty-kind](20261126-palette-filter-rows-read-empty-kind.md) | VoiceOver reads a palette filter row's kind as empty | fixed |
 | [20261126-palette-command-refused-after-refresh-is-silent](20261126-palette-command-refused-after-refresh-is-silent.md) | A palette command that becomes unavailable after the list was built does nothing, silently | fixed |
+| [20261126-image-zoom-wait-hangs-when-every-tile-is-refused](20261126-image-zoom-wait-hangs-when-every-tile-is-refused.md) | A program's zoom wait hangs when the budget refuses every tile it needs | open |
