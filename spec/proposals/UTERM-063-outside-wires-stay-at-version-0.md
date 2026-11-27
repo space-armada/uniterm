@@ -117,7 +117,9 @@ reset this build knows only version 0. It reads a pre-reset file as written by a
 and saves none, and leaves the file as it is. What should the reset do with such a file?
 
 Decision: set a pre-reset policy file aside with a notice, as a broken file is today. Every controller is approved
-again once. The user chose this on 2026-11-26.
+again once. The user chose this on 2026-11-26. The reset tells a pre-reset file apart by the store's format number, not
+by a scope's version: whichever of this proposal's M1 and UTERM-067 lands second moves that number. Amended 2026-11-26;
+see Decision Log.
 
 Rationale: the decision touches only files written before the reset, which in practice means the user's own. The user
 does not need those approvals kept.
@@ -292,7 +294,9 @@ agree on every message.
   and checks that an approval made at the older edition no longer covers it, and the user is asked again
 - A protocol-mismatched exec hello is never admitted on its placeholder schema of 0.0
 - `uniterm/api-version` reports 0, and its doc says it stays at 0 until uniterm's maintainers declare it
-- A policy file written before the reset is set aside with a notice, and the next approval is saved
+- A policy file written before the reset is set aside with a notice, and the next approval is saved. The file is told
+  apart by its format number, which this milestone moves when it lands after UTERM-067, so no pre-reset scope is ever
+  read as an edition
 - The bundled `uniterm` command, the Janet helper, every test fixture, and every example driver and controller in the
   repository speak version 0, `Tests/ExecTestSupport/Fixtures/driver.pl` and the controller package fixtures included.
   Tests that compute an older version as the current one minus 1 still work at 0
@@ -424,6 +428,11 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   bundle, which a relaunch cannot fix. The fix came from UTERM-056 M3, whose remaining work waits on ScriptWire's
   declaration. The user chose to land it here, so the wrong text never ships after the reset. Leaves undone: a user who
   swaps an older uniterm under a running app is told to rebuild or update, not to relaunch.
+- 2026-11-26: Amended "The controller policy file at the reset" and its M1 check for UTERM-067, whose reader keeps an
+  entry it cannot read instead of reading the whole file as newer. A pre-reset file was told apart only by scopes at a
+  version this build does not know. It is now told apart by the store's format number, which the later of M1 and
+  UTERM-067 moves. Otherwise a pre-reset scope at version 1 could later be read as edition 1 of its kind. The M1 check
+  said before: "A policy file written before the reset is set aside with a notice, and the next approval is saved".
 
 ## References
 

@@ -253,6 +253,8 @@ failure that refusing unknown fields does not already catch.
 
 Superseded in part by UTERM-032; see Decision Log.
 
+Superseded in part by UTERM-067; see Decision Log.
+
 Decision: file approvals live in their own policy file, beside the controller policy file, with their own selectors.
 
 - A file's version selector names the file's SHA-256 alone, so an unsigned file needs no ID.
@@ -783,6 +785,9 @@ a socket that belongs to another user never reached the app, so it keeps 69.
 - 2026-11-23: Superseded in part by UTERM-056. Once it lands, the app refuses an older command at its begin instead of
   at the hello. A program that is not the command and sends an undeclared or open begin from an older version is refused
   too, until it is rebuilt.
+- 2026-11-26: Superseded in part by UTERM-067. File approvals no longer live in a policy file of their own. Every
+  approval lives in `policy.json`, and each entry names its artifact kind, so a file approval and a package approval
+  are still never read as each other's.
 
 ## References
 

@@ -1,6 +1,6 @@
 # UTERM-067: Stores Keep What They Cannot Read
 
-**Status:** designing
+**Status:** accepted
 **Created:** 2026-11-26
 **Updated:** 2026-11-26
 
@@ -452,6 +452,9 @@ None.
 - 2026-11-26: Dropped the Dependencies gate that held this proposal back until ADR-18 was accepted. It said before:
   "It is proposed, and this proposal is not accepted before it is". No standard asks for it, and the decisions stand
   whether ADR-18 is proposed or accepted.
+- 2026-11-26: Accepted, the user's choice. Applied the amendments in Impacts: UTERM-024, UTERM-026, UTERM-032,
+  UTERM-063, and UTERM-066 are amended to match, and UTERM-004 and UTERM-021 carry "Superseded in part by UTERM-067"
+  markers. Not scheduled.
 
 ## References
 

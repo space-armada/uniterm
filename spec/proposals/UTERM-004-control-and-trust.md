@@ -464,6 +464,8 @@ Superseded in part by UTERM-032; see Decision Log.
 
 Superseded in part by UTERM-066; see Decision Log.
 
+Superseded in part by UTERM-067; see Decision Log.
+
 Original question: integrate startup declarations and remembered approvals with clipboard attribution, host-launch
 scopes, control enablement, REPL capabilities, revocation, and inert restore without repeated modal interruptions.
 
@@ -1662,6 +1664,9 @@ Superseded in part by UTERM-036; see Decision Log.
   interpreters had no equally verifiable loader. For such a script, ambient module paths and startup hooks are
   outside what uniterm verifies, and the user is told so. A verified driver's run stays bound to its channel and
   snapshot across exec, where a controller's binding ends at exec.
+- 2026-11-26: Superseded in part by UTERM-067. The policy file keeps every entry it can read when it meets one it
+  cannot, keeps that entry unchanged, and grants nothing from it. A file is no longer moved aside or left untouched
+  whole over one entry. Old-format files are set aside once, and the file has no count limit.
 
 ## References
 

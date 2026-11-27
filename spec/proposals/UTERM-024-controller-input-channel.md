@@ -442,20 +442,17 @@ folder, where the presenter's approval goes. An older build reads such a store a
 
 Decision: no addition. Accept the skew, and state it per store. (autonomous)
 
-- On a build without the kind, `files.json` and UTERM-032's input-folder store read as newer. Every approval in them
-  stops working, and that build can neither remember a new approval nor revoke one there. It shows its notice that a
-  newer uniterm wrote the file, and it never moves the file aside.
-- `policy.json` holds no approval of the kind, since packages cannot declare it, so package approvals keep working.
+- Every approval lives in one store, per UTERM-067 "One store holds every approval". A build with UTERM-067's reader
+  that does not know the kind keeps an approval of it unread: it grants nothing there, it is counted, and every other
+  approval keeps working.
+- A build from before UTERM-067 behaves as UTERM-067 "Version skew" states.
 - Dev and release builds share one store folder, so this is the common case on a development machine.
-- UTERM-032 kept its folder policies out of older builds' stores for a list change. A new declarable kind is a
-  different case, as UTERM-022 found for `ask-user`. The window closes once a build with both proposals ships.
-- Left undone: a reader that skips only the policy it cannot read, instead of the whole store. It would change the
-  trust-store contract UTERM-021 owns, and it cannot reach builds already installed.
 
-Rationale: the failure is closed, and no data is lost. A store of its own for commanded approvals would go whole-newer
-at the kind's next version, and would override UTERM-032's rule that a folder policy lives whole in its store. Never
-remembering the kind would also remove Remember for the run's other powers, including the presenter's folder.
-Converged in 1 pass.
+Amended 2026-11-26; see Decision Log.
+
+Rationale: the failure is closed, and costs only the approvals of the new kind. A store of its own for commanded
+approvals would add a split that UTERM-067's reader makes unnecessary. Never remembering the kind would also remove
+Remember for the run's other powers, including the presenter's folder. Converged in 1 pass.
 
 ## Design Decisions (Open)
 
@@ -468,11 +465,10 @@ None.
   permission kind fails closed. See "Version skew". The Janet names follow UTERM-019's rule that a name never changes
   meaning and a rename adds a name. On the wire, an added event field is a new ScriptWire version, per ADR-13 P1. Amended
   2026-11-23; see Decision Log.
-- **An older build stops honoring every file approval** — likelihood: high on a development machine, low elsewhere,
-  impact: medium. After an approval of the new kind is saved, a build without the kind reads `files.json` and
-  UTERM-032's input-folder store as newer. It cannot use, remember, or revoke any approval in them. `policy.json` is
-  untouched. Accepted: it fails closed with no data lost, as UTERM-022 accepted for `ask-user`, and the approvals come
-  back on the new build. See "Stores that older builds read".
+- **An older build stops honoring approvals of the new kind** — likelihood: high on a development machine, low
+  elsewhere, impact: low. A build with UTERM-067's reader that does not know the kind keeps those approvals unread, and
+  every other approval keeps working. Accepted: it fails closed, and the approvals apply again on the new build. See
+  "Stores that older builds read". Amended 2026-11-26; see Decision Log.
 - **Navigation-key capture confuses the user** — likelihood: medium, impact: medium. A viewer stops scrolling on the
   arrow keys, and the user does not know why. Mitigation: the key indicator, the scope to the controller's own members,
   and revoking from the pane.
@@ -712,6 +708,14 @@ Amended 2026-11-20; see Decision Log.
 - 2026-11-21: Scheduled as UTERM-024 M1-M2 in queue.md.
 - 2026-11-23: From UTERM-056's acceptance. The skew decision had no end to exact match, the published-contract risk said
   "an event gains fields only by adding them", and an M1 check had the two refuse each other only at the hello.
+- 2026-11-26: Amended "Stores that older builds read" and its risk for UTERM-067, which puts every approval in one
+  store and keeps an entry a build cannot read. Its bullets said before: "On a build without the kind, `files.json` and
+  UTERM-032's input-folder store read as newer. Every approval in them stops working, and that build can neither
+  remember a new approval nor revoke one there." and "`policy.json` holds no approval of the kind, since packages
+  cannot declare it, so package approvals keep working." Removed the bullet on UTERM-032's store and the Left undone
+  line, "a reader that skips only the policy it cannot read", which UTERM-067 builds. The risk was "An older build
+  stops honoring every file approval", rated medium impact, and is now "An older build stops honoring approvals of the
+  new kind", rated low.
 
 ## References
 

@@ -321,8 +321,9 @@ Decision: uniterm is pre-v1, so each contract may break, and the behavior is sta
 - The policy store: format 1 means every entry is a controller package entry, and no entry carries a kind. Format 2
   requires a kind on every entry. A newer build writes format 2 whenever any entry is not a controller package entry,
   and format 1 otherwise. A build in use today then leaves a format 2 file untouched and trusts nothing from it, so a
-  run of new, old, and new builds loses no approval. A newer build reads today's format 1 file unchanged. Amended
-  2026-11-26; see Decision Log. UTERM-067 changes this under ADR-18.
+  run of new, old, and new builds loses no approval. A newer build reads today's format 1 file unchanged. Once
+  UTERM-067 lands, the store moves to a format above 2, every entry names its kind, and UTERM-067's "Version skew" and
+  "Old trust files are set aside" govern it. Amended 2026-11-26; see Decision Log.
 - The layout file: an older build keeps a version 4 file aside, per ADR-06.
 - The descriptor, which gains a role, driver kinds, an interpreter entry kind, an interpreter command, skipped folder
   names, a list of environment keys, a starting-folder read scope, and a fixed command line: an older build refuses a new package by name, through
@@ -392,7 +393,7 @@ None.
   are not immutable against a malicious process of the same user. Accepted: the same holds for controllers today.
 - **The design depends on proposals still in flight** — likelihood: medium, impact: medium. UTERM-028, UTERM-055, and
   UTERM-065 are accepted and not started, and UTERM-063 changes permission editions underneath. ADR-18 is proposed, and
-  UTERM-067 is a draft. The second reason for one policy entry per role rests on ADR-18 P4. Mitigation: M2's parts wait
+  UTERM-067 is accepted and not built. The second reason for one policy entry per role rests on ADR-18 P4. Mitigation: M2's parts wait
   on each power, per Dependencies. The first reason for one entry per role, that the roles carry different powers,
   holds without ADR-18.
 - **The descriptor's new fields are a signed contract** — likelihood: medium, impact: medium. Authors sign descriptors
@@ -656,6 +657,9 @@ None.
   ADR-18 covers the policy store's skew.
 - 2026-11-26: Accepted, the user's choice, after the review gate. UTERM-004 gains its "Superseded in part by
   UTERM-066" markers, per Impacts.
+- 2026-11-26: Amended the policy store bullet of "Version skew" for UTERM-067, which puts every approval in one store
+  at a format above 2, with a kind on every entry. It ended before with: "UTERM-067 changes this under ADR-18." The
+  in-flight risk said UTERM-067 is a draft. It is now accepted.
 
 ## References
 
