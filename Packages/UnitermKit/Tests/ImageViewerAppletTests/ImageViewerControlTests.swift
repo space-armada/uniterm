@@ -568,9 +568,21 @@ final class ImageViewerControlTests: XCTestCase {
 
   // MARK: Zoom
 
-  private func large(_ applet: ImageViewerApplet) async throws {
+  /// Shows a 1200 by 800 image. Its fit-size backdrop is 600 by 400.
+  ///
+  /// The fixture folder holds three small neighbors, and the pane prefetches them in the
+  /// background, so the budget a test sees depends on how many have landed. `alone` puts the image
+  /// in a folder of its own, for a test that counts the budget's bytes.
+  private func large(_ applet: ImageViewerApplet, alone: Bool = false) async throws {
+    var home: URL = folder
+
+    if alone {
+      home = folder.appendingPathComponent("alone", isDirectory: true)
+      try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+    }
+
     let url = try ImageFixtures.write(
-      ImageFixtures.png(width: 1200, height: 800), named: "big.png", in: folder)
+      ImageFixtures.png(width: 1200, height: 800), named: "big.png", in: home)
 
     applet.content.backingScaleSource = { 2 }
     _ = try await run("show", ["path": .string(url.path)], to: applet)
@@ -909,12 +921,13 @@ final class ImageViewerControlTests: XCTestCase {
   /// zoom limit and the pane goes back to fit. It cannot prove a refusal by the helper, which has
   /// its own test.
   func testAZoomWhoseEveryTileTheBudgetRefusesFailsWithTheZoomLimit() async throws {
-    let (applet, _) = panes.make(bitmapBudget: ImageBitmapBudget(limit: 1, floor: 968_192))
+    let backdrop = 600 * 400 * 4
+    let (applet, _) = panes.make(bitmapBudget: ImageBitmapBudget(limit: 1, floor: backdrop))
 
-    try await large(applet)
+    try await large(applet, alone: true)
 
     XCTAssertEqual(
-      applet.bitmapBudget.held(by: applet.lease), 968_192, "the budget holds the backdrop only")
+      applet.bitmapBudget.held(by: applet.lease), backdrop, "the budget holds the backdrop only")
 
     let started = send("zoom", ["scale": .number(1)], to: applet)
     let handle = try XCTUnwrap(started.handle)
@@ -931,7 +944,7 @@ final class ImageViewerControlTests: XCTestCase {
   func testAZoomWhoseSomeTilesTheBudgetRefusesStillEndsDone() async throws {
     let (applet, _) = panes.make(bitmapBudget: ImageBitmapBudget(limit: 1, floor: 1200 * 800 * 4))
 
-    try await large(applet)
+    try await large(applet, alone: true)
 
     let started = send("zoom", ["scale": .number(1)], to: applet)
     let handle = try XCTUnwrap(started.handle)
