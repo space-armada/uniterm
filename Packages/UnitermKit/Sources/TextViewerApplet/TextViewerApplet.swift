@@ -31,6 +31,9 @@ import UniformTypeIdentifiers
 /// last good render on screen. A file caught half written can still parse, and the next write
 /// reloads again. A reload reads the stored path alone and never follows the bookmark, since
 /// an editor's save can move the path away for a moment.
+///
+/// An open the user chooses, from the panel or a drop, asks `checkSource` first. A file that cannot
+/// be opened then leaves the pane's source alone.
 @MainActor
 public final class TextViewerApplet: Applet, SourceReplacing {
   public let typeID = TextViewerDescription.typeID
@@ -588,19 +591,10 @@ public final class TextViewerApplet: Applet, SourceReplacing {
       case .success(let loaded):
         show(pdf: loaded.document, anchor: anchor)
 
-      case .failure(.read(.access(let error))):
-        fail(error.errorDescription ?? "The file could not be opened.", .unreadable)
+      case .failure(let error):
+        let (text, code) = Self.failure(of: error, fileName: name, limits: limits)
 
-      case .failure(.read(.tooLarge(_, let bytes, _))):
-        fail(limits.tooLargeMessage(fileName: name, bytes: bytes, format: format), .tooLarge)
-
-      case .failure(.notAPDF):
-        fail("\u{201C}\(name)\u{201D} is not a PDF that macOS can open.", .unsupported)
-
-      case .failure(.locked):
-        fail(
-          "\u{201C}\(name)\u{201D} is password-protected, which the text viewer does not open.",
-          .unsupported)
+        fail(text, code)
       }
 
     case .rtf, .word97, .wordXML:
@@ -615,6 +609,99 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     case .unsupported(let description):
       fail(
         TextFormatRule.unsupportedMessage(fileName: name, description: description), .unsupported)
+    }
+  }
+
+  /// What the pane says, and the code a waiting command gets, for a PDF that did not load.
+  private static func failure(
+    of error: PDFLoadError, fileName name: String, limits: TextViewerLimits
+  )
+    -> (String, RemoteFailure)
+  {
+    switch error {
+    case .read(let read):
+      return failure(of: read, fileName: name, format: .pdf, limits: limits)
+
+    case .notAPDF:
+      return ("\u{201C}\(name)\u{201D} is not a PDF that macOS can open.", .unsupported)
+
+    case .locked:
+      return (
+        "\u{201C}\(name)\u{201D} is password-protected, which the text viewer does not open.",
+        .unsupported
+      )
+    }
+  }
+
+  /// What the pane says, and the code a waiting command gets, for a file that could not be read in
+  /// full.
+  private static func failure(
+    of error: FileReadError, fileName name: String, format: TextFormat, limits: TextViewerLimits
+  ) -> (String, RemoteFailure) {
+    switch error {
+    case .access(let error):
+      return (error.errorDescription ?? "The file could not be opened.", .unreadable)
+
+    case .tooLarge(_, let bytes, _):
+      return (limits.tooLargeMessage(fileName: name, bytes: bytes, format: format), .tooLarge)
+    }
+  }
+
+  /// Finds `file` and reads it the way a load does, as far as the pane's failures go: its format,
+  /// its size, and whether PDFKit or the file system accepts it. It drops what it read. The page
+  /// and the saved path stay as they were. A document that only the helper's decode or the
+  /// Markdown page rejects still shows that in the pane after the swap.
+  public func checkSource(_ file: URL, startDirectory: String) async throws {
+    let limits = settings.limits
+    let name = file.lastPathComponent
+
+    switch await SourceResolver.resolve(path: file.path, bookmark: nil) {
+    case .failure(let error):
+      throw SourceCheckFailure(error.errorDescription ?? "The file could not be opened.")
+
+    case .success(let resolved):
+      let found = resolved.file
+      let format = TextFormatRule.format(of: found)
+      var failure: (String, RemoteFailure)?
+
+      switch format {
+      case .pdf:
+        if case .failure(let error) = await PDFLoading.load(
+          path: found.path, limit: limits.maxPDFBytes)
+        {
+          failure = Self.failure(of: error, fileName: name, limits: limits)
+        }
+
+      case .rtf, .word97, .wordXML:
+        switch await Self.openForHelper(path: found.path) {
+        case .failure(let error):
+          failure = (error.errorDescription ?? "The file could not be opened.", .unreadable)
+
+        case .success(let opened):
+          if opened.size > limits.fileLimit(for: format) {
+            failure = (
+              limits.tooLargeMessage(fileName: name, bytes: opened.size, format: format), .tooLarge
+            )
+          }
+        }
+
+      case .markdown:
+        if case .failure(let error) = await MarkdownLoading.load(
+          path: found.path, limit: limits.maxMarkdownBytes, sentByProgram: false)
+        {
+          failure = Self.failure(of: error, fileName: name, format: format, limits: limits)
+        }
+
+      case .unsupported(let description):
+        failure = (
+          TextFormatRule.unsupportedMessage(fileName: name, description: description),
+          .unsupported
+        )
+      }
+
+      try Task.checkCancellation()
+
+      if let failure { throw SourceCheckFailure(failure.0) }
     }
   }
 
@@ -688,11 +775,10 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     guard generation == openGeneration, !closed else { return }
 
     switch result {
-    case .failure(.access(let error)):
-      fail(error.errorDescription ?? "The file could not be opened.", .unreadable)
+    case .failure(let error):
+      let (text, code) = Self.failure(of: error, fileName: name, format: .markdown, limits: limits)
 
-    case .failure(.tooLarge(_, let bytes, _)):
-      fail(limits.tooLargeMessage(fileName: name, bytes: bytes, format: .markdown), .tooLarge)
+      fail(text, code)
 
     case .success(let document):
       guard let view = await markdownView(limits: limits) else {

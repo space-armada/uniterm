@@ -11,6 +11,9 @@ import Theme
 /// reach the same path, which finds the file off the main thread and hands it to the session. The
 /// session reads it, also off the main thread, and the applet shows what it holds.
 ///
+/// An open the user chooses, from the panel or a drop, asks `checkSource` first. A file that cannot
+/// be opened then leaves the pane's source alone.
+///
 /// The description holds the file's path and bookmark, never its rows. `describe()` reads memory
 /// only.
 @MainActor
@@ -291,6 +294,24 @@ public final class DataViewerApplet: Applet, SourceReplacing {
     restoreWaitsForStart = false
 
     open(path: file.path, bookmark: nil, restoring: nil, sheet: nil, origin: .user)
+  }
+
+  /// Finds `file` and reads its first rows the way a load does, and drops them. A file that is
+  /// missing, unsupported, or does not parse from its start fails here, and the table stays. A
+  /// failure that only a later row reaches still shows in the pane after the swap.
+  public func checkSource(_ file: URL, startDirectory: String) async throws {
+    switch await SourceResolver.resolve(path: file.path, bookmark: nil) {
+    case .failure(let error):
+      throw TableLoadError(error)
+
+    case .success(let resolved):
+      let failure = await TableLoader.probe(
+        .file(resolved.file, sheet: nil), budget: budget, pageTarget: pageTarget)
+
+      try Task.checkCancellation()
+
+      if let failure { throw failure }
+    }
   }
 
   private func open(

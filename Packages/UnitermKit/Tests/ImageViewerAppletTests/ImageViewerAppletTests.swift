@@ -94,6 +94,31 @@ final class ImageViewerAppletTests: XCTestCase {
     XCTAssertFalse(applet.isRunningSomething)
   }
 
+  /// Catches an Open in This Pane that drops the pane's image when the chosen file is not an
+  /// image. The pane keeps showing its image and its saved path, and the status bar names the file.
+  func testAFailedOpenInThisPaneKeepsTheOldImageAndWarns() async throws {
+    let good = try ImageFixtures.write(
+      ImageFixtures.png(width: 400, height: 200), named: "shot.png", in: folder)
+    let bad = folder.appendingPathComponent("notes.txt")
+    try Data("not an image".utf8).write(to: bad)
+
+    let (applet, host) = make()
+
+    try applet.replaceSource(with: good, startDirectory: folder.path)
+    let opened = await showing(applet)
+    XCTAssertTrue(opened)
+
+    await applet.replaceSource(withChosen: bad).value
+
+    XCTAssertEqual(applet.phase, .showing)
+    XCTAssertEqual(applet.title, "shot.png")
+    XCTAssertEqual(applet.segments.first?.text, "400 \u{00D7} 200")
+    XCTAssertEqual(try ImageViewerDescription.decode(applet.describe()).path, good.path)
+
+    let warned = host.sent.contains { $0.level == .warning && $0.text.contains("notes.txt") }
+    XCTAssertTrue(warned, "\(host.sent)")
+  }
+
   /// Catches an image that does not fit the pane, or that is enlarged past its own size. A large
   /// image shrinks to the pane and keeps its aspect ratio, and a small one stays its own size.
   func testTheImageFitsThePaneAndASmallOneIsNeverEnlarged() async throws {
