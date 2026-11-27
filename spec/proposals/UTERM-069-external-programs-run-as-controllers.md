@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-26
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -416,12 +416,6 @@ None.
   An external program with host-launch permission could start `uniterm controller run` in a terminal pane it opened. If
   that run binds to the new tab, it gets tab-only trust without the external sheet. Not traced: whether a host launch
   records a tab session root. M1 checks it.
-- **Unanswered reviews fill the connection slots** — likelihood: medium, impact: high.
-  A review waits until the user answers or the program exits, and each waiting review holds one of the listener's 32
-  connection slots (`ScriptListener.swift:13`). A cron job that runs every minute, unanswered, fills them, and every
-  later script is refused, including the user's own in tabs. This happens today for untrusted runs and for clients
-  waiting on Grant Access, and external direct clients reach it too. Mitigation: a Deny refuses later runs of that
-  client without a review. The underlying bound is filed as a bug.
 - **Direct clients built before the declaration message** — likelihood: high, impact: low.
   An existing direct client sends a plain begin and no declaration. Under the new app it is refused at its first call.
   Mitigation: the refusal names the declaration message, under UTERM-063's rule that a stale program is refused by
@@ -607,10 +601,16 @@ None.
 - 2026-11-26: Review gate: kept all. The user confirmed reading the first pane's anchor as placement, not a UTERM-064
   target; accepted the focus risk while uniterm is active; kept asking once and then remembering external coverage; and
   kept direct clients in a tab as they are.
-- 2026-11-26: Removed the keyboard-focus risk. It described a user's own trusted program opening a pane while they
-  type, which is not a design exposure, and the user said such cases are not the design's to prevent.
+- 2026-11-26: Removed the keyboard-focus risk. It needed a program the user trusted to open a pane at the moment the
+  user types in uniterm. A program started in a tab already behaves this way, so external programs add no exposure,
+  and the design does not guard against the user's own trusted program doing what it was trusted to do.
 - 2026-11-26: Accepted after its review. ADR candidate: every program's source is a tab, a pane, or external, and origin
   never grants anything. Declined: ADR-14 already decides what a controller may reach.
+- 2026-11-27: Removed the risk that unanswered reviews fill the connection slots. The slots fill only when the user's
+  own program is started 32 or more times and every review it makes is left unanswered in Pending Requests, where the
+  user sees each one and can deny it. That is the user misconfiguring their own program, which the design does not
+  guard against. The bug filed for it, `20261126-unanswered-reviews-fill-connection-slots`, is rejected for that
+  reason.
 
 ## References
 
