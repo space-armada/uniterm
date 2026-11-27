@@ -2,7 +2,8 @@
 
 **Status:** open
 **Triaged:** 2026-11-15 (not reproducible; see investigation notes)
-**Validation:** not confirmed. Seen once in a full package run. It passed alone and in another full run.
+**Validation:** not confirmed. Seen twice in full package runs, on 2026-11-14 and 2026-11-27. It passed alone and in
+another full run.
 
 ## Observed
 
@@ -45,3 +46,10 @@ Triage run on 2026-11-15.
 - This is a hypothesis about test synchronization. A product race is not ruled out.
 - Next step: run the full package suite several times in the original order and note whether the failure recurs.
   If it does, make the test wait for the read itself, for example by having the fixture signal after the read begins.
+
+## Second sighting
+
+On 2026-11-27 the test failed again during `make ci-package`, in a landing worktree for a batch of data viewer commits.
+That batch does not touch ScriptHost. The same two symptoms showed: the first Ctrl-C ended the call, and standard error
+read `stuck-in-c.janet: interrupted`. The watchdog state also read `reaped` where the test expects `sent`
+(`ScriptLimitsTests.swift:137`). Every other package test passed in that run.
