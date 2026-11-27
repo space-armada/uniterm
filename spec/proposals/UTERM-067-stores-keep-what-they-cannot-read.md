@@ -70,24 +70,31 @@ Rationale: ADR-18 P4. An approval acted on with one of its scopes dropped grants
 approved as a set. The cost is that an older build gives up the readable scopes of that approval, and asks again for
 them.
 
+### `files.json` folds into `policy.json`
+
+Decision: script-file approvals become entries in `policy.json`, each naming its own artifact kind, as UTERM-066's
+driver approvals do. The first launch of a build with this change moves every entry from `files.json` into
+`policy.json` once, then removes `files.json`. Entries it cannot read move over unchanged, per ADR-18 P2.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: `files.json` exists only so older builds keep their controller approvals, and ADR-18 removes that reason.
+One store keeps one lock, one set of kept-aside copies, and one place where entries name their artifact kind. uniterm
+is pre-v1, so an older build that later finds no `files.json` simply has no script-file approvals.
+
+### The window shows a count of kept entries
+
+Decision: when a store holds entries this build cannot read, the Controllers & Permissions window shows one line under
+the approvals list: "N approvals from a newer version of uniterm are kept, and do not apply here."
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: ADR-18 P5 asks only that the user can see kept entries exist. A row per entry would show parts of an entry
+this build cannot read, such as its artifact kind, which ADR-18 P4 keeps whole and unread.
+
 ## Design Decisions (Open)
 
-### Folding `files.json` back into `policy.json`
-
-`files.json` exists only so older builds keep their controller approvals. ADR-18 removes that reason. UTERM-066 already
-puts driver approvals in `policy.json`, each naming its artifact kind.
-
-- A. Fold it in. Script-file approvals become entries in `policy.json` with their own artifact kind. A launch of the new
-  build moves existing entries over once.
-- B. Keep both files. The window already merges them. Nothing moves.
-
-### How the window shows kept entries
-
-ADR-18 P5 asks that the user can see a store holds entries this build cannot read.
-
-- A. A line under the approvals list: "N approvals from a newer version of uniterm are kept, and do not apply here."
-- B. A row per kept entry, showing whatever this build can read of it, such as its artifact kind, marked as not
-  applying.
+None.
 
 ## Risks
 
@@ -119,7 +126,9 @@ ADR-18 P5 asks that the user can see a store holds entries this build cannot rea
 - A save from this build writes every kept entry back byte for byte, and a newer build reads it again
 - No file is moved aside or left unwritable because of one entry this build cannot read
 - A file this build cannot read as a whole, such as one that is not JSON, still grants nothing and is kept aside
-- The Controllers & Permissions window shows that kept entries exist
+- The Controllers & Permissions window shows the count of kept entries
+- The first launch moves every `files.json` entry into `policy.json`, kept entries unchanged, and removes `files.json`.
+  A script-file approval still covers only script-file runs
 - Two instances of different builds saving the same file keep each other's entries
 
 ## Decision Log
@@ -127,6 +136,9 @@ ADR-18 P5 asks that the user can see a store holds entries this build cannot rea
 - 2026-11-26: Filed from UTERM-066's review. The user chose ADR-18's rule, a new ADR for it, and this proposal to
   apply it to the trust stores and check every other store. The user noted that uniterm's formats may break freely
   before v1, and that ADR-18 binds from v1.
+- 2026-11-26: Settled both open questions, on the user's instruction to keep going. `files.json` folds into
+  `policy.json`, moved once at first launch. The window shows a count of kept entries. Turned down: keeping two files,
+  and a row per kept entry, which would read parts of an entry ADR-18 P4 keeps whole. (autonomous)
 
 ## References
 
