@@ -106,7 +106,7 @@ extension MainWindowController {
     let palette = contentController.commandPalette
     let current = paletteCandidates(target: target).map(\.entry)
 
-    palette.setEntries(PaletteListing.updatedInPlace(palette.entries, from: current))
+    palette.updateEntriesInPlace(PaletteListing.updatedInPlace(palette.entries, from: current))
   }
 
   /// Every tab and every command the palette can list, in their natural order, before any query
@@ -205,6 +205,10 @@ extension MainWindowController {
 
   /// Runs the entry the user chose. The palette hides and gives the keyboard back first, so a
   /// launcher, a sheet, or a window that the command opens ends up holding it.
+  ///
+  /// A command that can no longer run leaves the palette up with its row dimmed in place, and
+  /// says so. That is checked before the palette hides, because hiding first would leave the user
+  /// with nothing to retry from. A gone pane still hides, and the registry says why.
   private func choose(_ entry: PaletteEntry) {
     guard let target = paletteTarget else { return }
 
@@ -212,8 +216,19 @@ extension MainWindowController {
     case .command(let id):
       let context = CommandContext(controller: self, pane: target)
 
+      guard commands.isAvailable(id, in: context) else {
+        updateCommandPaletteInPlace()
+        postCommandUnavailable(for: entry.title)
+        return
+      }
+
       hideCommandPalette(restoringFocus: true)
-      commands.run(id, in: context)
+
+      // Giving the keyboard back moves focus, which a command's check may read. A refusal here is
+      // rare, but it is never silent.
+      if commands.attempt(id, in: context) == .unavailable {
+        postCommandUnavailable(for: entry.title)
+      }
 
     case .tab(let pane, let tab):
       chooseTab(pane: pane, tab: tab, title: entry.title)

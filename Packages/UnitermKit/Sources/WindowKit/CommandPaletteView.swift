@@ -90,7 +90,15 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
 
   /// The entry Return would run. It is an ID, so a list that re-sorts keeps the same entry
   /// highlighted.
-  private(set) var selection: PaletteEntryID?
+  private(set) var selection: PaletteEntryID? {
+    didSet {
+      if selection != nil { dimmedSelection = nil }
+    }
+  }
+
+  /// The row that was selected when it dimmed in place. Nothing is selected then, and Up and Down
+  /// move from where this row stands rather than from an end of the list.
+  private var dimmedSelection: PaletteEntryID?
 
   /// What the chip narrows the list to. Like the text, it lasts until the palette hides.
   private(set) var filter: PaletteFilter?
@@ -360,18 +368,40 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
   /// goes back to where the user was. With no other tab it is the first other entry that can run.
   func setEntries(_ entries: [PaletteEntry]) {
     self.entries = entries
+    dimmedSelection = nil
 
     // The same entry stays highlighted, wherever it sorted to.
     if selection.map({ id in !entries.contains { $0.id == id && $0.isSelectable } }) ?? true {
       selection = Self.firstChoice(in: entries, emptyQuery: PaletteRanking.isEmpty(query))
     }
 
+    showRows()
+    scrollToSelection()
+  }
+
+  /// Brings the rows on show up to date where they stand. The caller keeps every row in its
+  /// place, and this never picks a row on its own.
+  ///
+  /// A selected row that dims loses the selection, and no row takes it, so Return runs nothing.
+  /// Moving the selection to another row would make a second Return run a command the user never
+  /// looked at.
+  func updateEntriesInPlace(_ entries: [PaletteEntry]) {
+    self.entries = entries
+
+    if let id = selection, !entries.contains(where: { $0.id == id && $0.isSelectable }) {
+      selection = nil
+      dimmedSelection = id
+    }
+
+    showRows()
+  }
+
+  private func showRows() {
     let rows = min(entries.count, Self.maximumVisibleRows)
     resultsHeight?.constant = CGFloat(rows) * Self.rowHeight + 2 * Self.resultsPadding
     results.isHidden = !isActive || entries.isEmpty
 
     table.reloadData()
-    scrollToSelection()
   }
 
   private static func firstChoice(in entries: [PaletteEntry], emptyQuery: Bool) -> PaletteEntryID? {
@@ -388,6 +418,7 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
   func reset() {
     field.stringValue = ""
     selection = nil
+    dimmedSelection = nil
     filter = nil
     updateChip()
     entries = []
@@ -400,6 +431,13 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
   }
 
   private func moveSelection(by step: Int) {
+    if selection == nil, let dimmed = dimmedSelection,
+      let row = entries.firstIndex(where: { $0.id == dimmed })
+    {
+      moveSelection(from: row, by: step)
+      return
+    }
+
     let enabled = entries.filter(\.isSelectable)
 
     guard !enabled.isEmpty else { return }
@@ -407,7 +445,21 @@ final class CommandPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     let current = enabled.firstIndex { $0.id == selection } ?? (step > 0 ? -1 : enabled.count)
     let next = min(max(current + step, 0), enabled.count - 1)
 
-    selection = enabled[next].id
+    select(enabled[next].id)
+  }
+
+  /// Selects the first row that can run beyond `row` in the direction of `step`. With none on that
+  /// side, nothing is selected, as Down on the last row moves nowhere.
+  private func moveSelection(from row: Int, by step: Int) {
+    let beyond = step > 0 ? Array(entries[(row + 1)...]) : Array(entries[..<row].reversed())
+
+    guard let next = beyond.first(where: \.isSelectable) else { return }
+
+    select(next.id)
+  }
+
+  private func select(_ id: PaletteEntryID) {
+    selection = id
     table.reloadData()
     scrollToSelection()
   }

@@ -48,6 +48,17 @@ public struct AppCommandHooks {
   }
 }
 
+/// What came of asking the registry to run a command.
+enum CommandOutcome: Equatable {
+  case ran
+
+  /// The command is unknown, or its own check says it cannot run now.
+  case unavailable
+
+  /// A pane-scoped command whose pane is gone. The window has already said so.
+  case paneGone
+}
+
 /// Every command uniterm runs, shared by its key bindings, its menus, and the palette.
 ///
 /// One registry serves the whole app, so command recency is one list for the app. Recency lives in
@@ -210,11 +221,18 @@ public final class CommandRegistry {
   /// window says so.
   @discardableResult
   func run(_ id: CommandID, in context: CommandContext) -> Bool {
-    guard let command = command(id), isAvailable(id, in: context) else { return false }
+    attempt(id, in: context) == .ran
+  }
+
+  /// Runs a command as `run` does, and says why it did not run. Only the gone-pane refusal posts a
+  /// message here. A caller that wants the unavailable refusal said posts it itself, since a menu
+  /// item or a key never offers an unavailable command in the first place.
+  func attempt(_ id: CommandID, in context: CommandContext) -> CommandOutcome {
+    guard let command = command(id), isAvailable(id, in: context) else { return .unavailable }
 
     if command.scope == .pane, !Self.paneExists(context) {
       context.controller?.postPaneGone(for: command.title)
-      return false
+      return .paneGone
     }
 
     command.run(context)
@@ -223,7 +241,7 @@ public final class CommandRegistry {
       remember(id)
     }
 
-    return true
+    return .ran
   }
 
   /// Runs an app command when there is no window to run it in. A command that needs a window or

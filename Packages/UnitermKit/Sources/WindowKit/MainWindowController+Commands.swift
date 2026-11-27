@@ -46,6 +46,13 @@ extension MainWindowController {
         + "Focus a pane and try again."
     )
   }
+
+  /// The command's own check gives no reason, so the message cannot give one either.
+  func postCommandUnavailable(for title: String) {
+    statusCenter.post(
+      level: .warning,
+      text: "\u{201C}\(title)\u{201D} did not run, because it is not available now.")
+  }
 }
 
 // MARK: Actions

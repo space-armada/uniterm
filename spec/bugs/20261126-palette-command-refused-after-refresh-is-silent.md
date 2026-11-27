@@ -1,8 +1,8 @@
 # A palette command that becomes unavailable after the list was built does nothing, silently
 
-**Status:** open. Confirmed by reading the code, not by a test.
-
+**Status:** fixed 2026-11-26
 **Estimate:** medium; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
+**Fixed:** 2026-11-26
 
 ## Observed
 
@@ -78,3 +78,22 @@ below it, and Up the first above it. The same selection rule holds for any selec
 
 The recorded decisions stand: palette rows only, and `run` reports why it refused through an enum. A gone pane keeps
 its own message. The regression test lives in `CommandPaletteTests.swift`.
+
+## Fix note
+
+Two new tests in `Packages/UnitermKit/Tests/WindowKitTests/CommandPaletteTests.swift` failed on the unfixed code.
+`testChoosingACommandThatBecameUnavailableKeepsThePaletteUpAndSaysWhy` saw the palette hide with no message.
+`testASelectedRowThatDimsInPlaceLeavesNoSelectionAndArrowsMoveFromIt` saw the selection jump to the first runnable row,
+so Return ran Settings. `testChoosingACommandWhosePaneClosedHidesAndPostsOneMessage` pins the gone-pane path to one
+message.
+
+- `CommandRegistry.swift`: `attempt` returns a `CommandOutcome` of ran, unavailable, or pane gone. `run` wraps it and
+  keeps its Bool, so menu, key, and status-bar dispatch are unchanged.
+- `MainWindowController+Palette.swift`: `choose` checks availability before it hides. A refused command row keeps the
+  palette open, updates the rows in place, and posts the warning. A gone pane still hides, and the registry posts its
+  one message. A refusal that only shows up after the hide also posts the warning.
+- `MainWindowController+Commands.swift`: `postCommandUnavailable` posts `"<title>" did not run, because it is not
+  available now.` at warning level, beside `postPaneGone`.
+- `CommandPaletteView.swift`: in-place updates go through `updateEntriesInPlace`, which never picks a row. A selected
+  row that dims loses the selection, and Return runs nothing. Down then selects the first runnable row below it, and Up
+  the first above it. With none on that side, nothing is selected. A full re-sort after typing keeps its old rule.
