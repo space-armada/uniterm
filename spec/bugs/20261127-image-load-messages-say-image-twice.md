@@ -1,6 +1,9 @@
 # The image viewer's load messages say "image" twice
 
-**Status:** open
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27
+**Estimate:** small; no open design decisions. Make `formatName` a short name with no noun, since it is used only in
+these three messages and a type that falls back to its extension would read badly with the noun dropped instead.
 
 ## Observed
 
@@ -34,3 +37,16 @@ Choose how the messages read once. The options are to drop the trailing "image" 
 a fallback name reads "This PNG has no usable size", or to make `formatName` return a short name with no noun, such as
 the type's extension, and keep "image" in the messages. A test checks each message against a type whose description
 ends in "image" and one that falls back to its extension.
+
+## Fix note
+
+Fixed on 2026-11-27 with the second option.
+
+- `UTType.formatName` in `ImageDecoding/SourceFile.swift` now returns the uppercased file extension, and the identifier
+  when the type has none. It no longer reads the localized description. Nothing else used the name, so only the three
+  messages change. A corrupt PNG now reads "This PNG image has no usable size."
+- `PixelRendererTests.testALoadFailureNamesTheFormatWithTheWordImageOnce` feeds a PNG with only its signature and a
+  truncated PNG through the open and the render. It failed before the fix on "This PNG image image has no usable size."
+- Not covered: both inputs reach the "no usable size" message. The "damaged" and "could not be decoded" messages share
+  the fix but have no test, since no input was found that reaches them.
+- The fallback to the identifier is untested.
