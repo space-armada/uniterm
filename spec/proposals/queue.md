@@ -15,6 +15,9 @@
 | UTERM-042 M1-M3 | UTERM-041 M2 | M2 builds on UTERM-041 M1's tab bar and markers. M3 builds on its chip. M1 needs neither |
 | UTERM-054 M6 | None | Split from M1-M5: M6 amends UTERM-019 and must land before UTERM-019 M1 ships |
 | UTERM-054 M1-M4 | None | Split from M5 and M6: M1-M4 need nothing from UTERM-019. M2 builds the full-page route if UTERM-019 M4 has not |
+| UTERM-018 M1-M2 | None | Split from M3-M5: M1 builds the walk and the shared metric that UTERM-061 and UTERM-064 reuse. M2's links open browser tabs, which need no viewer tabs |
+| UTERM-069 M1-M2 | UTERM-063 M2, UTERM-067 M2, UTERM-054 M4 | Placed before UTERM-019 so every program-facing row builds on the three source kinds and without Grant Access. Needs UTERM-054 M4's terminal tab owners for a tab source's scope |
+| UTERM-064 M1 | UTERM-069, UTERM-018 M1, UTERM-054 M4, UTERM-063 M2 | Placed before UTERM-019 and every program-facing row, so they build on named targets and opaque identities once. Uses UTERM-018 M1's nearest-pane metric, moved up for it. UTERM-062 waits on it |
 | UTERM-019 M1-M2 | None | Split from M3: M1-M2 need nothing from UTERM-041 or UTERM-042 |
 | UTERM-019 M3 | UTERM-041 M1, UTERM-042 M2 | Split from M1-M2: M3 publishes the run-end marker. It needs UTERM-041 M1's slot and UTERM-042 M2's "Rebuild Tab" menu, so the marker never ships without a way to rebuild the tab |
 | UTERM-054 M5 | UTERM-019 M3 | Split from M1-M4: M5 needs UTERM-019 M3's handles, read-result, and byte type |
@@ -34,7 +37,6 @@
 | UTERM-066 M2-M3 | UTERM-066 M1, UTERM-067 M2, UTERM-028 M1, UTERM-055 M1, UTERM-065 M2 | Split from M1: M2 remembers the command, capture, and read-scope powers those rows build, and stores driver approvals in UTERM-067 M2's one store. M3's verified scripts keep remembered approvals, so M3 follows M2 |
 | UTERM-029 M1-M3 | UTERM-024 M2, UTERM-025, UTERM-026, UTERM-030 M2, UTERM-032 M1 | Extends the presenter with UTERM-026's notes window, UTERM-030 M2's slide images, and UTERM-032 M1's input file |
 | UTERM-043 M2 | UTERM-019 M6, UTERM-024, UTERM-028, UTERM-041, UTERM-042 | Split from M1: each check runs when the feature it names has landed. UTERM-019 M3 precedes M6 in its rows |
-| UTERM-018 M1-M2 | None | Split from M3-M5: M1 builds the walk and the shared metric that UTERM-061 and UTERM-064 reuse. M2's links open browser tabs, which need no viewer tabs |
 | UTERM-061 M1-M2 | None | Reuses the shared nearest-pane metric and tie rule that UTERM-018 M1 builds |
 | UTERM-040 M1-M3 | None | |
 | UTERM-039 M1 | None | |
@@ -48,7 +50,7 @@
 | UTERM-068 M1-M4 | UTERM-053 M1 | Per-tab rule installation builds on UTERM-053 M1's tab work, so it never grows with the tab count |
 | UTERM-059 M1 | UTERM-052 M2 | Needs UTERM-052 M2's saved-state revision. Placed after UTERM-053 M1, so every write to the terminal's tabs reaches the one place the revision observers watch |
 | UTERM-058 M1-M3 | UTERM-053 M1 | M1 measures after UTERM-053 M1's read-through view. Placed after UTERM-059 M1, so M2's terminal ID map joins a terminal whose writes already move the revision |
-| UTERM-062 M1-M6 | UTERM-063, UTERM-064 | Blocked until UTERM-064 is accepted and queued. UTERM-006 M5 must name a tab before it is built, which UTERM-065 carries |
+| UTERM-062 M1-M6 | UTERM-063, UTERM-064 | UTERM-006 M5 must name a tab before it is built, which UTERM-065 carries |
 | UTERM-006 M5 | UTERM-065 M2, UTERM-062 M4 | Split from M1-M4: a driver's `show` and stepping need UTERM-065's read grant, and name a tab, so M5 follows UTERM-062 M4's image viewer tabs |
 | UTERM-018 M3-M5 | UTERM-062 M5 | Split from M1-M2: a routed open adds a tab under UTERM-062, so these start once every viewer takes an open as a tab |
 | UTERM-049 M1-M3 | UTERM-018 M5 | M2 routes through UTERM-018's walk when no pane takes a tab file in place. M3's program open uses UTERM-018 M5's script file open |

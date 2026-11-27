@@ -333,6 +333,7 @@ None.
   never built from parts. Declined: ADR-16 covers naming places, and ADR-02's amendment covers reuse. The ADR-02
   amendment text still waits for the user's approval, and M1 waits with it.
 - 2026-11-27: The user approved the ADR-02 amendment text. M1 applies it.
+- 2026-11-27: Scheduled as M1 in queue.md, after UTERM-069 M1-M2 and before UTERM-019 M1-M2.
 
 ## References
 

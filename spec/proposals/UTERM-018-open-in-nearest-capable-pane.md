@@ -691,6 +691,8 @@ and the path-reading power, and after UTERM-062 M5, so a script's file open adds
 - 2026-11-27: Amended for UTERM-064, which removes every target picked when a program's call arrives. A script or
   controller open no longer walks: it names the existing pane it wants, found with the find query, or opens a new pane
   by placement. The user's own opens keep the walk. M5 gained the check.
+- 2026-11-27: Its M1-M2 row moved up to follow UTERM-054 M1-M4, so UTERM-064, which uses M1's nearest-pane metric,
+  lands before the program-facing rows.
 
 ## References
 
