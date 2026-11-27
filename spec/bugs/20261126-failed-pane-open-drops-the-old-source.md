@@ -1,9 +1,8 @@
 # A failed Open in This Pane drops the pane's old file instead of keeping it
 
-**Status:** open
-**Validation:** not confirmed in the running app; traced in the code of all five viewers
-
-**Estimate:** medium. Each viewer needs the same change, and the fix has one design call. See "Fix".
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27
+**Estimate:** medium. Four viewers took the same change, and the design call was settled with the user.
 
 ## Observed
 
@@ -57,3 +56,31 @@ destroying the pane's file and its saved description.
 
 UTERM-062 plans to have every open into a viewer pane add a tab. That proposal changes where a failed open lands, so
 the fix and that proposal should agree on it.
+
+## Fix note
+
+Fixed on 2026-11-27. Open in This Pane and a drop now check the chosen file before the pane gives up its source.
+
+- `SourceReplacing` has a new async `checkSource(_:startDirectory:)`. It reads the file far enough to know the pane can
+  open it, and throws why when it cannot. It changes nothing the pane shows or saves.
+- `replaceSource(withChosen:)` checks first, then replaces. A failure posts the warning and leaves the old file, its
+  content, and its saved description alone. A swap that a later choice superseded says nothing.
+- `SourceSwap` now waits for the check, tells the swap whether it is still current, and cancels the swap it supersedes.
+- Data viewer: `TableLoader.probe` reads until the first rows arrive or the load ends. It catches a missing, unsupported,
+  or unparsable file.
+- Image viewer: the check runs the same source load. It catches a file that is not an image, or cannot be read.
+- Text viewer: the check covers the format, the size cap, and the PDF or Markdown read. The PDF and Markdown failure
+  messages are now shared with the load.
+- Map viewer: the check reads and parses the file as a load does, and drops the result.
+
+Files: `AppletKit/SourceReplacing.swift`, `AppletKit/SourceSwap.swift`, `TableData/TableLoader.swift`, and the four
+viewers' applets. Each viewer's test target has a regression test that opens a good file, swaps in a bad one, and checks
+the old source, the description, and the warning. Each failed on the old code because the pane showed the bad file and
+described it.
+
+What stays open. A failure that only the full load reaches still shows in the pane after the swap, as before. Examples
+are a corrupt image the helper cannot decode, a document the helper rejects, and a JSON error far into a big table. The
+sync `replaceSource(with:)` is unchanged, so a script's send and a new pane's factory still replace at once.
+
+UTERM-062 will reshape where a failed open lands, because every open into a viewer pane will add a tab. This fix keeps
+the old file in the pane for now.
