@@ -1,8 +1,8 @@
 # UTERM-044: Shard CI's UI Tests Across macOS Runners
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-21
-**Updated:** 2026-11-25
+**Updated:** 2026-11-27
 
 ## Impacts
 
@@ -411,12 +411,30 @@ All clock times here are UTC. Local time in America/Los_Angeles is 8 hours earli
 
 ### M3: A failed shard reruns alone on CI
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 Split from M2 on 2026-11-25; see Decision Log.
 
 - Rerunning a failed job reruns only the failed shard
 - The measured length of a one-shard rerun is recorded in the As built block
+
+**As built:**
+
+All clock times here are UTC, on 2026-11-27. Lengths are minutes and seconds.
+
+- The proof is run 46055769038, the pull request run for "Keep the test runner's job notices off standard error". In
+  attempt 1, `app (1)` failed and the other two shards passed. The one failing test was
+  `LauncherUITests.testEscapeClosesTheEmptyPane`, among 68 executed. Its entry in `spec/flaky-tests.md` logs the
+  sighting.
+- "Re-run failed jobs" started attempt 2 at 19:42:43. Only `app (1)` and `ci` ran again. The attempt lists all seven
+  jobs, but `app (0)`, `app (2)`, `package`, `ghostty-offline`, and `changes` carry attempt 1's start and end times.
+- The rerun shard's job ran from 19:45:09 to 19:56:46, which is 11:37. Its setup took 0:22 and its shard step took
+  11:10, build and listing included. It executed the same 68 tests with 0 failures.
+- The whole rerun took 14:12, from the attempt's start to the end of `ci` at 19:56:55. The shard job started 2:26 after
+  the attempt did.
+- The measured 11:37 sits inside the 8 to 12 minutes the three-shard decision derived from M2's shard job lengths.
+- The first failed shard on CI was `app (0)` of run 46052402044, earlier the same day. Nobody reran it. A new push
+  replaced it, so it proves nothing about reruns.
 
 ## Decision Log
 
@@ -480,6 +498,8 @@ Split from M2 on 2026-11-25; see Decision Log.
   derived from the shard job length and compared against an estimate. The rerun's own length waits on M3. "Near 234
   tests" under Leaves undone now reads "Near 395 tests". M2 measured the crossover at about 395 tests, with a range of
   352 to 450. The decision itself, three shards, stands. (run best guess)
+- 2026-11-27: M3 finished from run 46055769038, whose failed `app (1)` shard reran alone in 11:37. Every milestone is
+  finished, so the status is implemented. The user chose to close M3 from that run.
 
 ## References
 
