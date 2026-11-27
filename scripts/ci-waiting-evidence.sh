@@ -5,9 +5,11 @@ set -euo pipefail
 # test after its fix lands, a failure of one rare flake, or a job that reaches its time limit. This
 # reports each of them from GitHub, so nobody rereads CI by hand to learn that nothing changed.
 #
-# The clean count is a floor, not the count itself. It counts only runs created after the fix
-# merged, and it lets every failure of the test break the streak. The closing rule in
-# spec/flaky-tests.md decides the real count, and may count more.
+# The clean count is an estimate, not the count itself. It counts only runs created after the fix
+# merged, and it lets every failure of the test break the streak. It cannot judge a job whose log
+# GitHub no longer serves, such as a cancelled one, so it lists those instead. The closing rule in
+# spec/flaky-tests.md decides the real count. FIRED means the estimate has reached the count, and
+# the recount by that rule is due.
 #
 # Finished runs never change, so each answer from GitHub is kept under .build and read once.
 
@@ -34,15 +36,18 @@ fail() {
   exit 1
 }
 
-# Prints every page of a list endpoint through one filter. The path already holds a query.
+# Prints every page of a list endpoint through one filter. The path already holds a query. The
+# list filter names the page's items, so an empty page ends the walk. A page whose items all fail
+# the filter must not end it.
 pages() {
-  local path="$1" filter="$2" page=1 out
+  local path="$1" list="$2" filter="$3" page=1 out
 
   while :; do
-    out="$("$gh" api "$path&per_page=100&page=$page" --jq "$filter")" || fail "Could not read $path from GitHub."
-    [[ -n "$out" ]] || break
+    out="$("$gh" api "$path&per_page=100&page=$page" --jq "\"#\\($list | length)\", ($filter)")" \
+      || fail "Could not read $path from GitHub."
+    [[ "${out%%$'\n'*}" != "#0" ]] || break
 
-    printf '%s\n' "$out"
+    sed 1d <<<"$out"
     page=$((page + 1))
   done
 }
@@ -60,7 +65,7 @@ test_step_limit() {
 wheel_landed_at() {
   local found sha date merged
 
-  found="$(pages "repos/$repo/commits?since=$since" \
+  found="$(pages "repos/$repo/commits?since=$since" . \
     ".[] | select(.commit.message | startswith(\"$wheel_subject\")) | \"\(.sha) \(.commit.committer.date)\"")"
   [[ -n "$found" ]] || return 0
 
@@ -129,8 +134,9 @@ landed="$(wheel_landed_at)"
 : >"$scratch/stall"
 : >"$scratch/limit"
 : >"$scratch/unread"
+: >"$scratch/wheel-unread"
 
-pages "repos/$repo/actions/runs?status=completed&created=%3E%3D$since" \
+pages "repos/$repo/actions/runs?status=completed&created=%3E%3D$since" .workflow_runs \
   '.workflow_runs[] | select(.name == "ci") | "\(.id) \(.run_attempt) \(.created_at)"' >"$scratch/runs"
 
 while read -r run attempts created; do
@@ -170,6 +176,9 @@ while read -r run attempts created; do
 
       if ! lines="$(job_test_lines "$job")"; then
         echo "$where" >>"$scratch/unread"
+        if [[ "$holds_wheel" == true ]]; then
+          echo "$where, $conclusion" >>"$scratch/wheel-unread"
+        fi
         continue
       fi
 
@@ -200,11 +209,15 @@ echo "Clean runs of the launcher scroll test since the wheel change landed:"
 if [[ -z "$landed" ]]; then
   echo "  WAITING: 0 of $wheel_count. \"$wheel_subject\" has not reached main."
 elif [[ "$streak" -ge "$wheel_count" ]]; then
-  echo "  FIRED: at least $streak of $wheel_count, since it landed at $landed."
+  echo "  FIRED: about $streak of $wheel_count, since it landed at $landed. Recount by the closing rule."
 else
-  echo "  WAITING: at least $streak of $wheel_count, since it landed at $landed."
+  echo "  WAITING: about $streak of $wheel_count, since it landed at $landed."
 fi
 printf '%s' "$breaks"
+if [[ -s "$scratch/wheel-unread" ]]; then
+  echo "  Not judged, since GitHub serves no log. A job cut off after the test started breaks the streak:"
+  sed 's/^/    /' "$scratch/wheel-unread"
+fi
 
 echo "Failures of the remapped shortcut test on CI since $since:"
 if [[ -s "$scratch/stall" ]]; then
@@ -223,6 +236,6 @@ else
 fi
 
 if [[ -s "$scratch/unread" ]]; then
-  echo "Logs GitHub would not serve, so these jobs are not counted above:"
+  echo "Logs GitHub would not serve, so these jobs are not read above:"
   sed 's/^/  /' "$scratch/unread"
 fi

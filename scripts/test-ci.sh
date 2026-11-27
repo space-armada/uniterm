@@ -644,8 +644,10 @@ set -euo pipefail
 [[ "$1" == api ]] || exit 2
 path="${2#repos/example/repo/}"
 case "$path" in
-  commits\?*page=1) file=commits.json ;;
-  commits\?*) file=empty-list.json ;;
+  commits\?*)
+    file="commits-${path##*page=}.json"
+    [[ -f "$FAKE_EVIDENCE/$file" ]] || file=empty-list.json
+    ;;
   commits/*/pulls) file=pulls.json ;;
   actions/runs\?*page=1) file=runs.json ;;
   actions/runs\?*) file=empty-runs.json ;;
@@ -688,7 +690,8 @@ wheel="LauncherUITests testAShortPaneKeepsTheFilterBoxAndScrollsToTheLastEntry"
 shortcut="ShortcutOwnershipUITests testARemapOntoAnAppletKeyWinsAndWarnsOnce"
 printf '[]' >"$evidence/empty-list.json"
 printf '{"workflow_runs":[]}' >"$evidence/empty-runs.json"
-printf '[]' >"$evidence/commits.json"
+printf '[{"sha":"def","commit":{"message":"Another change","committer":{"date":"2026-11-27T05:00:00Z"}}}]' \
+  >"$evidence/commits-1.json"
 printf '[{"merged_at":"2026-11-27T10:00:00Z"}]' >"$evidence/pulls.json"
 printf '{"artifacts":[]}' >"$evidence/artifacts-3.json"
 printf '      - id: tested\n        timeout-minutes: 5\n      - id: test\n        timeout-minutes: 38\n' \
@@ -744,13 +747,13 @@ expect_evidence "a wheel change that has not landed counts nothing" "WAITING: 0 
 expect_evidence "a shortcut test failure fires before the wheel change lands" "run 1 attempt 1, app (0)"
 
 printf '[{"sha":"abc","commit":{"message":"Send every UI test wheel through one settled call\\n\\nBody","committer":{"date":"2026-11-27T04:00:00Z"}}}]' \
-  >"$evidence/commits.json"
-expect_evidence "the count starts at the merge, restarts at a failure, and skips a carried job" \
-  "WAITING: at least 2 of 33, since it landed at 2026-11-27T10:00:00Z."
+  >"$evidence/commits-2.json"
+expect_evidence "the count finds a wheel change behind a page of newer commits, starts at its merge, restarts at a failure, and skips a carried job" \
+  "WAITING: about 2 of 33, since it landed at 2026-11-27T10:00:00Z."
 expect_evidence "a failure that breaks the streak is named" "failed in run 2 attempt 1, app (1)"
 expect_evidence "a job at the test step's limit fires and names its missing upload" \
   "run 3 attempt 1, app (0): the test step ran 38 minutes, and ui-test-results-shard-0-attempt-1 is missing"
-expect_evidence "a log GitHub no longer serves is listed, not counted" "Logs GitHub would not serve"
+expect_evidence "a job with no log is listed under the count, not judged" "    run 3 attempt 1, app (0), cancelled"
 
 printf '{"artifacts":[{"name":"ui-test-results-shard-0-attempt-1"}]}' >"$evidence/artifacts-3.json"
 expect_evidence "a job at the limit names its upload" "ui-test-results-shard-0-attempt-1 was uploaded"
