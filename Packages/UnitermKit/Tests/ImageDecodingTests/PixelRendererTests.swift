@@ -351,6 +351,34 @@ final class PixelRendererTests: XCTestCase {
     }
   }
 
+  /// Catches a load failure that names the format with the word "image" twice, as "This PNG image
+  /// image has no usable size". A PNG with only its signature fails on its size, and a truncated PNG
+  /// fails on the open or the decode. Each message must read "This PNG image ...".
+  func testALoadFailureNamesTheFormatWithTheWordImageOnce() throws {
+    let signature = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    let noSize = signature + Data(repeating: 0xAB, count: 64)
+    let truncated = Data(ImageFixtures.png().prefix(ImageFixtures.png().count / 3))
+
+    var messages: [String] = []
+
+    for bytes in [noSize, truncated] {
+      do {
+        let source = try open(bytes)
+
+        _ = try PixelRenderer.render(source, frame: 0, maxPixel: 0)
+      } catch let error as SourceFailure {
+        messages.append(error.text)
+      }
+    }
+
+    XCTAssertEqual(messages.count, 2, "\(messages)")
+
+    for text in messages {
+      XCTAssertTrue(text.hasPrefix("This PNG image "), text)
+      XCTAssertFalse(text.contains("image image"), text)
+    }
+  }
+
   /// Catches a descriptor that is not a regular file being mapped. The helper re-checks what the
   /// app already checked, since it trusts the app no more than the app trusts it.
   func testAHelperRefusesADescriptorThatIsNotARegularFile() {
