@@ -138,31 +138,65 @@ the image viewer's `shown` hard-codes one. Handing every applet the attachment's
 redaction. UTERM-006 M5 can then adopt it without its own plumbing. An applet whose rule ignores access, such as the
 map's file pins, needs its own proposal to change that rule.
 
+### The request frame lands in place at version 0
+
+Decision: the request frame and its revocation frame land in place at exec protocol version 0, under UTERM-063. The
+app's hello is unchanged, and there is no version offer.
+
+- Old driver, new app: a driver that never sends the request runs as before, and gets the empty read access.
+- New driver, old app: an app built before this proposal refuses the request frame by name, under UTERM-063 M2's strict
+  decoder, before any effect.
+- The frames carry a compatibility promise only once uniterm's maintainers declare the exec wire stable.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: this is UTERM-028's skew analysis for its command frames, and holds for the same reasons. A hello field
+would change what every driver reads, which UTERM-063 leaves to version 1 or later.
+
+### The read frames
+
+Decision: the request is a frame whose reply waits for the user's answer. One pushed frame tells the driver of a
+revocation.
+
+- The driver sends `{"type":"request-read","id":n,"directories":[…]}`. The list follows UTERM-015's read scope bounds:
+  at most 32 directories, each at most 1024 bytes.
+- The reply is success, listing the granted directories, when the user allows the request. It is a structured error
+  when the user denies it, the request is withdrawn, or the request is refused.
+- Only a request that reaches the panel uses up the run's one request. One refused for its bounds, a malformed list, or
+  a full panel may be sent again, fixed.
+- The success reply is written before any command can read under the scope.
+- On revocation, the app pushes `{"type":"read","state":"ended","reason":"revoked"}`. Run end closes the channel, so it
+  needs no frame. A command refused after a revocation says the grant ended, not that the path is outside the scope.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: a reply that waits for the user's answer is how a driver's clipboard, layout, and command requests already
+work. Without the pushed frame, a driver could not tell a revocation from a path outside its scope. Leaving the frames
+to implementation would let an implementer pick a permanent contract.
+
+### One request per run
+
+Decision: a driver's request reaches the panel once per run. A later request is refused. A driver that needs another
+directory ends its run and asks again in the next one.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: this matches UTERM-028's one declaration per run, and a controller's one declaration at start. Widening
+mid-run would need a rule for the panel's Deny key, a bound on the growing union under ADR-14 P15, and a rule for
+commands already waiting when the scope changes. A driver that knows its folders asks for them up front.
+
+### The pane's badge shows a held scope
+
+Decision: while a driver holds the read grant, the pane's control badge counts it, as it counts a driver with a
+clipboard or browser grant. The badge's menu names the scope's directories, bounded with a count of the rest, and offers
+Revoke.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: the badge is where the pane already shows a driver's grants and offers Revoke. M1 needs Revoke there anyway.
+A grant display on the run strip would be a second place, and UTERM-048's inspector is not built.
+
 ## Design Decisions (Open)
-
-### The request frame on the version-0 wire
-
-UTERM-063 keeps the exec wire at version 0. Its strict decoders refuse an unknown frame. Today an unknown `type` is a
-wire error, and the app ends the whole driver, after any effects of its earlier commands.
-
-- A. Accept that. A driver that needs reads is ended by an older app at its first request. An old driver never sends
-  the frame, and sees what it sees today. This matches UTERM-028's skew analysis for its command frames.
-- B. The app's hello says whether it knows the request frame, and the driver skips it when not. This changes the hello
-  every driver reads, against UTERM-063's "Version 1 or later may add hello fields" and UTERM-028's "The app's hello is
-  unchanged". ADR-13 rejected optional features inside one version.
-- C. No request frame. A driver's first path command asks for its folder, as a clipboard request asks on first use.
-  This removes the wire change, but reopens "The driver asks at run time", a decision the user made.
-
-### The request frame's contract
-
-"The driver asks at run time" names a request frame but not its contract. UTERM-028 settled its frames as a decision,
-since an implementer would otherwise pick a permanent contract.
-
-- The frame's name and fields, and the bound on its directory list, which `ReadScope` caps at 32.
-- Whether its reply waits for the user's answer, and its error codes, such as refused, bad argument, and busy.
-- Whether a request refused for its bounds or malformed input may be resent, as UTERM-028 allows.
-- How a driver learns its grant ended. Without a pushed frame it cannot tell a Revoke from a path outside its scope.
-  UTERM-015's M4 review gives a run that knows its own grant its own refusal text.
 
 ### Relative paths from a driver
 
@@ -172,30 +206,6 @@ may name `./trip`. CLAUDE.md asks that such an attribute flow explicitly, and th
 - A. Paths must be absolute, in the request and in commands. A relative path is a bad argument, not an outside-scope
   error.
 - B. Relative paths resolve against the declaration's directory, which the app already holds.
-
-### Asking again to widen the scope
-
-A driver may find mid-run that it needs another directory.
-
-- A. One request per run, as UTERM-028 allows one declaration. A second is refused. A driver that needs a new folder
-  restarts its run.
-- B. A later request asks the user again, for the new directories only. ADR-14 P10 requires consent for a wider scope.
-  Constraints: the panel's Deny key names the requester, the power, and anything that scopes it. When the read power's
-  key leaves out the directories, a first Deny refuses every later request silently. When it includes them, each new
-  set of directories asks again. A request the current scope covers needs no prompt. UTERM-015's M4 review makes a
-  scope change refuse commands already waiting. ADR-14 P15 needs a bound on the union, which `ReadScope.union` does not have.
-- C. A, plus a request refused for its bounds or for malformed input may be resent.
-
-### Showing that a scope is held
-
-The user should see that a running driver holds a scope, and have a way to revoke it. Today the pane offers Revoke for a
-driver only while it holds a clipboard or browser grant or owns a group. The run strip says only that the driver runs.
-The Pending Requests panel drops a row once it is answered. UTERM-048's pane inspector is accepted but not built.
-
-- A. The pane's control badge counts the driver while it holds the grant, and its menu names the scope and offers
-  Revoke.
-- B. The run strip names the scope. The run strip shows no grants today, so this adds a grant display.
-- C. Only UTERM-048's pane inspector shows it, once built.
 
 ## Risks
 
@@ -228,6 +238,12 @@ The Pending Requests panel drops a row once it is answered. UTERM-048's pane ins
 - A path outside the scope is refused with one error, whether it is missing, unsupported, or denied
 - Run end, Revoke, and pane close stop queued reads, and their handles fail. A driver keeps its channel after Revoke
 - The driver's pane offers Revoke while the read grant stands, even when the driver holds no other grant
+- The pane's control badge counts a driver that holds only the read grant, and its menu names the scope
+- A `request-read` reply waits for the user's answer, and a success reply lists the granted directories
+- A second request that reaches the panel in one run is refused. A request refused for its bounds, a malformed list, or
+  a full panel may be sent again
+- A Revoke pushes the `read` ended frame, and a later path command says the grant ended
+- An app built before this proposal refuses `request-read` by name, before any effect
 - A driver holds at most 4 concurrent walks, counted per driver channel
 - A saved layout holds no scope, and a restored pane's Run asks again
 - The exec protocol version stays 0, and the exec wire documentation describes the request frame
@@ -264,6 +280,14 @@ The Pending Requests panel drops a row once it is answered. UTERM-048's pane ins
   "Asking again". Routed the panel text and a pending `wait` failing after Revoke to M1 and M2.
 - 2026-11-26: The user kept the scope for drivers, after the critique showed it guards what uniterm does for a driver,
   not what the driver reads. The alternative was no scope, with path commands open to any file.
+
+- 2026-11-26: Settled four open questions, on the user's instruction to keep going, using the critique's rankings and
+  UTERM-028's frames as the pattern. The request frame lands in place at version 0. The frames are `request-read`, with
+  a reply that waits for the user, and a pushed `read` ended frame on revocation. One request per run, with a resend
+  after a refusal for bounds or malformed input. The pane's badge shows a held scope and offers Revoke. Turned down: a
+  hello field, no frame at all, widening mid-run, and a grant display on the run strip. Left "Relative paths from a
+  driver" open for the user, since CLAUDE.md asks that a choice about an attribute's explicit flow be the user's.
+  Routed the frame, resend, revocation, and badge checks to M1. (autonomous)
 
 ## References
 
