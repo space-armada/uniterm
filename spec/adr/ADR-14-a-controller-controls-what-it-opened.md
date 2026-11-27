@@ -83,9 +83,10 @@ guarantee the behavior of approved code.
   It changes nothing else of the user's. It still needs an authenticated requester, and P15 bounds it. What the
   requester does with an answer is a separate effect, and P7 governs it.
 - **C2** (relaxes P9): A script run by a shared interpreter may hold a remembered approval when uniterm itself
-  snapshots and verifies the script and every file its package declares, and starts the interpreter with a command line
-  those verified files fix. No argument comes before the script, and no environment key the interpreter or the loader
-  reads as a hook comes from outside the verified files. Settings that change where the interpreter finds its startup
+  snapshots and verifies the script and every file its package declares, and starts the interpreter the user chose with
+  a command line those verified files fix. Only the user chooses the interpreter, never a program or a declaration.
+  No argument from outside the verified files comes before the script, and no environment key
+  the interpreter or the loader reads as a hook comes from outside the verified files. Settings that change where the interpreter finds its startup
   files, such as `HOME`, are outside what uniterm verifies, and the user is told so. The proof of identity is uniterm's
   own verification, not a name, path, or digest the script or its runner claims. The approval covers only the verified
   files and the access they declare. The interpreter, its install, and whatever the script loads beyond its package are
@@ -134,6 +135,9 @@ guarantee the behavior of approved code.
   command line those files fix. P9 guards against a program claiming an approved script's identity, and a snapshot
   uniterm verifies is not a claim. The approval covers only the verified files and says so, since no verification of
   files can isolate a program from its system.
+- 2026-11-26: C2 now lets the user choose the interpreter, which no program or declaration may supply. An author cannot
+  name the user's own interpreter, and a choice only the user makes is no claim of the kind P9 guards against. Removed:
+  "starts the interpreter with a command line those verified files fix."
 
 ## References
 

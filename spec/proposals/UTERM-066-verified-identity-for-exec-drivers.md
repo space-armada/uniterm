@@ -1,6 +1,6 @@
 # UTERM-066: Verified Identity for Exec Drivers
 
-**Status:** draft
+**Status:** accepted
 **Created:** 2026-11-26
 **Updated:** 2026-11-26
 
@@ -18,15 +18,24 @@
   launch, so its scope narrows to drivers with no package.
 - UTERM-004 — "Exec launch context" and "Saved layouts": a declaration may name a package, and the layout saves it.
   "Verified artifact and run binding": the app, not the `uniterm` command, spawns a verified native entry for a
-  driver, so the app must refuse `DYLD_` variables itself. UTERM-004 is implemented, so its text stays, and it gains
-  "Superseded in part by UTERM-066" markers when this proposal is accepted.
+  driver, so the app must refuse `DYLD_` variables itself. "Verified artifact and run binding" also says other
+  interpreters need "an equally verifiable loader" before script trust, that ambient module paths and startup hooks
+  "cannot select substitute dependencies", and that exec invalidates the live binding. For a verified driver, C2 and
+  "Trust covers what uniterm verified, and says so" replace the first two, and "A run is bound to its channel and
+  snapshot" replaces the third. UTERM-004 is implemented, so its text stays, and it gains "Superseded in part by
+  UTERM-066" markers when this proposal is accepted.
+- UTERM-004 — "Verified artifact and run binding": a packaged path component may start with `_`, a descriptor may list
+  folder names to skip, and a descriptor names one role, per "Python's own file names can be packaged" and "A
+  descriptor names one role". The policy file gains format 2, per "Version skew".
 - UTERM-028 — "How a driver gets the power": "Nothing is remembered across runs, since a driver has no verified
   identity" holds only for a driver with no verified identity.
 - UTERM-055 — "Which grant and targets an exec driver captures under": a verified driver may keep a remembered
   approval for capture.
 - UTERM-065 — "How long the grant lasts": its revisit hook names this proposal. A verified driver may keep a remembered
   read scope. "The driver asks at run time": a verified driver's request for directories its package did not declare
-  is denied, per "A verified driver declares the access it needs".
+  is denied, per "A verified driver declares the access it needs". A driver package may declare its starting folder as
+  its read scope, a form a controller's descriptor lacks. The granted scope stays the absolute folders UTERM-065
+  defines, per "A package may declare its starting folder as a read scope".
 - UTERM-048 — "A plain script or a driver is never labeled verified": a verified driver is labeled with its identity.
 - Driver clipboard and browser grants (UTERM-004, UTERM-019): a verified driver may keep remembered approvals for them.
 
@@ -75,17 +84,21 @@ outside the package, as UTERM-004 allows for a native entry.
 
 ### Script files are verified too
 
-Decision: a script driver's descriptor fixes its whole command line. It names the interpreter, the interpreter's
-flags, and the script, which is a file the descriptor lists. uniterm snapshots and verifies the script with the package,
-and the interpreter runs the snapshot copy. The declaration supplies only the arguments after the script. A package
-declaration that names an environment key the interpreter reads as a hook, such as `PYTHONSTARTUP`, `PYTHONPATH`, or
-`NODE_OPTIONS`, is refused. Amended 2026-11-26; see Decision Log.
+Decision: a script driver's descriptor fixes its whole command line. It names the interpreter's command, the
+interpreter's flags, and the script, which is a file the descriptor lists. The interpreter's path is the user's
+binding, per "The user binds a script driver's interpreter". uniterm snapshots and verifies the script with the package,
+and the interpreter runs the snapshot copy. The declaration supplies only the arguments after the script. The
+descriptor lists the environment key names a declaration may supply, and a package declaration that names any other
+key is refused, for every driver package, native or script. The user types each value, as for any exec declaration. A key the author
+lists, such as `HOME`, is the author's verified choice. Amended 2026-11-26; see Decision Log.
 
 **Decided by:** user, 2026-11-26
 
 Rationale: most drivers are scripts. Leaving them out would keep every script driver asking each run. Fixing the
-command line in the signed descriptor closes interpreter flags and scripts outside the signature. Refusing hook keys
-closes the environment. What trust says about the interpreter is settled in "Trust covers what uniterm verified, and
+command line in the signed descriptor closes interpreter flags and scripts outside the signature. Listing the keys in
+the descriptor closes the environment for every interpreter. A refused-key list per interpreter could never cover
+"Any interpreter the user has may run a driver": Lua reads `LUA_INIT`, zsh reads `ZDOTDIR`, and each new interpreter
+brings its own. What trust says about the interpreter is settled in "Trust covers what uniterm verified, and
 says so". Imports stay unverified, which is the deviation from ADR-14 P9 recorded above.
 
 ### Any interpreter the user has may run a driver
@@ -98,6 +111,78 @@ user has set it up, and no such limit decides whether a driver can keep a rememb
 
 Rationale: uniterm does not control how a user installs or uses interpreters, and may not add artificial limits on
 them.
+
+### The user binds a script driver's interpreter
+
+Decision: a script driver's descriptor names its interpreter as a command, such as `python3`, and may suggest an
+absolute path. The user picks the interpreter's absolute path on the package's first launch, in the launch prompt,
+and every later launch shows it. uniterm keeps the pick in a store of its own, apart from approvals, keyed by the
+package's ID, its interpreter command, and its signing key when it is signed. It survives a new version and a revoked
+approval. A launch whose ID, command, or key matches no binding asks for one. The user can change a binding in
+Controllers & Permissions. A declaration never supplies it, and nor does a program. ADR-14 C2 counts the user's binding
+as part of the fixed command line. Amended 2026-11-26; see Decision Log.
+
+**Decided by:** user, 2026-11-26
+
+Rationale: a pyenv or virtual-environment Python lives under the user's own home folder, and a Homebrew one sits in a
+different prefix on Intel and Apple silicon. An author cannot name it for anyone else, and uniterm does no PATH search.
+An absolute path in the descriptor would leave a package the user did not write unable to use the user's interpreter
+without re-signing it, which loses its author's identity trust. A path from the declaration would let a program's
+layout request pair a trusted package with its own binary, which would then use the package's remembered powers.
+Keeping the pick apart from approvals keeps it through Allow once, which stores no approval, and through each new
+version under "Trust this version". Authors choose IDs freely, so an ID alone would let an unrelated package with the
+same ID, or a new version that changed its command from `python3` to `node`, run under another package's interpreter.
+The command closes the second case for every package. The key closes the first for signed packages. Two unrelated
+unsigned packages with one ID and one command still share a binding, since an unsigned package has nothing beyond
+its ID to tell a new version from another package. Every launch shows the bound path, and the binding grants no power.
+
+### A descriptor names one role
+
+Decision: a descriptor names the one role its package serves, controller or driver. The role decides which entry kinds
+and which powers the descriptor may declare, and a mistake fails when the package is signed or read. A driver accepts
+a native entry or an interpreter entry. A controller accepts today's entry kinds only. A descriptor with no role reads
+as a controller. `uniterm run` refuses a driver package by name, and a pane refuses a controller package by name. A
+program wanted in both roles ships as two packages, which may share an ID and a signing key.
+
+**Decided by:** user, 2026-11-26
+
+Rationale: one role per descriptor makes an invalid package a load error, not a protocol failure at launch. A
+descriptor with a section per role would tie both roles to one version digest, so editing only the driver part would
+ask again for the controller's "Trust this version". No program in any proposal needs both roles. A Janet script
+driver uses an interpreter entry that names the user's `janet`. UTERM-004's Janet entry runs inside the `uniterm`
+command's own VM, which is a controller's contract.
+
+### Python's own file names can be packaged
+
+Decision: a packaged path component may start with `_`. A leading `.` or `-` stays refused. A descriptor may list
+folder names that the package check, the signer, and the snapshot copy all skip, at any depth, such as `__pycache__`.
+A skipped folder that holds a listed file is refused when the descriptor is read. This holds for every package.
+
+**Decided by:** proposal-reviewer (autonomous), 2026-11-26
+
+Rationale: UTERM-004's path rule refuses `__init__.py` and `_internal.py`, so no Python library could be vendored
+into a package, and vendoring is the only way to bring imports inside what uniterm verifies. Homebrew's Python writes
+`__pycache__` beside each imported module when the author tests the script, and the package check then refuses the
+package. A leading underscore gives no path a second spelling and climbs out of nothing. The author lists the skipped
+names, so uniterm infers nothing, per "Trust covers what uniterm verified, and says so". Copying only the listed files
+instead would lose the check that catches a module the author forgot to list. That module would then fall through to
+the interpreter's own search path and run unverified under the driver's remembered powers.
+
+### A package may declare its starting folder as a read scope
+
+Decision: a driver package may declare its read scope as the folder it starts in, and every folder inside it. A run
+resolves that folder once, with every link resolved, and uses the same resolved path as its working directory and as
+its scope. A remembered approval stores the resolved absolute folder, as any read scope does. A later run whose
+starting folder that approval covers needs no prompt. A run started in a new folder asks once, in the start review, as
+a broader scope, and approving it adds that folder to the approval. The launch approval never grants the scope.
+
+**Decided by:** proposal-reviewer (autonomous), 2026-11-26
+
+Rationale: a signed driver cannot know the user's project folder, and a declared absolute folder cannot reach
+`~/Documents` for someone else's home. Without this, the only way to read a user's folder is to run the script bare,
+which gives up verification. Remembering the declared form itself would let a later layout request start the same
+version at `/` and reach it with no review, against ADR-14 P10 and UTERM-065's rule that the launch approval never
+grants the scope. Storing the resolved folder keeps the granted scope the same type UTERM-065 defines.
 
 ### Trust covers what uniterm verified, and says so
 
@@ -142,15 +227,16 @@ and revoke trust. uniterm is pre-v1, so an older build that cannot read a driver
 ### Each approval names its artifact kind
 
 Decision: every entry in the policy store names its artifact kind, such as a controller package or a driver package. A
-selector matches only runs of its own kind. A package trusted both as a controller and as a driver has two entries,
-one per role, each with its own powers. Revoking one leaves the other.
+selector matches only runs of its own kind. A program shipped as a controller package and a driver package that share
+an ID and a signing key has two entries, one per role, each with its own powers. Revoking one leaves the other.
+Amended 2026-11-26; see Decision Log.
 
 **Decided by:** user, 2026-11-26
 
 Rationale: ADR-14 P8 says one granted power never silently grants another. Trusting a package to read the clipboard as
 a driver in a pane must not let it do so as a controller started from a shell. The code already keeps script-file and
-package approvals apart for the same reason. The window can still group a package's entries, so it reads as one
-program with two roles.
+package approvals apart for the same reason. The window can still group the entries that share an ID and a key, so
+they read as one program with two roles.
 
 One entry with a list of roles was weighed and rejected, for two reasons:
 
@@ -232,11 +318,17 @@ nothing, since a driver can fork a child that execs anything with the inherited 
 
 Decision: uniterm is pre-v1, so each contract may break, and the behavior is stated rather than made tolerant.
 
-- The policy store: an older build that meets a driver entry keeps no trust at all, for an unknown kind, or moves the
-  file aside, for an unknown selector. UTERM-067 changes this under ADR-18.
+- The policy store: format 1 means every entry is a controller package entry, and no entry carries a kind. Format 2
+  requires a kind on every entry. A newer build writes format 2 whenever any entry is not a controller package entry,
+  and format 1 otherwise. A build in use today then leaves a format 2 file untouched and trusts nothing from it, so a
+  run of new, old, and new builds loses no approval. A newer build reads today's format 1 file unchanged. Amended
+  2026-11-26; see Decision Log. UTERM-067 changes this under ADR-18.
 - The layout file: an older build keeps a version 4 file aside, per ADR-06.
-- The descriptor, which gains driver kinds, an interpreter entry kind, and a fixed command line: an older build refuses
-  a new package by name, through strict parsing. A newer build reads an old package unchanged.
+- The descriptor, which gains a role, driver kinds, an interpreter entry kind, an interpreter command, skipped folder
+  names, a list of environment keys, a starting-folder read scope, and a fixed command line: an older build refuses a new package by name, through
+  strict parsing. A newer build reads an old package unchanged, as a controller.
+- The interpreter binding store: an older build never reads it. A newer build that finds no binding for a package asks
+  for one at launch.
 - The layout-request API's package field: an older app refuses a new caller by name, which UTERM-063 allows at version
   0.
 
@@ -251,11 +343,12 @@ Decision: ADR-14 gains a carve-out to P9, C2, with the text below. The user appr
 ADR-14.
 
 > **C2** (relaxes P9): A script run by a shared interpreter may hold a remembered approval when uniterm itself
-> snapshots and verifies the script and every file its package declares, and starts the interpreter with a command line
-> those verified files fix. No argument comes before the script, and no environment key the interpreter or the loader
-> reads as a hook comes from outside the verified files. Settings that change where the interpreter finds its startup
-> files, such as `HOME`, are outside what uniterm verifies, and the user is told so. The proof of
-> identity is uniterm's own verification, not a name, path, or digest the script or its runner claims. The approval
+> snapshots and verifies the script and every file its package declares, and starts the interpreter the user chose with
+> a command line those verified files fix. Only the user chooses the interpreter, never a program or a declaration.
+> No argument from outside the verified files comes before the script, and no environment key
+> the interpreter or the loader reads as a hook comes from outside the verified files. Settings that change where the
+> interpreter finds its startup files, such as `HOME`, are outside what uniterm verifies, and the user is told so. The
+> proof of identity is uniterm's own verification, not a name, path, or digest the script or its runner claims. The approval
 > covers only the verified files and the access they declare. The interpreter, its install, and whatever the script
 > loads beyond its package are outside it, and the user is told so. Verifying files cannot isolate a program from the
 > system it runs on, so the approval states its boundary rather than claim one it cannot hold.
@@ -276,24 +369,37 @@ None.
 - **Code outside the verified files runs under remembered powers** — likelihood: low, impact: high. A flag such as
   `python3 -c`, or a hook such as `PYTHONSTARTUP`, could run code no digest covers. So could a same-user process that
   changes the interpreter's install, or a system library a native driver links. Mitigation: the descriptor fixes the
-  command line, and hook keys are refused, per "Script files are verified too". Accepted for the rest: the interpreter,
+  command line and lists the environment keys a declaration may name, per "Script files are verified too". Accepted for the rest: the interpreter,
   its startup files, and system libraries are outside what uniterm verifies, and the review text says so, per "Trust
   covers what uniterm verified, and says so".
 - **A verified script driver imports unverified code** — likelihood: high, impact: medium. An interpreter loads modules
   from its own search paths. Mitigation: the review text says imports are not verified, and "Trust this version" binds
-  only the packaged files. Accepted pending the ADR-14 amendment above.
-- **An older build loses every controller approval** — likelihood: medium, impact: low. A driver approval in
-  `policy.json` stops or moves aside every controller approval in an older build. Accepted: uniterm is pre-v1, and the
-  user accepts breaking changes until then.
+  only the packaged files. Accepted under ADR-14 C2.
+- **An older build trusts no controller** — likelihood: medium, impact: low. A driver approval in `policy.json` puts
+  the file at format 2, so a build in use today trusts no controller from it. The file stays untouched, and the newer
+  build finds every approval again, per "Version skew". Accepted: uniterm is pre-v1, and the user accepts breaking
+  changes until then.
+- **The interpreter binding is stored data** — likelihood: medium, impact: low. Every later build reads the binding
+  store. A wrong binding runs the wrong interpreter under the package's remembered powers. Mitigation: only the user
+  sets a binding, every launch shows it, and the binding grants no power. A store a build cannot read asks for a new
+  binding at launch.
 - **A remote party behind a trusted driver** — likelihood: low, impact: medium. "Trust this version" of a packaged
   ssh-like driver remembers powers for whatever host its argv names. The approval binds the local code, not the remote
-  party. Mitigation: "The launch is never remembered", and a `host-launch` grant never covers a package, so every launch
-  shows its arguments to the user.
+  party. Mitigation: "The launch is never remembered", and a `host-launch` grant never covers a package. Every new
+  declaration's launch shows its arguments to the user. An Allow in This Pane grant relaunches the same pane's
+  declaration, which cannot change under the grant.
 - **A same-user process edits the snapshot** — likelihood: low, impact: medium. UTERM-004 notes that read-only files
   are not immutable against a malicious process of the same user. Accepted: the same holds for controllers today.
-- **The design depends on proposals still in flight** — likelihood: medium, impact: medium. UTERM-028 and UTERM-055 are
-  not started, UTERM-065 is a draft, and UTERM-063 changes permission editions underneath. Mitigation: M2's parts wait
-  on each power, per Dependencies.
+- **The design depends on proposals still in flight** — likelihood: medium, impact: medium. UTERM-028, UTERM-055, and
+  UTERM-065 are accepted and not started, and UTERM-063 changes permission editions underneath. ADR-18 is proposed, and
+  UTERM-067 is a draft. The second reason for one policy entry per role rests on ADR-18 P4. Mitigation: M2's parts wait
+  on each power, per Dependencies. The first reason for one entry per role, that the roles carry different powers,
+  holds without ADR-18.
+- **The descriptor's new fields are a signed contract** — likelihood: medium, impact: medium. Authors sign descriptors
+  that name a role, an interpreter command, skipped folders, environment keys, and a starting-folder scope, and every
+  later build must read them with the same meaning. Mitigation: strict parsing refuses an unknown field by name, a
+  newer build reads an older descriptor unchanged, and a descriptor with no role reads as a controller, per "Version
+  skew".
 - **A layout's package declaration is stored data** — likelihood: medium, impact: medium. Every later build reads it.
   Mitigation: ADR-06's versioned envelope, and "A layout saves the package's absolute path".
 
@@ -306,16 +412,29 @@ None.
 - A declaration that names a package snapshots it, verifies the copy, and spawns the snapshot's entry
 - A package whose descriptor, digests, signature, or load commands fail is refused, and nothing runs
 - A package declaration that names a `DYLD_` environment key is refused before anything runs
+- A native driver package declaration that names an environment key its descriptor does not list is refused
+- A descriptor that lists a `DYLD_` key is refused when it is signed or read
 - A layout request from a program can declare a package, and its launch still asks
 - A controller's `host-launch` grant never covers a package's launch, on the controller-owned Run path too
 - The run's binding and its snapshot last until the transport ends, not only until the spawned process exits, so a
   child that still holds the channel keeps its packaged files
 - The launch approval and the review of declared powers come in one prompt, or launch first and review second
+- The package is snapshotted and verified before the launch prompt shows, and the prompt names the verified identity
+  and every power the package already holds through a remembered approval
 - A moved package fails to launch, and the pane names the absolute path it looked at
 - The layout is written at envelope version 4, and an older build keeps a version 4 file aside
 - A declaration with a bare executable launches as today, with no verified identity
 - A driver package declares its powers in its descriptor, which knows the driver's kinds. A driver package that
-  declares a controller-only kind, such as `pane-control` or `host-launch`, is refused
+  declares a controller-only kind, such as `pane-control` or `host-launch`, is refused when it is signed or read
+- A descriptor names its role. A descriptor with no role reads as a controller. `uniterm run` refuses a driver package
+  by name, and a pane refuses a controller package by name
+- An older build refuses a driver package by name
+- A packaged path component may start with `_`, and one starting with `.` or `-` is still refused
+- A folder name the descriptor lists to skip is skipped at any depth by the package check, the signer, and the copy,
+  and the walk does not count its contents toward the entry bound. A skipped folder that holds a listed file is
+  refused when the descriptor is read
+- A package that declares its starting folder as its read scope resolves that folder once, and the driver's working
+  directory and its scope are the same resolved path. The start review shows that concrete folder
 - The user reviews a driver package's declared powers when it starts
 - A verified driver's request for a power its package did not declare is denied, with no prompt
 - uniterm never reads a packaged script or the interpreter to find what it imports or loads. A test shows a script
@@ -337,10 +456,21 @@ None.
   snapshot
 - A changed package asks again under "Trust this version", and a package signed by another key asks again under "Trust
   this identity"
+- Under "Trust this identity", a newer signed version that declares an added or broader power asks for the difference
+  only, per ADR-14 P10
 - A driver with no verified identity is never offered a remembered approval
-- A driver approval never covers a controller run of the same package, and a controller approval never covers a driver
-  run
-- A package trusted in both roles shows two entries, and revoking one leaves the other
+- A driver approval never covers a controller run of a package with the same ID and key, and a controller approval
+  never covers a driver run
+- A controller package and a driver package that share an ID and a key show two entries, grouped as one program, and
+  revoking one leaves the other
+- A remembered starting-folder scope covers a later run started inside a folder it holds, with no prompt. A run in a
+  new folder asks once, and approving it adds the folder
+- An approval whose read scope holds more than 32 folders reads back, and the policy file is not moved aside
+- A remembered starting-folder scope does not cover a run started in a protected location it leaves out, such as one
+  under `~/Documents` when the scope holds `~`. That run asks
+- A policy file holding any entry that is not a controller package entry is written at format 2, with a kind on every
+  entry. One holding only controller package entries is written at format 1. A build in use today leaves a format 2
+  file untouched, and a run of new, old, and new builds keeps every approval
 - Revoking a remembered approval removes it from the store, ends a live run's use of it, and stops its queued work
 - Each use of a remembered power is checked at the effect, against the live policy
 
@@ -349,13 +479,26 @@ None.
 **Status:** NOT STARTED
 
 - A driver whose entry is an interpreter runs the snapshot copy of its packaged script
-- The interpreter, its flags, and the script come from the descriptor. A declaration can add arguments only after the
-  script
-- Each interpreter kind the descriptor may name has a listed set of refused hook keys, tested per interpreter. It
-  includes at least `PYTHONSTARTUP`, `PYTHONPATH`, `PYTHONHOME`, `PYTHONUSERBASE`, `PYTHONINSPECT`, `NODE_OPTIONS`,
-  `NODE_PATH`, `RUBYOPT`, `RUBYLIB`, `PERL5OPT`, `PERL5LIB`, `PERLLIB`, `BASH_ENV`, `ENV`, and keys starting with
-  `BASH_FUNC_`. The set for a kind also covers launchers that kind runs through, such as `PYENV_HOOK_PATH` for a pyenv
-  shim. A package declaration that names one is refused before anything runs
+- The interpreter's command, its flags, and the script come from the descriptor. A declaration can add arguments only
+  after the script
+- The first launch of a script driver package asks the user for the interpreter's absolute path, pre-filled with the
+  descriptor's suggestion. Every later launch shows the bound path. The binding survives a new version and a revoked
+  approval, and the user can change it in Controllers & Permissions
+- A declaration or a program that supplies an interpreter path for a package is refused
+- Two packages that share an ID but differ in interpreter command or signing key each ask for their own binding, and a
+  new version that changes its command asks again
+- A binding store this build cannot read is kept unchanged and never written over, and a binding picked at launch
+  never replaces another package's binding. A pick made while the store cannot be read applies to that run only, and
+  the launch prompt says it will not be kept
+- Controllers & Permissions shows each binding's command and signing key, and changing one binding leaves the others
+  with the same ID alone
+- A skip name that is empty, holds `/`, or is `.` or `..` is refused when the descriptor is read, and skip names match
+  folder names as APFS compares them
+- A vendored Python library with `__init__.py` and `_internal.py` files imports from the snapshot, and a `__pycache__`
+  folder the descriptor skips does not refuse the package
+- A package declaration that names an environment key its descriptor does not list is refused before anything runs,
+  for every interpreter, including one uniterm has never seen, such as Lua with `LUA_INIT`
+- A key the descriptor lists, such as `HOME`, reaches the interpreter with the value the user typed
 - A Homebrew interpreter, a locally built one, a pyenv-style shim, and one in a virtual environment each run a verified
   script driver and keep a remembered approval, across the interpreter's own re-launch
 - A packaged multi-file script driver imports its packaged sibling modules under the flags the descriptor fixes
@@ -459,6 +602,60 @@ None.
   C2". It said before that this proposal departs from P9 with no carve-out.
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
+- 2026-11-26: Review start: 3 milestones, 14 settled decisions, 7 risks, no `**Live after:**` lines or row gates, no
+  out-of-scope statements; at commit "Add C2 to ADR-14: verified scripts may hold remembered approvals". The user asked
+  for an autonomous review. No open questions remain, so it runs the coherence and risk reviews over the earlier
+  autonomous decisions.
+- 2026-11-26: Amended "Script files are verified too", the user's choice. The descriptor lists the environment keys a
+  declaration may name, and any other key is refused, for every interpreter. It said before: "A package declaration
+  that names an environment key the interpreter reads as a hook, such as `PYTHONSTARTUP`, `PYTHONPATH`, or
+  `NODE_OPTIONS`, is refused." A refused-key list per interpreter kind could never cover "Any interpreter the user has
+  may run a driver". The user turned down refusing interpreter kinds with no list, and running them with no check. A
+  declared `HOME` is now refused unless the package lists it. Replaced M3's per-interpreter key list with checks.
+- 2026-11-26: Clarified ADR-14 C2, the user's choice. "No argument comes before the script" now reads "No argument
+  from outside the verified files comes before the script", which allows the interpreter flags the descriptor fixes.
+  The meaning is unchanged, so ADR-14 gains no Amendments line.
+- 2026-11-26: Review pass 1, a whole-proposal critique, UNSOUND. Verified its findings against the code. Rejected one:
+  the run binding needs no ADR-14 P13 deviation, since the requester the proposal claims is the run the app's pipe
+  establishes, not a single process. Fixed wording: UTERM-004's superseded clauses in Impacts, two stale risks, and
+  the remote-party risk's claim that every launch shows its arguments. Routed checks to M1 and M2. Added five open
+  questions, which the entries below settle.
+- 2026-11-26: Added "A descriptor names one role", the user's choice. Amended "Each approval names its artifact kind":
+  it said "A package trusted both as a controller and as a driver has two entries", and now names a controller package
+  and a driver package that share an ID and a key. A section per role would tie both roles to one version digest. The
+  user turned down a section per role, and a role taken from where the package is launched. Reworded two M2 checks.
+- 2026-11-26: Added "The user binds a script driver's interpreter", the user's choice. "Script files are verified too"
+  now names the interpreter's command, not its path. ADR-14 C2 was amended to say the interpreter is the one the user
+  chose. The user turned down an absolute path in the descriptor, which no author can write for a pyenv or virtual
+  environment Python, and a path from the declaration, which breaks C2.
+- 2026-11-26: Added "Python's own file names can be packaged". A leading `_` is allowed, and a descriptor may list
+  folder names to skip. Turned down copying only listed files, which would let a forgotten module fall through to the
+  interpreter's search path unseen. (autonomous, addition)
+- 2026-11-26: Added "A package may declare its starting folder as a read scope". Approvals store the resolved folder,
+  and a new folder asks once. Turned down remembering the declared form, which a later layout request could aim at `/`
+  with no review, and a per-run ask for undeclared folders, which reverses "A verified driver declares the access it
+  needs". It depends on approvals holding more than 32 folders. The policy reader refused that, and moved the whole
+  file aside. Fixed in "Keep a policy file whose merged read scope passes 32 folders". (autonomous, addition)
+- 2026-11-26: Amended "Version skew" for the policy store. Format 2 carries a kind on every entry, and is written only
+  when an entry is not a controller package entry. It said before that an older build "moves the file aside, for an
+  unknown selector". Moving it aside lost every approval in the newer build after a run of new, old, and new builds.
+  Turned down keeping format 1, and always writing format 2. (autonomous)
+- 2026-11-26: Review pass 2, a re-check, NOT CONVERGED on one defect. Amended "The user binds a script driver's
+  interpreter": it said "uniterm keeps the pick by package ID", and now keys it by ID, interpreter command, and signing
+  key. IDs are not unique, so an unrelated package with the same ID, or a version that changed its command, ran under
+  another binding with no prompt. "Script files are verified too" now applies the key list to native driver packages
+  too. Routed checks to M1, M2, and M3. (autonomous, addition)
+- 2026-11-26: Review pass 3, a re-check, CONVERGED. Corrected the binding's rationale, which said the new key closes
+  both cases for every package. It closes the shared-ID case only for signed packages. Routed checks to M1 and M3.
+- 2026-11-26: Review gate: kept all. The user kept the Python file-name rule for every package, the starting-folder
+  read scope, the environment-key list for native driver packages, and the binding key of ID, command, and signing
+  key. The earlier autonomous decisions on declaration sources, the layout path, the launch, the run binding, and
+  version skew had no finding standing against them, and were kept.
+- 2026-11-26: No decision from this review earns an ADR. The descriptor's role, the interpreter binding, the skipped
+  folders, and the starting-folder scope each shape one component. ADR-14 C2 already states the interpreter rule, and
+  ADR-18 covers the policy store's skew.
+- 2026-11-26: Accepted, the user's choice, after the review gate. UTERM-004 gains its "Superseded in part by
+  UTERM-066" markers, per Impacts.
 
 ## References
 
