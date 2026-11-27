@@ -1,7 +1,8 @@
 # A file that passes the open check but fails its full load still replaces the pane's old file
 
-**Status:** open
-**Validation:** not confirmed in a test or the running app; traced in the code and in each check's own doc comment
+**Status:** proposed; see `UTERM-070-a-viewer-keeps-its-file-when-the-new-one-fails-to-load.md`
+**Estimate:** large; two non-trivial decisions. Which callers keep the old file, which changes the script contract for a
+script's `send`. How each viewer holds two loads at once.
 
 ## Observed
 
@@ -39,7 +40,10 @@ the load.
 4. Expected: a warning on the status bar names `broken.png`, and the pane still shows the first image.
    Actual by the code: the pane shows the decode failure for `broken.png`, and the first image is gone.
 
-Not run. The fixture has to pass `SourceLoader.load` and fail the helper's decode, and that was not checked.
+Reproduced on 2026-11-27 for the image viewer, in a scratch package test in that viewer's target. The test opened a good
+PNG, then swapped in a file with a PNG signature and 64 bytes of garbage through `replaceSource(withChosen:)`. The pane
+showed "This PNG image image has no usable size." under the title `broken.png`, and `describe()` named `broken.png`. The
+scratch test was not kept. The text, data, and RTF and Word cases were traced, not run.
 
 ## Fix
 
