@@ -335,8 +335,6 @@ final class LauncherTests: XCTestCase {
       weak var host: (any AppletHost)?
       func start(origin: StartOrigin) {}
       func close() {}
-      func detach() {}
-      func reattach() {}
       func focus() {}
       func describe() -> AppletDescription {
         AppletDescription(type: "quiet", version: 1, payload: .null)

@@ -99,7 +99,11 @@ public final class TextViewerApplet: Applet, SourceReplacing {
   /// is always the one shown.
   private var reloadQueued = false
 
-  /// The latest change that arrived while the pane was detached, held for reattach.
+  /// True while the viewer's content is off screen. Nothing in the app sets it yet. It is kept for
+  /// a hidden tab, which holds its file changes until it is selected.
+  private(set) var isOffScreen = false
+
+  /// The latest change that arrived while the content was off screen, held for its return.
   private var heldChange: FileSignature?
 
   /// How the watch merges events. Tests shorten the windows.
@@ -373,7 +377,6 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     reloadNotice = nil
     reloadQueued = false
     posted.reset()
-    alerts.replaceLoad()
     remote.supersedeLoad()
     inline = nil
   }
@@ -514,13 +517,14 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     heldChange = nil
   }
 
-  /// The watch saw the path change. A detached pane holds the latest change for reattach.
+  /// The watch saw the path change. Content that is off screen holds the latest change for its
+  /// return.
   func fileChanged(_ signature: FileSignature) {
     guard !closed, record.path != nil else { return }
 
     watchedExists = signature.exists
 
-    if alerts.isDetached {
+    if isOffScreen {
       heldChange = signature
       return
     }
@@ -1209,7 +1213,6 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     remote.close()
     events.close()
     unwatch()
-    alerts.discard()
     cancelLoad()
     finder.documentChanged()
     content.removeMarkdown()
@@ -1225,12 +1228,15 @@ public final class TextViewerApplet: Applet, SourceReplacing {
     content.findBar.trailingReserve = width
   }
 
-  public func detach() {
-    alerts.detach()
+  /// The content went off screen. File changes are held from here on, and alerts still go out at
+  /// once.
+  func leaveScreen() {
+    isOffScreen = true
   }
 
-  public func reattach() {
-    alerts.reattach(from: self, to: host)
+  /// The content is back on screen. The latest held file change applies now.
+  func returnToScreen() {
+    isOffScreen = false
 
     if let held = heldChange {
       heldChange = nil

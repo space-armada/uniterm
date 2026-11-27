@@ -183,9 +183,6 @@ final class BrowserTab: NSObject {
   /// Whether the navigation in progress is the one a click or a load of the user's started.
   private var userNavigation = UserNavigation()
 
-  /// Whether the tab's media is suspended, as a detached pane's is.
-  private(set) var isMediaSuspended = false
-
   /// The configuration WebKit gave a pop-up, used once to build its web view.
   private var adopted: WKWebViewConfiguration?
 
@@ -339,8 +336,6 @@ final class BrowserTab: NSObject {
 
     let view = BrowserWebView(frame: .zero, configuration: configuration)
 
-    if isMediaSuspended { suspendMedia(view) }
-
     view.navigationDelegate = self
     view.uiDelegate = self
     view.allowsBackForwardNavigationGestures = true
@@ -356,48 +351,6 @@ final class BrowserTab: NSObject {
     observe(view)
 
     return view
-  }
-
-  /// Suspends or resumes the tab's media, as a pane's detach and reattach ask. A suspended web
-  /// view refuses every attempt to play until it is told to resume.
-  ///
-  /// Suspending alone is not enough. WebKit lets media that was playing, or was about to, carry on
-  /// when the suspension lifts. So the media is paused first, and lifting the suspension then
-  /// restarts nothing.
-  ///
-  /// A tab with no web view yet takes the state when it gets one.
-  func setMediaSuspended(_ suspended: Bool) {
-    guard suspended != isMediaSuspended else { return }
-
-    isMediaSuspended = suspended
-
-    guard isMaterialized else { return }
-
-    if suspended {
-      suspendMedia(webView)
-    } else {
-      resumeMedia(webView)
-    }
-  }
-
-  /// Whether the web view holds a suspension that only a resume lifts. WebKit wants the two in
-  /// pairs, so a second suspend or a resume with none outstanding is never sent.
-  private var holdsMediaSuspension = false
-
-  private func suspendMedia(_ view: WKWebView) {
-    view.pauseAllMediaPlayback { [weak self] in
-      guard let self, isMediaSuspended, isMaterialized, !holdsMediaSuspension else { return }
-
-      holdsMediaSuspension = true
-      webView.setAllMediaPlaybackSuspended(true, completionHandler: nil)
-    }
-  }
-
-  private func resumeMedia(_ view: WKWebView) {
-    guard holdsMediaSuspension else { return }
-
-    holdsMediaSuspension = false
-    view.setAllMediaPlaybackSuspended(false, completionHandler: nil)
   }
 
   /// The user chose a new-tab item from the context menu.
@@ -669,7 +622,6 @@ final class BrowserTab: NSObject {
 
     current = nil
     pageTitle = nil
-    holdsMediaSuspension = false
     loadState = .idle(history: state)
     keptInteraction = nil
     isLoading = false

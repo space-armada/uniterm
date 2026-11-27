@@ -384,8 +384,8 @@ final class BrowserUnsentInputTests: XCTestCase {
     XCTAssertEqual(counted as? Int, 1)
   }
 
-  /// Catches a tab counted as running something for reasons that are not unsent input or a download:
-  /// a page that is loading, and a pane that is detached.
+  /// Catches a tab counted as running something for a reason that is not unsent input or a download:
+  /// a page that is loading.
   func testNothingButInputAndDownloadsCountsAsRunning() async throws {
     let harness = try await make()
     defer { harness.stop() }
@@ -398,9 +398,7 @@ final class BrowserUnsentInputTests: XCTestCase {
 
     await harness.host.until("the page shows") { harness.applet.title == "Form" }
 
-    harness.applet.detach()
-
-    XCTAssertFalse(harness.applet.isRunningSomething, "a detached pane counted")
+    XCTAssertFalse(harness.applet.isRunningSomething, "a loaded page counted")
     XCTAssertEqual(harness.applet.runningLabels, [])
   }
 

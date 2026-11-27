@@ -81,9 +81,6 @@ import Theme
       events.close()
     }
 
-    public func detach() {}
-    public func reattach() {}
-
     public func focus() {
       view.window?.makeFirstResponder(button)
     }

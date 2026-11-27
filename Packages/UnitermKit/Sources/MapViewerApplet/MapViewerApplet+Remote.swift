@@ -246,7 +246,7 @@ extension MapViewerApplet: AppletCommandHandling {
         + "programs, so they are not shown."
 
     alerts.deliver(
-      AppletNotice(.info, text), origin: .restore, ofLoad: false, from: self, to: host)
+      AppletNotice(.info, text), origin: .restore, from: self, to: host)
 
     refresh()
     host?.appletDidChange(self)

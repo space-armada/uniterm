@@ -115,7 +115,7 @@ final class UndoCloseTests: XCTestCase {
   // MARK: Closing and undoing
 
   /// Catches a close that keeps the applet alive for undo. The closed pane's applet is closed at
-  /// once. It is never detached, and nothing is asked for an idle pane.
+  /// once, and nothing is asked for an idle pane.
   func testClosingAPaneEndsItsAppletAtOnce() throws {
     let fixture = try makeFixture()
     fixture.openPanes(2)
@@ -124,7 +124,6 @@ final class UndoCloseTests: XCTestCase {
 
     XCTAssertEqual(fixture.controller.paneIDs, [id(1)])
     XCTAssertTrue(fixture.made[1].closed)
-    XCTAssertEqual(fixture.made[1].detachCount, 0)
     XCTAssertEqual(fixture.controller.ledger.entries.count, 1)
     XCTAssertTrue(fixture.recorder.asked.isEmpty)
   }
@@ -145,7 +144,6 @@ final class UndoCloseTests: XCTestCase {
     XCTAssertTrue(fixture.recorder.restored[0].started)
     XCTAssertTrue(fixture.made[1].closed)
     XCTAssertEqual(fixture.made.count, 2)
-    XCTAssertEqual(fixture.made[1].reattachCount, 0)
     XCTAssertEqual(rootWeights(fixture.controller), [0.5, 0.5])
     XCTAssertEqual(fixture.controller.focusedPane, id(4))
     XCTAssertTrue(fixture.controller.ledger.entries.isEmpty)

@@ -35,8 +35,6 @@ public final class PlaceholderApplet: Applet {
 
   public func start(origin: StartOrigin) {}
   public func close() {}
-  public func detach() {}
-  public func reattach() {}
 
   public func focus() {
     view.window?.makeFirstResponder(view)

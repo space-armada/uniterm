@@ -6,8 +6,8 @@ import XCTest
 
 @testable import BrowserApplet
 
-/// What a restored pane loads, and when. A restore loads only the selected tab, and only while the
-/// pane is attached. A refused stored address explains itself in the pane and keeps its text.
+/// What a restored pane loads, and when. A restore loads only the selected tab. A refused stored
+/// address explains itself in the pane and keeps its text.
 @MainActor
 final class BrowserLazyRestoreTests: XCTestCase {
   private nonisolated static func titled() -> FixtureServer.Handler {
@@ -29,75 +29,6 @@ final class BrowserLazyRestoreTests: XCTestCase {
     paths.map {
       BrowserDescription.Tab(url: server.url($0).absoluteString, title: String($0.dropFirst()))
     }
-  }
-
-  /// Catches a restore that loads a pane nobody can see. A pane detached before `start` loads
-  /// nothing, and the first attach loads only the selected tab.
-  func testAPaneDetachedAtStartLoadsNothingUntilItIsAttached() async throws {
-    let server = try await FixtureServer.start(handler: Self.titled())
-    defer { server.stop() }
-
-    let applet = try restore(records(server, ["/a", "/b", "/c"]), selected: 1)
-    let harness = BrowserHarness(server: server, applet: applet, starting: false)
-    defer { harness.stop() }
-
-    applet.detach()
-    applet.start(origin: .restore)
-
-    XCTAssertTrue(server.requests.isEmpty, "a detached pane loaded at start")
-    XCTAssertFalse(applet.tab.isLoading)
-
-    applet.reattach()
-
-    await harness.host.until("the selected tab loads on attach") {
-      applet.title == "B" && !applet.tab.isLoading
-    }
-
-    XCTAssertEqual(server.requests.map(\.path), ["/b"])
-  }
-
-  /// Catches a tab selected while the pane is detached that loads anyway, such as one picked from
-  /// the palette. It waits for the attach, and then loads once.
-  func testATabSelectedWhileDetachedLoadsOnAttachAndNotBefore() async throws {
-    let server = try await FixtureServer.start(handler: Self.titled())
-    defer { server.stop() }
-
-    let applet = try restore(records(server, ["/a", "/b"]), selected: 0)
-    let harness = BrowserHarness(server: server, applet: applet, starting: false)
-    defer { harness.stop() }
-
-    applet.detach()
-    applet.start(origin: .restore)
-    applet.selectTab(at: 1)
-
-    XCTAssertTrue(server.requests.isEmpty, "selecting a tab loaded it in a detached pane")
-
-    applet.reattach()
-
-    await harness.host.until("the second tab loads") {
-      applet.title == "B" && !applet.tab.isLoading
-    }
-
-    XCTAssertEqual(server.requests.map(\.path), ["/b"])
-  }
-
-  /// Catches an attach that loads a page again. A pane that loaded at start and is detached and
-  /// attached once more asks the server nothing new.
-  func testDetachAndReattachAfterTheLoadAskTheServerNothingMore() async throws {
-    let server = try await FixtureServer.start(handler: Self.titled())
-    defer { server.stop() }
-
-    let applet = try restore(records(server, ["/a", "/b"]), selected: 0)
-    let harness = BrowserHarness(server: server, applet: applet, starting: false)
-    defer { harness.stop() }
-
-    applet.start(origin: .restore)
-    await harness.host.until("the page loads") { applet.title == "A" && !applet.tab.isLoading }
-
-    applet.detach()
-    applet.reattach()
-
-    XCTAssertEqual(server.requests.map(\.path), ["/a"])
   }
 
   /// Catches a refused stored address that leaves the pane blank and silent. The pane shows an
@@ -184,9 +115,9 @@ final class BrowserLazyRestoreTests: XCTestCase {
     XCTAssertFalse(applet.content.errorPage.isHidden)
   }
 
-  /// Catches a tab closed while the pane is detached that loads the tab the close selects. The
-  /// neighbour waits for the attach and loads once.
-  func testClosingATabWhileDetachedLoadsNoNeighbourUntilAttach() async throws {
+  /// Catches a close that leaves the tab it selects unloaded, or loads it twice. The neighbour was
+  /// restored and never looked at, so the close is its first selection, and it loads once.
+  func testClosingATabLoadsTheNeighbourItSelectsOnce() async throws {
     let server = try await FixtureServer.start(handler: Self.titled())
     defer { server.stop() }
 
@@ -197,50 +128,13 @@ final class BrowserLazyRestoreTests: XCTestCase {
     applet.start(origin: .restore)
     await harness.host.until("the first tab loads") { applet.title == "A" && !applet.tab.isLoading }
 
-    applet.detach()
-
     let closedResult = await applet.closeTab(at: 0)
 
     XCTAssertEqual(closedResult, .closed)
-    XCTAssertEqual(server.requests.map(\.path), ["/a"], "a close loaded a tab in a detached pane")
 
-    applet.reattach()
     await harness.host.until("the neighbour loads") { applet.title == "B" && !applet.tab.isLoading }
 
     XCTAssertEqual(server.requests.map(\.path), ["/a", "/b"])
-  }
-
-  /// Catches a tab reopened while the pane is detached that loads at once. It holds its history
-  /// until the attach, and then loads.
-  func testReopeningATabWhileDetachedLoadsOnAttach() async throws {
-    let server = try await FixtureServer.start(handler: Self.titled())
-    defer { server.stop() }
-
-    let applet = try restore(records(server, ["/a", "/b"]), selected: 1)
-    let harness = BrowserHarness(server: server, applet: applet, starting: false)
-    defer { harness.stop() }
-
-    applet.start(origin: .restore)
-    await harness.host.until("the selected tab loads") {
-      applet.title == "B" && !applet.tab.isLoading
-    }
-
-    let closedResult = await applet.closeTab(at: 1)
-
-    XCTAssertEqual(closedResult, .closed)
-
-    let stamp = try XCTUnwrap(applet.closedTabStamps.first)
-
-    applet.detach()
-
-    XCTAssertEqual(applet.reopenTab(stamp: stamp), .reopened(title: "B"))
-    XCTAssertFalse(applet.tab.isLoading)
-    XCTAssertNil(applet.tab.webView.url, "a reopen loaded a tab in a detached pane")
-
-    applet.reattach()
-    await harness.host.until("the reopened tab loads") {
-      applet.title == "B" && !applet.tab.isLoading && applet.tab.webView.url != nil
-    }
   }
 
   /// Catches a refused tab that warns again each time it is selected. The first selection warned

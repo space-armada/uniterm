@@ -64,7 +64,7 @@ public final class MapViewerApplet: Applet, SourceReplacing {
   /// The notices already posted to the status bar for the file shown now.
   private var posted = AppletNotices()
 
-  /// Reaches the status bar for every alert, and holds them back while the pane is detached.
+  /// Reaches the status bar for every alert.
   var alerts = AppletAlerts()
 
   /// The origin of the load that produced the file notices shown now. Each load, and each edit
@@ -382,7 +382,6 @@ public final class MapViewerApplet: Applet, SourceReplacing {
     hiddenFromFile = 0
     fileTruncated = false
     posted.reset()
-    alerts.replaceLoad()
     filePins = []
     content.removePins(layer: .file)
     forgetDocument()
@@ -623,7 +622,6 @@ public final class MapViewerApplet: Applet, SourceReplacing {
     closed = true
     sourceSwap.cancel()
     events.close()
-    alerts.discard()
     opening?.cancel()
     opening = nil
     editing?.cancel()
@@ -643,15 +641,6 @@ public final class MapViewerApplet: Applet, SourceReplacing {
     places.cancel()
     content.stopObserving()
     content.mapView.delegate = nil
-  }
-
-  /// The map holds back its alerts while detached. See `AppletAlerts`.
-  public func detach() {
-    alerts.detach()
-  }
-
-  public func reattach() {
-    alerts.reattach(from: self, to: host)
   }
 
   public func focus() {

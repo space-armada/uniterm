@@ -489,8 +489,7 @@ private final class BareHost: AppletHost {
   var texts: [String] = []
 
   func applet(
-    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String,
-    presenting record: StatusRecordID?
+    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String
   ) -> StatusRecordID? {
     texts.append(text)
     return nil

@@ -23,8 +23,6 @@ class FakeApplet: Applet {
   var currentDirectory: String?
   var started = false
   var closed = false
-  var detachCount = 0
-  var reattachCount = 0
 
   /// Unsaved work the applet reports, and what its save answers.
   var unsavedWork: AppletUnsavedWork?
@@ -204,8 +202,6 @@ class FakeApplet: Applet {
   /// What the host said built the applet when it started it.
   var startOrigin: StartOrigin?
   func close() { closed = true }
-  func detach() { detachCount += 1 }
-  func reattach() { reattachCount += 1 }
 
   /// How many times the host said the app is quitting, and the title the applet takes then, as an
   /// applet that saves something only at quit.
@@ -367,7 +363,7 @@ extension AppletHost {
   func applet(
     _ applet: any Applet, recordInHistory level: StatusLevel, text: String
   ) -> StatusRecordID? {
-    self.applet(applet, send: .historyOnly, level: level, text: text, presenting: nil)
+    self.applet(applet, send: .historyOnly, level: level, text: text)
   }
 }
 

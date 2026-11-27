@@ -389,36 +389,6 @@ final class BrowserDownloadTests: XCTestCase {
     XCTAssertEqual(harness.files().count, 1)
   }
 
-  /// Catches an outcome that interrupts a pane the user cannot see, and one that is lost. A
-  /// detached pane records the outcome at once with no turn on the bar, and presents the same
-  /// record on reattach, adding no second history entry. The download keeps going meanwhile.
-  func testADownloadThatEndsWhileDetachedIsRecordedNowAndPresentedOnReattach() async throws {
-    let hold = FixtureServer.Hold()
-    let harness = try await make(hold)
-    defer { harness.stop() }
-
-    harness.applet.submit(address: harness.server.url("/held").absoluteString)
-    await harness.host.until("the download has a file") {
-      harness.applet.downloads.active.first?.temporary != nil
-    }
-
-    harness.applet.detach()
-
-    XCTAssertTrue(harness.applet.isRunningSomething)
-
-    hold.release()
-    await harness.host.until("the outcome is recorded") { !harness.host.recording.records.isEmpty }
-
-    XCTAssertEqual(harness.host.recording.records.map(\.text), ["Downloaded held.bin."])
-    XCTAssertEqual(harness.posts.map(\.text), [])
-    XCTAssertEqual(harness.host.recording.presented.count, 0)
-
-    harness.applet.reattach()
-
-    XCTAssertEqual(harness.host.recording.presented.map(\.text), ["Downloaded held.bin."])
-    XCTAssertEqual(harness.host.recording.admitted.count, 1)
-  }
-
   // MARK: Reveal
 
   /// Catches a reveal that is offered with nothing to show, one that opens Finder in a test, and a

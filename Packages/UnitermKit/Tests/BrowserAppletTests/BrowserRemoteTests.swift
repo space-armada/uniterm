@@ -665,24 +665,6 @@ final class BrowserRemoteTests: XCTestCase {
     XCTAssertTrue(harness.host.recording.confirmations.isEmpty)
   }
 
-  // MARK: Attachment
-
-  /// Catches an open in a detached pane that leaves its tab unselected or its media playing. The
-  /// user's typed address loads at once, and a detached pane's media stays suspended.
-  func testATabOpenedWhileDetachedIsSelectedLoadsAndStaysSuspended() async throws {
-    let harness = try await make()
-    defer { harness.stop() }
-
-    harness.applet.detach()
-
-    let (_, opened) = try open(harness, "/a")
-
-    XCTAssertTrue(harness.applet.tab === opened)
-    XCTAssertTrue(opened.isMediaSuspended)
-
-    await harness.host.until("the tab loads") { opened.pageTitle == "A" }
-  }
-
   // MARK: Seeds and programs
 
   /// Catches a seeded pane that loads nothing, or an unseeded one that requests a page.

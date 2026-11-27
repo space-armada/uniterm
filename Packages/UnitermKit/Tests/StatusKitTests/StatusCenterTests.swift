@@ -154,14 +154,13 @@ final class StatusCenterTests: XCTestCase {
     XCTAssertTrue(center.hasUnseenWarning)
   }
 
-  /// Catches a delivery that mishandles one of its three ways, or a presented record that
-  /// duplicates its history row. Each way is checked at the center, where hosts call it.
-  func testDeliveryHasThreeWaysAndAPresentedRecordAddsNoRow() throws {
+  /// Catches a delivery that mishandles one of its three ways. Each way is checked at the center,
+  /// where hosts call it.
+  func testDeliveryHasThreeWays() throws {
     let center = StatusCenter(clock: ManualClock(), scheduler: ManualScheduler().schedule)
     let pane = StatusSource.pane(id: 4, name: "csv")
 
-    let quiet = try XCTUnwrap(
-      center.deliver(.historyOnly, level: .warning, source: pane, text: "a"))
+    center.deliver(.historyOnly, level: .warning, source: pane, text: "a")
     XCTAssertNil(center.display)
     XCTAssertFalse(center.hasUnseenWarning)
 
@@ -171,13 +170,7 @@ final class StatusCenterTests: XCTestCase {
 
     center.deliver(.message, level: .info, source: pane, text: "c")
     XCTAssertEqual(center.display?.message.text, "c")
-
-    let rows = center.history.count
-    let again = center.deliver(
-      .message, level: .warning, source: pane, text: "a", presenting: quiet)
-
-    XCTAssertEqual(again, quiet)
-    XCTAssertEqual(center.history.count, rows)
+    XCTAssertEqual(center.history.count, 3)
   }
 
   /// Catches a delivery that lets a producer present under an identity the center never issued.

@@ -95,7 +95,7 @@ enum WebContent {
 }
 
 /// A web view whose content process ended or hung. The tab shows the stopped message only for the
-/// selected tab of an attached pane. Any other tab goes back to not yet loaded. Recovery always
+/// selected tab. Any other tab goes back to not yet loaded. Recovery always
 /// builds a new web view from the tab's address and history, and nothing reloads by itself.
 @MainActor
 final class BrowserRecoveryTests: XCTestCase {
@@ -315,34 +315,6 @@ final class BrowserRecoveryTests: XCTestCase {
 
     XCTAssertEqual(harness.count("GET", "/c"), 2)
     XCTAssertFalse(harness.tab.isStopped)
-  }
-
-  /// Catches a detached pane that shows a message nobody can see, or reloads while it is off the
-  /// screen. The selected tab goes back to not yet loaded and loads on the attach, once.
-  func testKillingTheSelectedTabOfADetachedPaneWaitsForTheAttach() async throws {
-    let harness = try await make()
-    defer { harness.stop() }
-
-    await harness.load("/a", expecting: "A")
-
-    harness.applet.detach()
-
-    let tab = harness.tab
-
-    await WebContent.kill(tab.webView, in: harness)
-    await harness.eventually("the tab lost its content") { tab.generation == 1 }
-
-    XCTAssertFalse(tab.isStopped)
-    XCTAssertTrue(harness.applet.content.errorPage.isHidden)
-    XCTAssertEqual(harness.count("GET", "/a"), 1)
-
-    harness.applet.reattach()
-
-    await harness.host.until("the attach loads the page") {
-      tab.currentURL?.path == "/a" && !tab.isLoading
-    }
-
-    XCTAssertEqual(harness.count("GET", "/a"), 2)
   }
 
   /// Catches a page that crashes on load being reloaded in a loop, and a second stop that stays
@@ -1008,36 +980,6 @@ final class BrowserRecoveryTests: XCTestCase {
     }
   }
 
-  /// Catches the same wake in a pane that is off the screen. The attach loads the tab.
-  func testTheBoundInADetachedPaneDropsTheViewAndLoadsNothingUntilTheAttach() async throws {
-    let timer = ManualHangTimer()
-    let harness = try await make(services: .testing(hang: timer.policy))
-    defer { harness.stop() }
-
-    await harness.load("/a", expecting: "A")
-
-    let tab = harness.tab
-    let pid = try XCTUnwrap(WebContent.processID(of: tab.webView))
-
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
-
-    hang(tab.webView)
-    harness.applet.reload()
-    harness.applet.detach()
-    timer.fire()
-
-    XCTAssertEqual(tab.generation, 1)
-    XCTAssertFalse(tab.hasBegunLoading)
-    XCTAssertFalse(tab.isStopped)
-    XCTAssertEqual(harness.count("GET", "/a"), 1)
-
-    harness.applet.reattach()
-
-    await harness.host.until("the attach loads the page") {
-      tab.currentURL?.path == "/a" && !tab.isLoading
-    }
-  }
-
   /// Catches a callback from a view the tab already replaced. The old view has no delegates, and a
   /// second stop it reports is ignored, so it cannot replace the new view or its state.
   func testTheOldViewReachesNothingOfTheTabAfterARebuild() async throws {
@@ -1159,5 +1101,4 @@ final class BrowserRecoveryTests: XCTestCase {
     XCTAssertEqual(harness.count("POST", "/result"), 1)
     XCTAssertTrue(harness.host.recording.confirmations.isEmpty)
   }
-
 }

@@ -76,8 +76,6 @@ final class LauncherApplet: Applet {
   func close() {
     launcher.stop()
   }
-  func detach() {}
-  func reattach() {}
 
   func focus() {
     launcher.focusCurrent()

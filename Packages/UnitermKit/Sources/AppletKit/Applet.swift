@@ -85,14 +85,11 @@ public enum AppletPermissionAnswer: Sendable, Equatable {
 /// the message source.
 @MainActor
 public protocol AppletHost: AnyObject {
-  /// Delivers `text` the way `delivery` says. With no `record`, the host admits a new history
-  /// record. With the ID of a record the applet got from an earlier call, it presents that record
-  /// again and adds none. Returns the record's ID. The protocol has no default for it, so a host
-  /// cannot drop a delivery unnoticed.
+  /// Delivers `text` the way `delivery` says, and admits a new history record for it. Returns the
+  /// record's ID. The protocol has no default for it, so a host cannot drop a delivery unnoticed.
   @discardableResult
   func applet(
-    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String,
-    presenting record: StatusRecordID?
+    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String
   ) -> StatusRecordID?
 
   /// The applet has nothing left to run, so its pane should close.
@@ -137,7 +134,7 @@ public protocol AppletHost: AnyObject {
 extension AppletHost {
   /// A turn on the status bar, an entry in the history, and the unseen signal of the level.
   public func applet(_ applet: any Applet, post level: StatusLevel, text: String) {
-    self.applet(applet, send: .message, level: level, text: text, presenting: nil)
+    self.applet(applet, send: .message, level: level, text: text)
   }
 
   /// A host that has no way to open files says so, so a click never fails silently.
@@ -196,10 +193,11 @@ public enum TabCloseResult: Sendable, Equatable {
 
 /// What a pane runs. Every applet implements this contract.
 ///
-/// The host sends the lifecycle events: `start`, `detach`, `reattach`, `willQuit`, and `close`. It
-/// sends each when it happens and does nothing else on the applet's behalf. It never keeps an
-/// applet alive after closing it, and it never stops or signals the applet's work itself. Each
-/// applet decides what an event means for its own content.
+/// The host sends the lifecycle events: `start`, `willQuit`, and `close`. It sends each when it
+/// happens and does nothing else on the applet's behalf. It never keeps an applet alive after
+/// closing it, and it never stops or signals the applet's work itself. Hiding a view is not an
+/// event, so an applet in a hidden window or a hidden pane keeps running. Each applet decides what
+/// an event means for its own content.
 ///
 /// Undo reopens a closed pane from its description, in the same place, with the same kind of
 /// applet. An applet that wants an undo to bring back more saves it in the description's undo-only
@@ -257,17 +255,6 @@ public protocol Applet: AnyObject {
   /// its description. Work it keeps alive after close must be bounded in time and visible to the
   /// user.
   func close()
-
-  /// The applet has left the screen and stays alive. It stops at once what the user would notice
-  /// but cannot see. It pauses audio and video, and it holds back alerts. An applet with nothing
-  /// perceptible to pause does nothing.
-  ///
-  /// Holding back an alert means withholding its presentation. The applet still records the alert
-  /// in the history when it happens, and shows it again on `reattach`. `AppletAlerts` does both.
-  func detach()
-
-  /// The applet is back on screen. It undoes what `detach` did.
-  func reattach()
 
   /// The app is quitting, and the layout is saved as soon as this returns. The applet puts into
   /// its description what is too costly to keep there all the time. The host sends it only when

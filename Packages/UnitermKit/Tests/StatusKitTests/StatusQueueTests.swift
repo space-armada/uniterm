@@ -378,85 +378,7 @@ final class StatusQueueTests: XCTestCase {
     XCTAssertEqual(queue.history.first?.source.label, "zsh")
   }
 
-  // MARK: Presenting a record again
-
-  /// Catches a reattach that adds the same history entry twice. Presenting a record takes a turn
-  /// on the bar and marks it unseen, and the history keeps the one row it already had.
-  func testPresentingARecordAddsNoHistoryEntry() {
-    var queue = StatusQueue()
-    let record = queue.record(level: .warning, source: source, text: "held", at: 0)
-
-    XCTAssertFalse(queue.hasUnseenWarning)
-
-    queue.present(
-      level: .warning, source: source, text: "held", record: record.id, showsMessage: true,
-      raisesSignal: true, at: 1)
-
-    XCTAssertEqual(queue.history.map(\.text), ["held"])
-    XCTAssertEqual(queue.current?.message.id, record.id)
-    XCTAssertTrue(queue.hasUnseenWarning)
-    XCTAssertEqual(queue.unseenIDs, [record.id])
-  }
-
-  /// Catches an attention delivery that takes a turn. A restored warning raises the lesser signal
-  /// and leaves the bar to current activity.
-  func testPresentingForAttentionRaisesTheSignalWithoutATurn() {
-    var queue = StatusQueue()
-    post(&queue, .info, "current", at: 0)
-
-    let record = queue.record(level: .warning, source: source, text: "restored", at: 0.1)
-
-    queue.present(
-      level: .warning, source: source, text: "restored", record: record.id, showsMessage: false,
-      raisesSignal: true, at: 0.2)
-
-    XCTAssertEqual(queue.current?.message.text, "current")
-    XCTAssertEqual(queue.pendingCount, 0)
-    XCTAssertTrue(queue.hasUnseenWarning)
-  }
-
-  /// Catches a record that retention dropped before it was presented. Its signal moves to the loss
-  /// summary, since no row is left to mark, and only the summary's control clears it.
-  func testPresentingARecordThatRetentionDroppedRaisesTheSignalInTheLoss() {
-    var policy = StatusPolicy()
-    policy.otherHistoryLimit = 1
-
-    var queue = StatusQueue(policy: policy)
-    let held = queue.record(level: .warning, source: source, text: "held", at: 0)
-
-    queue.record(level: .info, source: source, text: "later", at: 1)
-
-    XCTAssertEqual(queue.history.map(\.text), ["later"])
-    XCTAssertFalse(queue.hasUnseenWarning)
-
-    queue.present(
-      level: .warning, source: source, text: "held", record: held.id, showsMessage: false,
-      raisesSignal: true, at: 2)
-
-    XCTAssertTrue(queue.hasUnseenWarning)
-    XCTAssertEqual(queue.loss.unseenWarnings, 1)
-    XCTAssertEqual(queue.history.map(\.text), ["later"])
-
-    queue.acknowledgeLoss()
-
-    XCTAssertFalse(queue.hasUnseenWarning)
-  }
-
-  /// Catches a presented record that repeats a message already on the bar. Its presentation
-  /// coalesces as a post does, and a repeat never restarts the dwell.
-  func testPresentingARecordCoalescesWithTheMessageOnTheBar() {
-    var queue = StatusQueue()
-    post(&queue, .info, "same", at: 0)
-
-    let record = queue.record(level: .info, source: source, text: "same", at: 0.5)
-
-    queue.present(
-      level: .info, source: source, text: "same", record: record.id, showsMessage: true,
-      raisesSignal: false, at: 1)
-
-    XCTAssertEqual(queue.pendingCount, 0)
-    XCTAssertEqual(queue.history.count, 2)
-  }
+  // MARK: A signal without a turn
 
   /// Catches a restore-time record that cannot raise the lesser signal on its own turn.
   func testARecordCanRaiseTheSignalWithoutATurn() {
@@ -469,38 +391,5 @@ final class StatusQueueTests: XCTestCase {
     XCTAssertEqual(queue.pendingCount, 0)
     XCTAssertEqual(queue.unseenWarningCount, 1)
     XCTAssertFalse(queue.hasUnseenError)
-  }
-
-  /// Catches an ID the history never held that still counts. Presenting it must change nothing,
-  /// since the loss summary would then show an unseen count with no row and no way to clear it.
-  func testPresentingAnIDNeverIssuedChangesNothing() {
-    var queue = StatusQueue()
-    queue.record(level: .info, source: source, text: "real", at: 0)
-
-    queue.present(
-      level: .error, source: source, text: "forged", record: 999, showsMessage: true,
-      raisesSignal: true, at: 1)
-
-    XCTAssertFalse(queue.hasUnseenError)
-    XCTAssertEqual(queue.loss, RetentionLoss())
-    XCTAssertNil(queue.current)
-    XCTAssertEqual(queue.pendingCount, 0)
-  }
-
-  /// Catches one source raising a signal on, or showing, another source's record. Identity is
-  /// bound at origin, so a record answers only to the source that made it.
-  func testPresentingAnotherSourcesRecordChangesNothing() {
-    var queue = StatusQueue()
-    let mine = StatusSource.pane(id: 1, name: "a")
-    let other = StatusSource.pane(id: 2, name: "b")
-    let record = queue.record(level: .warning, source: other, text: "theirs", at: 0)
-
-    queue.present(
-      level: .warning, source: mine, text: "theirs", record: record.id, showsMessage: true,
-      raisesSignal: true, at: 1)
-
-    XCTAssertFalse(queue.hasUnseenWarning)
-    XCTAssertNil(queue.current)
-    XCTAssertEqual(queue.pendingCount, 0)
   }
 }

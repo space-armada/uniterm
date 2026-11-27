@@ -24,8 +24,6 @@ private final class DirectoryApplet: Applet {
 
   func start(origin: StartOrigin) {}
   func close() {}
-  func detach() {}
-  func reattach() {}
   func focus() {}
 
   func describe() -> AppletDescription {

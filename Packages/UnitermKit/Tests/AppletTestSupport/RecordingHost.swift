@@ -3,16 +3,14 @@ import Foundation
 import StatusKit
 
 /// Stands in for the pane's host in applet tests. It collects what an applet tells its pane, and it
-/// numbers each history record it admits, so a test can tell a new record from a presented one.
+/// numbers each history record it admits.
 @MainActor
 public final class RecordingHost: AppletHost {
-  /// One delivery, in the order the applet sent it. `record` is set when the applet presented an
-  /// earlier record again.
+  /// One delivery, in the order the applet sent it.
   public struct Sent: Equatable {
     public var delivery: StatusDelivery
     public var level: StatusLevel
     public var text: String
-    public var record: StatusRecordID?
   }
 
   public private(set) var sent: [Sent] = []
@@ -46,9 +44,6 @@ public final class RecordingHost: AppletHost {
     sent = []
   }
 
-  /// The deliveries that admitted a history record, as the window's history would hold them.
-  public var admitted: [Sent] { sent.filter { $0.record == nil } }
-
   /// What the applet delivered with a turn on the bar.
   public var posts: [(level: StatusLevel, text: String)] { texts(of: .message) }
 
@@ -58,26 +53,14 @@ public final class RecordingHost: AppletHost {
   /// What the applet delivered with the unseen signal and no turn on the bar.
   public var attentions: [(level: StatusLevel, text: String)] { texts(of: .attention) }
 
-  /// What the applet presented again from a record it made earlier, without a new history entry.
-  public var presented:
-    [(delivery: StatusDelivery, level: StatusLevel, text: String, record: StatusRecordID)]
-  {
-    sent.compactMap { item in
-      item.record.map { (item.delivery, item.level, item.text, $0) }
-    }
-  }
-
   private func texts(of delivery: StatusDelivery) -> [(level: StatusLevel, text: String)] {
-    admitted.filter { $0.delivery == delivery }.map { ($0.level, $0.text) }
+    sent.filter { $0.delivery == delivery }.map { ($0.level, $0.text) }
   }
 
   public func applet(
-    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String,
-    presenting record: StatusRecordID?
+    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String
   ) -> StatusRecordID? {
-    sent.append(Sent(delivery: delivery, level: level, text: text, record: record))
-
-    if let record { return record }
+    sent.append(Sent(delivery: delivery, level: level, text: text))
 
     lastRecord += 1
     return lastRecord
