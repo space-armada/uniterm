@@ -2,13 +2,7 @@
 
 **Status:** open. Confirmed by reading the code, not with VoiceOver.
 
-**Estimate:** small, but one non-trivial decision. Which words VoiceOver reads for a filter or notice row is unsettled.
-Candidates: omit the kind and read only the enabled state, give filter and notice rows kind words, or read the row as
-its title alone. UTERM-061's "How a command row reads to VoiceOver" decision settles "Browser command" and "Browser tab"
-for command and tab rows. It names no wording for filter, notice, or filter-keyword rows. Its acceptance line only says a
-filter row's value does not read as an empty kind, which both candidate fixes satisfy. UTERM-002 settles no
-accessibility wording. The fix would touch `CommandPaletteView.swift` (`configure`), possibly `PaletteRanking.swift`
-(`Kind.label`), and a test under `Packages/UnitermKit/Tests/WindowKitTests`.
+**Estimate:** small; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
 
 ## Observed
 
@@ -32,3 +26,12 @@ kind, or no leading comma. Actual: ", enabled".
 
 UTERM-061 M1 has a check that every row's value names its kind, so the fix can land there or on its own. Build the
 value without an empty kind, or give filter and notice rows a kind word.
+
+## Chosen fix
+
+2026-11-26, chosen by the user: filter and notice rows get kind words, so a row's value names its kind, as UTERM-061
+says every row's value does. The words are "Filter" and "Notice". A row then reads as its title, then its kind and
+enabled state, with no empty kind before the comma.
+
+The fix touches `CommandPaletteView.swift` (`configure`), likely `Commands/PaletteRanking.swift` (`Kind.label`), and a
+new test under `Packages/UnitermKit/Tests/WindowKitTests`.

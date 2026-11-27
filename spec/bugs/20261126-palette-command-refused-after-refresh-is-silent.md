@@ -2,8 +2,7 @@
 
 **Status:** open. Confirmed by reading the code, not by a test.
 
-**Estimate:** medium, with one non-trivial design call: whether the palette hides or stays up when a chosen
-command is refused. See "Estimate check".
+**Estimate:** medium; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
 
 ## Observed
 
@@ -68,3 +67,14 @@ CommandRegistry tests.
 - The regression test belongs in `CommandPaletteTests.swift`. It drives `palette.onChoose` with a row that was enabled
   and is now unavailable, as `TabSearchTests` drives stale tab rows.
 - UTERM-061 M1 rewrites `choose` and covers this refusal. A fix landed first is compatible, but M1 restructures it.
+
+## Chosen fix
+
+2026-11-26, chosen by the user: a command row refused when chosen keeps the palette open. The row dims in place, and
+the status bar says the command did not run, such as `"Clear Screen" did not run, because it is not available now.`.
+The row loses the selection, and no row is selected, so Return runs nothing. Down selects the first selectable row
+below it, and Up the first above it. The same selection rule holds for any selected row that dims in place. UTERM-061's
+"The palette list holds still" and its M1 checks were amended to match.
+
+The recorded decisions stand: palette rows only, and `run` reports why it refused through an enum. A gone pane keeps
+its own message. The regression test lives in `CommandPaletteTests.swift`.

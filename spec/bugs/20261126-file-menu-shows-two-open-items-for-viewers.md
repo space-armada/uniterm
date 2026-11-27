@@ -1,11 +1,7 @@
 # The File menu shows two items titled "Open…" while a viewer is focused
 
 **Status:** open
-**Estimate:** small to medium; non-trivial design decisions: the pane-local Open's new menu title (wording is a naming
-choice), whether the palette title changes too, and whether an existing remap of "Open…" for the pane-local item is
-allowed to stop matching. The fix would add an optional menu title to `AppletCommand` (as registry commands have),
-set it in `AppletCommand.openSource`, use it in the menu build, and update `SourceOpeningTests` and
-`BuiltInCommandsTests`, which pin the "Open…" title.
+**Estimate:** small to medium; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
 **Validation:** the two same-titled items are confirmed by reading the code on 2026-11-26 (`openSource` titles
 "Open…" and uniterm's Open uses the menu title "Open…"; the menu hides applet items only by type). Not confirmed on
 screen; the two items follow from the code, but how macOS binds an App Shortcuts remap of a
@@ -42,3 +38,15 @@ It needs a design call:
   title apart from the palette title, so an applet command would need the same field. An existing remap of the
   pane-local Open's title stops matching.
 - Keep both titles, and accept that a remap of "Open…" is ambiguous.
+
+## Chosen fix
+
+2026-11-26, chosen by the user: rename the viewer's pane-local Open to "Open in This Pane…" in the palette and the
+menu alike. Applet commands carry one title, so no separate menu title is needed. An existing App Shortcuts remap of
+"Open…" for the pane-local item stops matching, which follows from giving the two actions different names. The tests
+that pin the "Open…" title change with it.
+
+The user also asked for a rule that one thing reads the same in every place it shows. It is proposed as ADR-17.
+
+The fix touches `AppletKit/SourceReplacing.swift` (`openSource`), plus `WindowKitTests/SourceOpeningTests.swift` and
+`AppletCatalogTests/BuiltInCommandsTests.swift`, which pin the old title.

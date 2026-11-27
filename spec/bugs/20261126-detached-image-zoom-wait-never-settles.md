@@ -1,9 +1,7 @@
 # A program's zoom wait on a detached image pane never settles until the pane comes back
 
 **Status:** open. Traced on 2026-11-26 against the current code. The path is deterministic. No run was made.
-**Estimate:** small to medium, with one non-trivial design call: whether a program's zoom on a detached pane
-settles before the helper has accepted it. Settling once the viewport is set drops the `zoom-limit` refusal that
-UTERM-006 promises. See "Estimate check".
+**Estimate:** medium; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
 
 ## Observed
 
@@ -70,3 +68,13 @@ detached panes and hidden tabs alike.
 - Gap in the planned fix: a zoom already pending when the pane detaches stays pending. `detach()`
   (`ImageViewerApplet.swift`, about lines 1055-1063) never calls `observeRemote`, and `tileArrived` bails while
   detached without observing. The fix needs `detach()` to observe, and a second test.
+
+## Chosen fix
+
+2026-11-26, chosen by the user: while the pane is detached, uniterm still asks the helper for one tile, or one frame
+level, for a program's pending zoom. It draws nothing. The zoom's wait settles when that tile arrives, or fails with
+`zoom-limit` when the helper or a budget refuses it. This keeps UTERM-006's `zoom-limit` contract, and matches
+UTERM-062's rule that a hidden tab still asks the helper for the decodes its program's commands need.
+
+The fix also covers both gaps in "Estimate check": an animated image zoomed after detach, and a zoom still pending
+when the pane detaches. Each gets its own regression test.
