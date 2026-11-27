@@ -93,6 +93,15 @@ stands in for a full one.
 Pick the classes from what the diff touches, plus any new test. Run the full `make test-app` and `make test-package`
 before calling the work done. Run them earlier when a change touches shared UI test helpers or app-wide code.
 
+### Hand checks
+
+Some checks need a person at the Mac. Examples are how a view looks, a trackpad or mouse gesture, a real sign-in, or
+VoiceOver. Reports and proposals leave these to the user. The `hand-checks` Claude Code skill in
+`.claude/skills/hand-checks/` finds the ones with no record of being done. It writes a guide for each, and builds a
+bundle outside the repo that testers can zip and share. The bundle holds an offline page for recording verdicts, and a
+`launch.sh` that builds the app and starts it with throwaway state. Testers need only a clone that `make build` works
+in. The generated checks are never committed. Each round regenerates them from the current proposals and reports.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
