@@ -244,8 +244,36 @@ The final review covered the run's twelve commits, with an ADR review of the thr
 - `ControllerConsentUITests`: 10 of 11 passed at 15:30. `testAnUnsafeReviewOffersThreeChoicesAndNoTrust` failed with
   "the Pending Requests panel never opened", and the log shows WezTerm coming to the front inside that test. It passed
   alone at 15:33. An earlier pass at 15:02 lost one test the same way to Messages, and all 11 passed at 15:05.
-- Every UI failure in the run sits beside a `[frontmost] Activation` line for another app. No UI failure came without
-  one.
+- `make fuzz` at the final head: 25 tests pass, 325 s.
+- `TextViewerUITests` and `ImageViewerUITests` at 15:37, 27 tests: 26 passed.
+  `ImageViewerUITests.testScrollMovesAZoomedImageTheWayATableMoves` failed with "the table did not move for a scroll of
+  +100", with Google Chrome and Mattermost coming to the front inside it. It passed alone at 15:40.
+- `proposals.py freeze` at the final head: the same four origin `other` hunks, and none on UTERM-063 or UTERM-067.
+- The full `make test-app` never ran in this run. The UI classes that did run are `MapViewerUITests`,
+  `ExecPaneUITests`, `ControllerRunUITests`, `ControllerConsentUITests`, `BrowserRemoteUITests`,
+  `PendingRequestsUITests`, `ImageViewerUITests`, `PresentationUITests`, `QuestionsWireUITests`, `QuestionsUITests`,
+  `ScriptRunUITests`, `ScriptOpenUITests`, `ReplUITests`, `ReplCapabilityUITests`, and `TextViewerUITests`.
+
+### UI failures in the run, by cause
+
+- Caused by the work, and fixed: the five failures at 11:41, from UI test packages that still wrote descriptor formats
+  1 and 2.
+- Another app's `[frontmost] Activation` line sits inside the failed test, and the test passed when run again:
+  - 13:05: `ControllerConsentUITests.testControllersAndPermissionsShowsAndRevokesTheApproval`,
+    `ControllerConsentUITests.testThePanelAllowsOnceAndDeniesAReview`, and
+    `PendingRequestsUITests.testAnOutsideProgramAsksAndAGrantLetsItsNextCallThrough`
+  - 14:28: `ControllerConsentUITests.testASignedFilesReviewOffersTrustThisIdentity` and
+    `PendingRequestsUITests.testAnOutsideProgramAsksAndAGrantLetsItsNextCallThrough`
+  - 15:02: `ControllerConsentUITests.testADeclaredFilesReviewAndApprovalReachThePanelAndTheWindow`
+  - 15:30: `ControllerConsentUITests.testAnUnsafeReviewOffersThreeChoicesAndNoTrust`
+  - 15:37: `ImageViewerUITests.testScrollMovesAZoomedImageTheWayATableMoves`
+- No such line inside the test, so the cause is unresolved. Each passed when run again:
+  - 13:11: `QuestionsUITests.testReturnPressesPrimaryOutsideAMultilineFieldAndInsertsANewlineInside`, where the field
+    read nil
+  - 14:31: `PendingRequestsUITests.testADenialReachesTheProgramAndClearsTheIndicator`, where a menu click had no point.
+    The user said they may have clicked the window during these runs, which the activation lines would not show.
+- "A revoked approval still covered a run", from the 13:05 run, is not a trust bug. Google Chrome came to the front
+  inside that test, and the revoke test passed in every later run, on the new store too.
 
 ### Left open
 
