@@ -413,12 +413,13 @@ Fixed by: "Wait for the form's focus before typing its answers" and "Give the Qu
 - Evidence: `LauncherUITests.swift:199` failed with "the scroll wheel did not scroll the list", with uniterm frontmost
   and the launcher's filter box focused. The failure screenshot showed the list still at its top. Waiting for the list
   to settle did not help. Locally it passed 15 of 15, and 10 of 10 with legacy scrollers forced as CI shows them.
-- First suspected cause, which proved partial: the test sent one wheel of -1000 to a list that starts at the top. Which way that moves the
-  list follows the machine's scroll direction setting, and CI runners differ in it. When the wheel went up, the list
-  could not move. Flipping the sign to +1000 on a local machine failed the first run with CI's message.
-- First fix: "Scroll the short launcher either way the machine's wheel goes". The wheel goes the other way when the first
-  one leaves the last entry out of view. A list that scrolls neither way still fails. After that change, the launcher
-  tests passed 7 of 7 locally, and 3 of 3 with the two wheels swapped.
+- First suspected cause, which proved partial: the test sent one wheel of -1000 to a list that starts at the top.
+  Which way that moves the list follows the machine's scroll direction setting, and CI runners differ in it. When the
+  wheel went up, the list could not move. Flipping the sign to +1000 on a local machine failed the first run with
+  CI's message.
+- First fix: "Scroll the short launcher either way the machine's wheel goes". The wheel goes the other way when the
+  first one leaves the last entry out of view. A list that scrolls neither way still fails. After that change, the
+  launcher tests passed 7 of 7 locally, and 3 of 3 with the two wheels swapped.
 - Seen again after that change: 2026-11-21, at `LauncherUITests.swift:209`, the assertion after both wheels. It failed
   CI on the merge of #82 into main, which carried the change, and on the first `app` runs of #83 and #87. Neither PR
   touches the launcher. #83's rerun passed. So the scroll direction is not the whole cause.
