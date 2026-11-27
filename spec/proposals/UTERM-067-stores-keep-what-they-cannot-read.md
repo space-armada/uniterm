@@ -6,7 +6,7 @@
 
 ## Dependencies
 
-- ADR-18: the principles this proposal applies. It is proposed, and this proposal is not accepted before it is
+- ADR-18: the principles this proposal applies
 - UTERM-004: the controller trust stores, `policy.json` and `files.json`
 
 ## Impacts
@@ -449,6 +449,9 @@ None.
   two decisions taken without asking, "Two entries that name one selector" and "Version skew", carried no dissent and
   no addition. No decision earns an ADR: each new rule applies ADR-18 P1 to P5 or ADR-14 P8 and P10. The proposal stays
   `designing` until the user accepts ADR-18, per Dependencies.
+- 2026-11-26: Dropped the Dependencies gate that held this proposal back until ADR-18 was accepted. It said before:
+  "It is proposed, and this proposal is not accepted before it is". No standard asks for it, and the decisions stand
+  whether ADR-18 is proposed or accepted.
 
 ## References
 
