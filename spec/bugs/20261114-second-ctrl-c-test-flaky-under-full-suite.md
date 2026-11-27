@@ -2,7 +2,7 @@
 
 **Status:** open
 **Triaged:** 2026-11-15 (not reproducible; see investigation notes)
-**Validation:** not confirmed. Seen twice in full package runs, on 2026-11-14 and 2026-11-27. It passed alone and in
+**Validation:** not confirmed. Seen three times in full package runs, on 2026-11-14 and twice on 2026-11-27. It passed alone and in
 another full run.
 
 ## Observed
@@ -53,3 +53,10 @@ On 2026-11-27 the test failed again during `make ci-package`, in a landing workt
 That batch does not touch ScriptHost. The same two symptoms showed: the first Ctrl-C ended the call, and standard error
 read `stuck-in-c.janet: interrupted`. The watchdog state also read `reaped` where the test expects `sent`
 (`ScriptLimitsTests.swift:137`). Every other package test passed in that run.
+
+## Third sighting
+
+On 2026-11-27 at 15:00 local time the test failed in a full `make test-package`, on a tree that changed only the
+controller trust store's reader. The same three assertions failed, at `ScriptLimitsTests.swift:136`, `:137`, and `:142`.
+The other 3374 tests passed. `ScriptLimitsTests` passed alone right after. Six other full runs that day, on nearby
+trees, passed this test.
