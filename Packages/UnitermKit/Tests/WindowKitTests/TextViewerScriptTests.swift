@@ -74,7 +74,7 @@ final class TextViewerScriptTests: XCTestCase {
 
     let center = StatusCenter()
     let host = ScriptHost(
-      listener: try ScriptListener.start(directory: socketDirectory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: socketDirectory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) },
       windows: fixture.scripting)
 

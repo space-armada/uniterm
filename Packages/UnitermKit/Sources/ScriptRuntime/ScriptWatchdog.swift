@@ -97,7 +97,7 @@ final class ScriptWatchdog: @unchecked Sendable {
         guard !isFinished else { return }
 
         ScriptSession.endHelper(
-          "the connection to uniterm failed: \(error)", flushingOutput: false)
+          "the connection to uniterm failed: \(scriptWireText(error))", flushingOutput: false)
       }
     }
   }

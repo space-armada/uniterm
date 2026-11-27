@@ -93,7 +93,7 @@ final class ReplAppletTests: XCTestCase {
       delay: .milliseconds(20), isRunning: { _ in true }, kill: { killed.add($0.pid) })
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { _ in nil }, reaper: reaper)
     host.start()
 
@@ -821,7 +821,8 @@ extension ReplAppletTests {
 
     let killed = killed
     let limited = ScriptHost(
-      listener: try ScriptListener.start(directory: local), issueProducer: { _ in nil },
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: local),
+      issueProducer: { _ in nil },
       reaper: ProcessReaper(
         delay: .milliseconds(20), isRunning: { _ in true }, kill: { killed.add($0.pid) }),
       replLimits: ReplLimits(

@@ -126,8 +126,11 @@ public enum ScriptReplMain {
 
     do {
       opened = try ScriptSession.openRepl(path: socket, token: token)
-    } catch WireError.versionMismatch {
-      return fail(ScriptProtocol.mismatchText, .protocolMismatch)
+    } catch WireError.versionMismatch(let found, let expected) {
+      return fail(
+        ScriptProtocol.versionMismatchText(program: expected, uniterm: found), .protocolMismatch)
+    } catch WireError.notRecognized(let text) {
+      return fail(text, .protocolMismatch)
     } catch WireError.io(let code) where ScriptHelperMain.Address.meansNobodyListens(code) {
       return fail("no uniterm is reachable at \(socket)", .unavailable)
     } catch WireError.closed {
@@ -137,7 +140,7 @@ public enum ScriptReplMain {
     } catch ScriptSessionError.foreignSocket(let path) {
       return fail("the socket at \(path) belongs to another user", .unavailable)
     } catch {
-      return fail("cannot talk to uniterm at \(socket): \(error)", .unavailable)
+      return fail("cannot talk to uniterm at \(socket): \(scriptWireText(error))", .unavailable)
     }
 
     let session = opened.session

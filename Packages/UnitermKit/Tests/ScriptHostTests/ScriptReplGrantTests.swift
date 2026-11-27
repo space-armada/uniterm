@@ -30,7 +30,7 @@ final class ScriptReplGrantTests: XCTestCase {
     let center = center!
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: FakeWindowAPI(),
       reaper: .inert)
     host.start()

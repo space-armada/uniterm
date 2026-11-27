@@ -272,7 +272,7 @@ public final class ExecDriverChannel: AppletEventSink {
       refuse(
         code: "unsupported-version",
         text: "The driver speaks exec protocol \(version), and this uniterm speaks "
-          + "\(ExecProtocol.version). Update the driver or uniterm so they match.")
+          + "\(ExecProtocol.version). \(ExecProtocol.staleDriverAdvice)")
 
     case (.connected, .hello), (.connected, .helloOfAnotherVersion):
       end(.failed("it sent a second hello"))

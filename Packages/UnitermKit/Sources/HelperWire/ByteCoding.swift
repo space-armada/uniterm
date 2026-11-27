@@ -9,6 +9,11 @@ public enum WireError: Error, Equatable, Sendable {
   case tooLong(declared: Int, limit: Int)
   case badValue(String)
   case versionMismatch(found: UInt16, expected: UInt16)
+
+  /// A message, call, or value that this build does not know, or one it retired. The text names it
+  /// and says to rebuild the program or update uniterm. Only a wire at an external version uses
+  /// it. Its peer may be a program that uniterm did not build, so the text is for the user.
+  case notRecognized(String)
   case closed
   case io(Int32)
 }

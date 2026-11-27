@@ -391,7 +391,11 @@ final class ScriptAskRunTests: XCTestCase {
     let result = try await finish(asking)
 
     XCTAssertEqual(result.status, 70, result.standardError)
-    XCTAssertTrue(result.standardError.contains(ScriptProtocol.mismatchText), result.standardError)
+    XCTAssertTrue(
+      result.standardError.contains(
+        ScriptProtocol.versionMismatchText(
+          program: ScriptProtocol.version, uniterm: ScriptProtocol.version + 1)),
+      result.standardError)
 
     let sentNothingAfterTheHello = await seen.value
 
@@ -421,6 +425,7 @@ final class ScriptAskRunTests: XCTestCase {
 
       try? socket.send(ScriptAppMessage.hello(version: ScriptProtocol.version).frame())
 
+      guard case .identity? = next() else { return false }
       guard case .questionBegin? = next() else { return false }
 
       try? socket.send(ScriptAppMessage.questionOnlyAdmitted.frame())
@@ -500,6 +505,7 @@ final class ScriptAskRunTests: XCTestCase {
 
       try? socket.send(ScriptAppMessage.hello(version: ScriptProtocol.version).frame())
 
+      guard case .identity? = next() else { return calls }
       guard case .questionBegin? = next() else { return calls }
 
       try? socket.send(ScriptAppMessage.questionOnlyAdmitted.frame())

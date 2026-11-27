@@ -165,6 +165,10 @@ final class ExecDriverChannelTests: XCTestCase {
       ("hello-protocol", "0.0", ["2"], "exec protocol 2"),
       ("hello-protocol", "0.0", ["3"], "exec protocol 3"),
       ("hello-protocol", "0.0", ["4"], "exec protocol 4"),
+      (
+        "hello-protocol", "0.0", ["4"], "Rebuild the driver against this uniterm, or update uniterm"
+      ),
+      ("stale-hello", "0.0", ["4"], "exec protocol 4"),
       ("hello-schema", "0.0", ["2.0"], "schema version 2.0"),
       ("hello-schema", "0.0", ["1.0"], "schema version 1.0"),
       ("hello-schema", "0.0", ["0.1"], "schema version 0.1"),
@@ -288,6 +292,36 @@ final class ExecDriverChannelTests: XCTestCase {
       }
 
       XCTAssertTrue(reason.contains(needle), "\(mode): \(reason)")
+    }
+  }
+
+  /// Catches a driver whose message holds a key or a type this build does not know, which an
+  /// ignoring decoder would run under the meaning it had. The driver's command must never land, and
+  /// the text must name the key or type and say to rebuild the driver or update uniterm.
+  func testAnUnknownKeyOrTypeEndsTheChannelByNameWithNoCommandRun() async throws {
+    let cases = [
+      ("unknown-key", "the key \"tab\" in a \"command\" message"),
+      ("unknown-type", "the message type \"retire-me\""),
+    ]
+
+    for (mode, needle) in cases {
+      ended = []
+      applet = SlidesFixture()
+
+      _ = try start(mode)
+
+      await waitUntil("\(mode) fails") { !ended.isEmpty }
+      try? await Task.sleep(for: .milliseconds(200))
+
+      XCTAssertEqual(applet.titles, [], "\(mode) ran a command")
+
+      guard case .failed(let reason)? = ended.first else {
+        XCTFail("\(mode) ended as \(ended)")
+        continue
+      }
+
+      XCTAssertTrue(reason.contains(needle), "\(mode): \(reason)")
+      XCTAssertTrue(reason.contains("Rebuild the driver against this uniterm"), reason)
     }
   }
 

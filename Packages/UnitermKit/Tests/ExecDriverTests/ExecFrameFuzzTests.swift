@@ -29,6 +29,7 @@ final class ExecFrameFuzzTests: XCTestCase {
     #"{"type":"error","error":{"code":"unsupported-version","message":"synthetic"}}"#,
     #"{"type":"command","id":3,"name":"set-series","arguments":{"values":[1.5,-2,4e3,[[{}]]]}}"#,
     #"{"type":"command","id":4,"pane":7,"applet":"fixture-notes","schema":[1,0],"name":"clear"}"#,
+    #"{"type":"hello","protocol":4,"applet":"fixture-notes","schema":{"major":1,"minor":0},"x":1}"#,
     #"{"type":"layout","id":5,"layout":{"split":"row","children":[{"pane":1},{"open":"x"}]}}"#,
   ]
 

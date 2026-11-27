@@ -12,13 +12,29 @@ import Foundation
 /// runs. A program's message is read with its old meaning or refused, never read under a new
 /// meaning. Programs built for the versions that counted breaking revisions before this reset, 1
 /// through 14, are refused at the hello.
+///
+/// A decoder refuses a message tag, a call tag, an enumerated value, or trailing bytes it does not
+/// know, by name, and the text says to rebuild the program or update uniterm. A change of meaning
+/// takes a new tag. A positional field has no name, so a field whose meaning changes takes a new
+/// message tag, and the old tag goes into `ScriptRetiredNames`.
+///
+/// The bundled `uniterm` command and its REPL send their code identity right after the hello, and
+/// before `begin` or `attach`. A program built against this library on its own sends none.
 public enum ScriptProtocol {
   public static let version: UInt16 = 0
 
-  /// What the user is told when the two sides disagree. The app and its command are two binaries
-  /// in one bundle, so replacing the bundle under a running app pairs an old app with a new one.
-  public static let mismatchText =
-    "The uniterm command and the app come from different versions. Relaunch uniterm."
+  /// What the user is told when the two sides name different versions. It names both and says how
+  /// to fix either side. It never says to relaunch uniterm, since the identity check catches a
+  /// command that comes from another build of this bundle. It never picks a remedy by comparing
+  /// the numbers, since a program from before the reset names a version above this one.
+  public static func versionMismatchText(program: UInt16, uniterm: UInt16) -> String {
+    "The program speaks ScriptWire version \(program), and this uniterm speaks version "
+      + "\(uniterm). \(ScriptRetiredNames.advice)"
+  }
+
+  /// The longest code identity the bundled command may present, in bytes. A code directory hash is
+  /// 20 bytes today.
+  public static let maxIdentityBytes = 64
 
   /// The largest body any message may declare. The reader checks it before it allocates.
   public static let maxControlBody = 64 * 1024
@@ -222,18 +238,22 @@ extension ByteReader {
     let window = try id()
     let pane = try id()
 
-    switch try u8() {
+    let flag = try u8()
+
+    switch flag {
     case 0: return ScriptPaneReference(window: window, pane: pane)
     case 1: return ScriptPaneReference(window: window, pane: pane, tab: try id())
-    default: throw WireError.badValue("a reference has an unknown tab flag")
+    default: throw ScriptRetiredNames.unknownValue("a tab flag", flag)
     }
   }
 
   mutating func target() throws -> ScriptTarget {
-    switch try u8() {
+    let form = try u8()
+
+    switch form {
     case 0: return .pane(try reference())
     case 1: return .nearest(kind: try string(limit: ScriptProtocol.maxKindBytes))
-    default: throw WireError.badValue("a target has an unknown form")
+    default: throw ScriptRetiredNames.unknownValue("a target form", form)
     }
   }
 
@@ -257,6 +277,18 @@ extension ByteReader {
     return text
   }
 
+  /// Exactly `count` bytes. A body that ends first is truncated, and one that goes on is refused
+  /// as trailing bytes by the message's own check.
+  mutating func bytes(count: Int) throws -> Data {
+    guard remaining >= count else { throw WireError.truncated }
+
+    var bytes = Data()
+
+    for _ in 0..<count { bytes.append(try u8()) }
+
+    return bytes
+  }
+
   /// The `--allow` names of a begin: a count, then each name.
   mutating func capabilities() throws -> [String] {
     let count = Int(try u8())
@@ -275,10 +307,12 @@ extension ByteReader {
   }
 
   mutating func optionalString(limit: Int) throws -> String? {
-    switch try u8() {
+    let flag = try u8()
+
+    switch flag {
     case 0: return nil
     case 1: return try string(limit: limit)
-    default: throw WireError.badValue("an optional string has an unknown flag")
+    default: throw ScriptRetiredNames.unknownValue("an optional-string flag", flag)
     }
   }
 }
@@ -430,11 +464,17 @@ public enum ScriptCall: Equatable, Sendable {
   }
 
   /// Public because the helper reads back the call its shim wrote, before it sends the call.
-  public static func decode(from reader: inout ByteReader) throws -> ScriptCall {
-    switch try reader.u16() {
+  public static func decode(
+    from reader: inout ByteReader, retired: ScriptRetiredNames = .current
+  ) throws -> ScriptCall {
+    let callTag = try reader.u16()
+
+    switch callTag {
     case 1:
-      guard let level = ScriptStatusLevel(rawValue: try reader.u8()) else {
-        throw WireError.badValue("an unknown status level")
+      let levelByte = try reader.u8()
+
+      guard let level = ScriptStatusLevel(rawValue: levelByte) else {
+        throw ScriptRetiredNames.unknownValue("a status level", levelByte)
       }
 
       return .postStatus(
@@ -452,13 +492,14 @@ public enum ScriptCall: Equatable, Sendable {
       let axisByte = try reader.u8()
 
       guard axisByte == 0 || ScriptAxis(rawValue: axisByte) != nil else {
-        throw WireError.badValue("an unknown split axis")
+        throw ScriptRetiredNames.unknownValue("a split axis", axisByte)
       }
 
       let directory = try reader.optionalString(limit: ScriptProtocol.maxDirectoryBytes)
+      let accessByte = try reader.u8()
 
-      guard let access = ScriptPaneAccess(rawValue: try reader.u8()) else {
-        throw WireError.badValue("an unknown pane access")
+      guard let access = ScriptPaneAccess(rawValue: accessByte) else {
+        throw ScriptRetiredNames.unknownValue("a pane access", accessByte)
       }
 
       return .openPane(
@@ -473,6 +514,7 @@ public enum ScriptCall: Equatable, Sendable {
     case 6:
       let pane = try reader.target()
       let name = try reader.string(limit: ScriptProtocol.maxFileNameBytes)
+      // The content is the rest of the body by design. Its size is the field's own bound.
       let content = reader.rest()
 
       guard content.count <= ScriptProtocol.maxSendBytes else {
@@ -524,7 +566,7 @@ public enum ScriptCall: Equatable, Sendable {
       return .discardForm(form: try reader.id())
 
     default:
-      throw WireError.badValue("an unknown host function")
+      throw retired.refusal(callTag: callTag)
     }
   }
 }
@@ -699,9 +741,16 @@ public enum ScriptHelperMessage: Equatable, Sendable {
   /// A host function call. The reply carries the same request ID.
   case request(id: UInt32, call: ScriptCall)
 
-  /// A REPL helper presents its single-use token. It is the first message after the hello, in
+  /// A REPL helper presents its single-use token. It comes after the hello and the identity, in
   /// place of `begin`, and names the REPL pane the connection serves.
   case attach(token: Data)
+
+  /// The code directory hash of the bundled command that sent it. The bundled command and its REPL
+  /// send it right after the hello, and before `begin`, `attach`, or any other declaration. The
+  /// app refuses the other order by name. The app compares the hash with the one it kept for its
+  /// own command at launch. A program built against this library on its own sends none, and the
+  /// app admits it as before. The message keeps one form in every version.
+  case identity(codeDirectoryHash: Data)
 
   /// A line the user entered in the REPL, reported before it is evaluated. The app keeps its own
   /// copy of the history from these.
@@ -749,6 +798,26 @@ public enum ScriptHelperMessage: Equatable, Sendable {
   /// The frame type of the one call that carries content.
   static let sendType: UInt8 = 4
 
+  /// Whether the message tells the app what the connection is: a script, a REPL, a controller run,
+  /// a file, an open, or a question session. The identity message must come before one.
+  public var declaresRole: Bool {
+    switch self {
+    case .begin, .attach, .controllerBegin, .fileBegin, .undeclaredBegin, .openBegin,
+      .questionBegin:
+      return true
+
+    default:
+      return false
+    }
+  }
+
+  /// Whether the message is a REPL's token, which the app answers with `attachRefused`.
+  public var isAttach: Bool {
+    if case .attach = self { return true }
+
+    return false
+  }
+
   var wireType: UInt8 {
     switch self {
     case .hello: return 1
@@ -768,6 +837,7 @@ public enum ScriptHelperMessage: Equatable, Sendable {
     case .undeclaredBegin: return 13
     case .openBegin: return 14
     case .questionBegin: return 15
+    case .identity: return 16
     }
   }
 
@@ -817,6 +887,10 @@ public enum ScriptHelperMessage: Equatable, Sendable {
 
     case .attach(let token): body.put(raw: token)
 
+    case .identity(let hash):
+      body.put(UInt8(min(hash.count, ScriptProtocol.maxIdentityBytes)))
+      body.put(raw: hash.prefix(ScriptProtocol.maxIdentityBytes))
+
     case .replLine(let text): body.put(string: text, limit: ScriptProtocol.maxReplLineBytes)
 
     case .replEvaluating(let running): body.put(running ? UInt8(1) : UInt8(0))
@@ -835,18 +909,61 @@ public enum ScriptHelperMessage: Equatable, Sendable {
       ? ScriptProtocol.maxSendBytes + ScriptProtocol.maxControlBody : ScriptProtocol.maxControlBody
   }
 
-  public static func decode(type: UInt8, body: Data) throws -> ScriptHelperMessage {
+  /// Decodes one frame. A tag this build does not know, a value it does not know, and bytes after
+  /// a message's last field are refused by name. `retired` is only a test's to change.
+  public static func decode(
+    type: UInt8, body: Data, retired: ScriptRetiredNames = .current
+  ) throws -> ScriptHelperMessage {
+    do {
+      return try decodeKnown(type: type, body: body, retired: retired)
+    } catch WireError.trailingBytes {
+      throw ScriptRetiredNames.trailingBytes(in: name(ofType: type), from: .helper)
+    }
+  }
+
+  /// What a frame type is called in an error. A type this build does not know is only a number.
+  static func name(ofType type: UInt8) -> String {
+    switch type {
+    case 1: return "hello"
+    case 2: return "begin"
+    case 3, sendType: return "call"
+    case 5: return "attach"
+    case 6: return "REPL line"
+    case 7: return "REPL evaluating"
+    case 8: return "pong"
+    case 9: return "memory limit"
+    case 10: return "controller begin"
+    case 11: return "file begin"
+    case 12: return "file declaration"
+    case 13: return "undeclared begin"
+    case 14: return "open begin"
+    case 15: return "question begin"
+    case 16: return "identity"
+    default: return "tag \(type)"
+    }
+  }
+
+  private static func decodeKnown(
+    type: UInt8, body: Data, retired: ScriptRetiredNames
+  ) throws -> ScriptHelperMessage {
     var reader = ByteReader(body)
     let message: ScriptHelperMessage
 
     switch type {
-    case 1: message = .hello(version: try reader.u16())
+    case 1:
+      let version = try reader.u16()
+
+      // A hello of another version is not read past its version field. It may hold fields this
+      // build does not know, and the refusal names the versions instead.
+      guard version == ScriptProtocol.version else { return .hello(version: version) }
+
+      message = .hello(version: version)
 
     case 2: message = .begin(name: try reader.string(limit: ScriptProtocol.maxNameBytes))
 
     case 3, sendType:
       let id = try reader.u32()
-      let call = try ScriptCall.decode(from: &reader)
+      let call = try ScriptCall.decode(from: &reader, retired: retired)
 
       var isSend = false
 
@@ -859,13 +976,7 @@ public enum ScriptHelperMessage: Equatable, Sendable {
       message = .request(id: id, call: call)
 
     case 5:
-      let token = reader.rest()
-
-      guard token.count == ScriptProtocol.tokenBytes else {
-        throw WireError.badValue("a token is not \(ScriptProtocol.tokenBytes) bytes")
-      }
-
-      message = .attach(token: token)
+      message = .attach(token: try reader.bytes(count: ScriptProtocol.tokenBytes))
 
     case 6: message = .replLine(try reader.string(limit: ScriptProtocol.maxReplLineBytes))
 
@@ -881,8 +992,10 @@ public enum ScriptHelperMessage: Equatable, Sendable {
     case 9: message = .memoryLimit
 
     case 10:
-      guard let entry = ControllerBegin.Entry(rawValue: try reader.u8()) else {
-        throw WireError.badValue("an unknown controller entry kind")
+      let entryByte = try reader.u8()
+
+      guard let entry = ControllerBegin.Entry(rawValue: entryByte) else {
+        throw ScriptRetiredNames.unknownValue("a controller entry kind", entryByte)
       }
 
       let package = try reader.string(limit: ScriptProtocol.maxDirectoryBytes)
@@ -937,7 +1050,17 @@ public enum ScriptHelperMessage: Equatable, Sendable {
 
     case 15: message = .questionBegin
 
-    default: throw WireError.unknownType(type)
+    case 16:
+      let count = Int(try reader.u8())
+
+      guard (1...ScriptProtocol.maxIdentityBytes).contains(count) else {
+        throw WireError.badValue(
+          "a code identity is not 1 to \(ScriptProtocol.maxIdentityBytes) bytes")
+      }
+
+      message = .identity(codeDirectoryHash: try reader.bytes(count: count))
+
+    default: throw retired.refusal(messageTag: type, from: .helper)
     }
 
     try reader.finished()
@@ -1077,13 +1200,50 @@ public enum ScriptAppMessage: Equatable, Sendable {
     ScriptProtocol.maxControlBody
   }
 
-  public static func decode(type: UInt8, body: Data) throws -> ScriptAppMessage {
+  /// Decodes one frame. A tag this build does not know, a value it does not know, and bytes after
+  /// a message's last field are refused by name. `retired` is only a test's to change.
+  public static func decode(
+    type: UInt8, body: Data, retired: ScriptRetiredNames = .current
+  ) throws -> ScriptAppMessage {
+    do {
+      return try decodeKnown(type: type, body: body, retired: retired)
+    } catch WireError.trailingBytes {
+      throw ScriptRetiredNames.trailingBytes(in: name(ofType: type), from: .app)
+    }
+  }
+
+  /// What a frame type is called in an error. A type this build does not know is only a number.
+  static func name(ofType type: UInt8) -> String {
+    switch type {
+    case 1: return "hello"
+    case 2: return "reply"
+    case 3: return "attach refused"
+    case 4: return "history"
+    case 5: return "ping"
+    case 6: return "stop"
+    case 7: return "controller admitted"
+    case 8: return "controller refused"
+    case 9: return "controller reviewing"
+    case 10: return "file admitted"
+    case 11: return "undeclared admitted"
+    case 12: return "open done"
+    case 13: return "question-only admitted"
+    default: return "tag \(type)"
+    }
+  }
+
+  private static func decodeKnown(
+    type: UInt8, body: Data, retired: ScriptRetiredNames
+  ) throws -> ScriptAppMessage {
     var reader = ByteReader(body)
 
     switch type {
     case 1:
       let version = try reader.u16()
-      try reader.finished()
+
+      // A hello of another version is not read past its version field. It may hold fields this
+      // build does not know, and the refusal names the versions instead.
+      if version == ScriptProtocol.version { try reader.finished() }
 
       return .hello(version: version)
 
@@ -1092,11 +1252,12 @@ public enum ScriptAppMessage: Equatable, Sendable {
       let status = try reader.u8()
 
       if status == 0 {
+        // The payload is the rest of the body by design. The call's own decoder reads it strictly.
         return .reply(id: id, result: .ok(reader.rest()))
       }
 
       guard let kind = ScriptFailureKind(rawValue: status) else {
-        throw WireError.badValue("an unknown failure kind")
+        throw ScriptRetiredNames.unknownValue("a failure kind", status, from: .app)
       }
 
       let text = try reader.string(limit: ScriptProtocol.maxFailureBytes)
@@ -1148,12 +1309,8 @@ public enum ScriptAppMessage: Equatable, Sendable {
 
     case 7:
       let snapshot = try reader.string(limit: ScriptProtocol.maxDirectoryBytes)
-      let version = reader.rest()
-
-      guard version.count == ScriptProtocol.versionDigestBytes else {
-        throw WireError.badValue(
-          "a controller version is not \(ScriptProtocol.versionDigestBytes) bytes")
-      }
+      let version = try reader.bytes(count: ScriptProtocol.versionDigestBytes)
+      try reader.finished()
 
       return .controllerAdmitted(snapshot: snapshot, version: version)
 
@@ -1171,12 +1328,8 @@ public enum ScriptAppMessage: Equatable, Sendable {
 
     case 10:
       let snapshot = try reader.string(limit: ScriptProtocol.maxDirectoryBytes)
-      let version = reader.rest()
-
-      guard version.count == ScriptProtocol.versionDigestBytes else {
-        throw WireError.badValue(
-          "a file version is not \(ScriptProtocol.versionDigestBytes) bytes")
-      }
+      let version = try reader.bytes(count: ScriptProtocol.versionDigestBytes)
+      try reader.finished()
 
       return .fileAdmitted(snapshot: snapshot, version: version)
 
@@ -1196,7 +1349,7 @@ public enum ScriptAppMessage: Equatable, Sendable {
       return .questionOnlyAdmitted
 
     default:
-      throw WireError.unknownType(type)
+      throw retired.refusal(messageTag: type, from: .app)
     }
   }
 

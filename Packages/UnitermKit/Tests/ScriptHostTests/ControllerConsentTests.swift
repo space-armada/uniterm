@@ -53,8 +53,11 @@ final class ControllerConsentTests: XCTestCase {
 
     windows = FakeWindowAPI()
 
+    // The listener holds no command identity here. The tests of a generic peer and a REPL pane run
+    // the unsigned SwiftPM helper as a program that is not the bundled command, and a listener
+    // that held the command's identity would refuse it for the identity it sends.
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows,
       controllers: ControllerSettings(
         runsRoot: work.appendingPathComponent("runs"),

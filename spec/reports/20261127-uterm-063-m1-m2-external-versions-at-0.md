@@ -94,3 +94,79 @@ Three amended decisions carry `**Decided by:** user`. Their text was left as the
   - PLAUSIBLE: the freeze check missed `AppletCommandSchema.init(`, a typealias, and a contextual `.init(`. The trace
     confirmed it from the pattern and a scratch fixture. The check now fails on all three, with self-test cases.
   - ADR-13 reference labels in other proposals still said "outside wires". Fixed.
+
+Committed as "Reset every external version to 0 and fail the build when one moves". The peer's commits "File the bug
+that a local UI test run fails in a fresh checkout" and "Log a CI sighting of the launcher Escape flake" landed inside
+this row's range. They are not this row's work.
+
+## UTERM-063 M2
+
+### What was built
+
+- ScriptWire refuses an unknown or retired tag, call, enumerated byte, or trailing byte by name. The text says to
+  rebuild the program or update uniterm. Tokens and digests read their exact size. A reply's payload and a send's
+  content stay the rest of the body, and their own decoders read them strictly.
+- Each exec message has a known key set, and any other key is refused by name. Both forms of an error's text still
+  read.
+- Each hello reads its version first, on both wires and in both directions. A hello at another version gets text that
+  names both versions and never says to relaunch.
+- Each wire has an empty retired-names table. The tests prove the mechanism with a table of their own.
+- The bundled command and the REPL send their code directory hash right after the hello. The app reads its own
+  command's identity once, before the listener serves any connection. A failed read is kept too, so nothing is adopted
+  later. The adopt path is gone.
+- A swapped command at the app's own path is refused with the relaunch text. One from another install names the
+  running app's command path. Identity after a role message, or twice, is refused by name.
+
+### Implementer best guesses
+
+- The app tells the bundled command from a native controller by the peer's executable path, from the kernel. A peer at
+  the app's own command path must present an identity. A peer elsewhere may send none. Source: ADR-13 P6 and the
+  decision text, which left the mechanism open. The decision was amended in place. If wrong, a native controller run
+  from the command's path would be refused.
+- A swapped command copied to another path that sends no identity is admitted as a generic peer, as any native-style
+  peer is. `refusal(forPeer:)` still gates controller, file, undeclared, and question sessions. The decision now says so.
+- The identity is checked at the first role message, so the refusal reaches the reply path the peer waits on.
+- Fail closed: a peer whose path the kernel cannot name, and that sends no identity, is refused. An app identity that
+  names no command path refuses every program. The trace found both cases reachable only for an exited peer or a test
+  fake.
+- The public listener start takes a required command identity. Tests use a test-named start.
+
+### Checks
+
+- `make fmt-check lint check`: pass.
+- `make fuzz`: pass, 334 s, before the review fixes. The fixes changed no decoder.
+- `xcodebuild build-for-testing`: TEST BUILD SUCCEEDED.
+- `caffeinate -dimsu make test-package`: the coordinator's run at 12:52 passed 3337 tests, 10 skipped, in 291 s. The
+  implementer's last run after the fixes passed in 290 s.
+- Unowned failure, continued: `ProcessReaperTests.testTheReaperLogsThePidPathAndFailuresButNotAGoneHelper` failed in
+  the implementer's two full runs at 12:38 and 12:45, with the same missing OSLog entry. It passed alone, in a partial
+  run, in both of the coordinator's full runs, and in the implementer's last full run, with nothing else running. Its
+  code is untouched. The cause is unresolved. The failures came only in runs where the implementer had other work going.
+- UI run at 13:05, 67 tests in 13 classes that drive the bundled command, the REPL, questions, exec drivers, and
+  controllers: 4 failures. They were `ControllerConsentUITests.testControllersAndPermissionsShowsAndRevokesTheApproval`
+  ("a revoked approval still covered a run"), `ControllerConsentUITests.testThePanelAllowsOnceAndDeniesAReview` ("the
+  terminal did not take the keys"), `PendingRequestsUITests.testAnOutsideProgramAsksAndAGrantLetsItsNextCallThrough`
+  ("the Pending Requests panel never opened"), and
+  `QuestionsUITests.testReturnPressesPrimaryOutsideAMultilineFieldAndInsertsANewlineInside` (the field read nil).
+  - All four passed together, run alone, at 13:14.
+  - The whole 13-class selection then passed 67 of 67, in the same order, at 13:15.
+  - The two `ControllerConsentUITests` failures match the flaky entry "`ControllerConsentUITests`, several tests,
+    after the strict and unsafe modes landed", which names both tests failing together in a multi-class run. The other
+    two have no entry.
+  - A passing rerun does not prove they are flakes. The cause of each is unresolved. The revoked-approval message
+    deserves a look, since a revoke that does not take would be a trust bug.
+- An incremental SwiftPM build did not recompile code that depends on `WireError` after a case was added. Image tests
+  then failed on wrong enum values. The implementer touched the 40 files that name it, and a fresh build is fine.
+
+### Review
+
+- adr-impact: no conflict. ADR-13 P6 covers the bundled command's identity, and ADR-14 P9 holds, since the presented
+  hash only refuses and never grants. No decision clears the ADR bar.
+- The reviewer had four findings, and one hardening note:
+  - CONFIRMED: a failed launch read was not kept, so a command that appeared later was adopted. Fixed. Its regression
+    test failed on the old code first.
+  - PLAUSIBLE: a peer whose path could not be read was admitted without an identity. Traced, and fixed to fail closed,
+    along with adr-impact's matching note on a missing command path.
+  - A doubled doc comment line. Fixed.
+  - The decision did not state what a copied command at another path gets. Fixed.
+  - Hardening: the listener's command identity was optional on its public start. Now required.

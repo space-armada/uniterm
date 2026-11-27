@@ -365,16 +365,30 @@ final class ScriptCodecTests: XCTestCase {
     trailing.put(UInt16(1))
     trailing.put(UInt8(0xFF))
 
-    XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 1, body: trailing.bytes)) { error in
-      XCTAssertEqual(error as? WireError, .trailingBytes)
+    XCTAssertEqual(
+      try ScriptHelperMessage.decode(type: 1, body: trailing.bytes), .hello(version: 1),
+      "a hello of another version is read for its version alone")
+
+    var current = ByteWriter()
+    current.put(ScriptProtocol.version)
+    current.put(UInt8(0xFF))
+
+    XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 1, body: current.bytes)) { error in
+      guard case WireError.notRecognized(let text) = error else { return XCTFail("\(error)") }
+
+      XCTAssertTrue(text.contains("hello"), text)
     }
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 99, body: Data())) { error in
-      XCTAssertEqual(error as? WireError, .unknownType(99))
+      guard case WireError.notRecognized(let text) = error else { return XCTFail("\(error)") }
+
+      XCTAssertTrue(text.contains("tag 99"), text)
     }
 
     XCTAssertThrowsError(try ScriptAppMessage.decode(type: 99, body: Data())) { error in
-      XCTAssertEqual(error as? WireError, .unknownType(99))
+      guard case WireError.notRecognized(let text) = error else { return XCTFail("\(error)") }
+
+      XCTAssertTrue(text.contains("tag 99"), text)
     }
   }
 }
@@ -467,7 +481,9 @@ extension ScriptCodecTests {
     axis.put(UInt8(0))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: axis.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("an unknown split axis"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("split axis 3"), text)
     }
 
     var flag = ByteWriter()
@@ -480,7 +496,9 @@ extension ScriptCodecTests {
     flag.put(UInt8(0))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: flag.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("a reference has an unknown tab flag"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("tab flag 2"), text)
     }
 
     var form = ByteWriter()
@@ -490,7 +508,9 @@ extension ScriptCodecTests {
     form.put(UInt8(0))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: form.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("a target has an unknown form"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("target form 2"), text)
     }
 
     var access = ByteWriter()
@@ -503,7 +523,9 @@ extension ScriptCodecTests {
     access.put(UInt8(2))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: access.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("an unknown pane access"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("pane access 2"), text)
     }
   }
 

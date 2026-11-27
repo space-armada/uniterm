@@ -13,6 +13,11 @@ import Foundation
 /// A driver's message is read with its old meaning or refused, never read under a new meaning.
 /// Drivers written for the versions that counted breaking revisions before this reset, 1 through
 /// 4, are refused at the hello.
+///
+/// Every message, and every key of one, that this build does not know is refused by name. A change
+/// of meaning never reuses a message type or a key. The changed thing takes a new name, and the
+/// old one goes into `ExecRetired`. The meaning of an omitted key is part of its message's
+/// meaning, so a message that changes what an omission does takes a new name too.
 public enum ExecProtocol {
   public static let version = 0
 
@@ -50,6 +55,30 @@ public enum ExecProtocol {
 
   /// The longest refusal text a driver may send, in UTF-8 bytes. Longer text is cut.
   public static let maxRefusalBytes = 512
+
+  /// What to do when the driver and this uniterm disagree. It never picks a side by comparing
+  /// numbers, since a driver from before the reset names a version above this one.
+  public static let staleDriverAdvice =
+    "Rebuild the driver against this uniterm, or update uniterm if the driver is the newer one."
+}
+
+/// A name the exec wire retired, so a driver that still sends it is refused by name. A message
+/// type is retired with no key. A key is retired with the type of the message it sat in.
+public struct ExecRetiredName: Equatable, Sendable {
+  public let messageType: String
+  public let key: String?
+
+  public init(messageType: String, key: String? = nil) {
+    self.messageType = messageType
+    self.key = key
+  }
+}
+
+/// The names the exec wire retired while it stays at version 0. A change of meaning never reuses
+/// a message type or a key. The changed thing takes a new name, and its old name is added here.
+/// The list starts empty.
+public enum ExecRetired {
+  public static let names: [ExecRetiredName] = []
 }
 
 /// Why the wire failed. Each one closes the channel, and the pane shows the text.
@@ -59,6 +88,10 @@ public enum ExecWireError: Error, Sendable, Equatable, CustomStringConvertible {
   case malformed(String)
   case tooDeep
   case tooManyValues
+
+  /// A message type or a key that this build does not know, or one it retired. The text names it.
+  /// The driver or uniterm is out of date, and the text says to rebuild or update.
+  case unrecognized(String)
 
   public var description: String {
     switch self {
@@ -76,6 +109,9 @@ public enum ExecWireError: Error, Sendable, Equatable, CustomStringConvertible {
 
     case .tooManyValues:
       return "the driver wrote a message with more than \(ExecProtocol.maxValues) values"
+
+    case .unrecognized(let what):
+      return "the driver wrote \(what). \(ExecProtocol.staleDriverAdvice)"
     }
   }
 }
@@ -162,7 +198,12 @@ public enum ExecWire {
 
   /// Decodes one line, without its newline. The bounds on nesting and values are checked before
   /// the JSON decoder sees the bytes.
-  public static func decode(_ line: Data) throws(ExecWireError) -> ExecDriverMessage {
+  ///
+  /// A message type or key the decoder does not know is refused by name. `retired` is only a test's
+  /// to change.
+  public static func decode(
+    _ line: Data, retired: [ExecRetiredName] = ExecRetired.names
+  ) throws(ExecWireError) -> ExecDriverMessage {
     try checkBounds(line)
 
     let value: JSONValue
@@ -181,12 +222,15 @@ public enum ExecWire {
     case "hello":
       let protocolVersion = try integer(fields["protocol"], "protocol")
 
-      // A driver of another protocol may write its other fields in another shape. The hello then
-      // still decodes, so the refusal names the protocol versions and says to update, instead of
-      // calling the line malformed.
+      // A driver of another protocol may write its other fields in another shape, and may carry
+      // keys this protocol does not have. The hello then still decodes, so the refusal names both
+      // protocol versions, instead of calling the line malformed or its keys unknown.
       guard protocolVersion == ExecProtocol.version else {
         return .helloOfAnotherVersion(protocolVersion: protocolVersion)
       }
+
+      try refuseUnknownKeys(
+        of: fields, in: "hello", known: ["protocol", "applet", "schema"], retired)
 
       return .hello(
         protocolVersion: protocolVersion,
@@ -194,6 +238,13 @@ public enum ExecWire {
         schemaVersion: try schemaVersion(fields["schema"]))
 
     case "command":
+      let isPaneCommand = fields["pane"] != nil
+      let known: Set<String> =
+        isPaneCommand
+        ? ["id", "name", "arguments", "pane", "applet", "schema"] : ["id", "name", "arguments"]
+
+      try refuseUnknownKeys(of: fields, in: "command", known: known, retired)
+
       let arguments = fields["arguments"] ?? .object([:])
 
       guard case .object = arguments else { throw .malformed("its arguments are not an object") }
@@ -211,6 +262,8 @@ public enum ExecWire {
         arguments: arguments)
 
     case "layout":
+      try refuseUnknownKeys(of: fields, in: "layout", known: ["id", "layout"], retired)
+
       guard let layout = fields["layout"], case .object = layout else {
         throw .malformed("its layout is not an object")
       }
@@ -218,9 +271,13 @@ public enum ExecWire {
       return .layout(id: try requestID(fields["id"]), layout: layout)
 
     case "clipboard-read":
+      try refuseUnknownKeys(of: fields, in: "clipboard-read", known: ["id"], retired)
+
       return .clipboardRead(id: try requestID(fields["id"]))
 
     case "clipboard-write":
+      try refuseUnknownKeys(of: fields, in: "clipboard-write", known: ["id", "text"], retired)
+
       // Text past the clipboard bound is still a message. The channel refuses that one write.
       guard case .string(let text)? = fields["text"] else {
         throw .malformed("its text is not a string")
@@ -229,6 +286,9 @@ public enum ExecWire {
       return .clipboardWrite(id: try requestID(fields["id"]), text: text)
 
     case "error":
+      // The text is `error.message` or the top-level `message`. Both forms are read.
+      try refuseUnknownKeys(of: fields, in: "error", known: ["error", "message"], retired)
+
       var text = "the driver gave no reason"
 
       if case .object(let error)? = fields["error"], case .string(let message)? = error["message"] {
@@ -241,7 +301,33 @@ public enum ExecWire {
         String(decoding: text.utf8.prefix(ExecProtocol.maxRefusalBytes), as: UTF8.self))
 
     default:
-      throw .malformed("its type \"\(type.prefix(32))\" is unknown")
+      let shown = String(type.prefix(32))
+
+      if retired.contains(where: { $0.messageType == type && $0.key == nil }) {
+        throw .unrecognized("the message type \"\(shown)\", which this uniterm retired")
+      }
+
+      throw .unrecognized("the message type \"\(shown)\", which this uniterm does not know")
+    }
+  }
+
+  /// Refuses a key of a message that this build does not know, by name. The type key is known to
+  /// every message. A retired key is named as retired, since a driver that still sends it means
+  /// what it meant before.
+  private static func refuseUnknownKeys(
+    of fields: [String: JSONValue], in messageType: String, known: Set<String>,
+    _ retired: [ExecRetiredName]
+  ) throws(ExecWireError) {
+    for key in fields.keys.sorted() where key != "type" && !known.contains(key) {
+      let shown = String(key.prefix(32))
+
+      if retired.contains(where: { $0.messageType == messageType && $0.key == key }) {
+        throw .unrecognized(
+          "the key \"\(shown)\" in a \"\(messageType)\" message, which this uniterm retired")
+      }
+
+      throw .unrecognized(
+        "the key \"\(shown)\" in a \"\(messageType)\" message, which this uniterm does not know")
     }
   }
 

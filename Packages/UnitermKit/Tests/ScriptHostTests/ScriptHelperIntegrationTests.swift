@@ -27,7 +27,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
     refusals = []
 
     let center = center!
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     host = ScriptHost(
       listener: listener,
@@ -141,7 +141,9 @@ final class ScriptHelperIntegrationTests: XCTestCase {
     await fulfillment(of: [refused], timeout: 30)
 
     XCTAssertEqual(refusals, [.versionMismatch(found: other)])
-    XCTAssertEqual(refusals.first?.text, ScriptProtocol.mismatchText)
+    XCTAssertEqual(
+      refusals.first?.text,
+      ScriptProtocol.versionMismatchText(program: other, uniterm: ScriptProtocol.version))
   }
 
   /// Catches a peer that renames its session or floods the app with begin messages. One begin is
@@ -176,7 +178,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
   /// Catches a stop that returns before the socket file is gone. The app quits right after it
   /// stops the listener, so a file removed later by the accept thread can outlive the process.
   func testStopRemovesTheSocketFileBeforeItReturns() throws {
-    let listener = try ScriptListener.start(
+    let listener = try ScriptListener.startForTests(
       directory: directory.appendingPathComponent("stop", isDirectory: true))
 
     XCTAssertTrue(FileManager.default.fileExists(atPath: listener.path))
@@ -214,7 +216,8 @@ final class ScriptHelperIntegrationTests: XCTestCase {
   }
 
   /// Catches a helper that runs against an app of another protocol version. It must refuse with
-  /// the relaunch message and a distinct exit status, before it runs any of the script.
+  /// a message that names both versions and a distinct exit status, before it runs any of the
+  /// script.
   func testTheHelperRefusesAnAppOfAnotherProtocolVersion() async throws {
     let path = directory.appendingPathComponent("other.sock").path
     let server = try FakeApp.listen(path: path)
@@ -236,7 +239,12 @@ final class ScriptHelperIntegrationTests: XCTestCase {
     let run = try await ScriptFixtures.finish(process)
 
     XCTAssertEqual(run.status, 70)
-    XCTAssertTrue(run.standardError.contains("Relaunch uniterm"), run.standardError)
+    XCTAssertTrue(
+      run.standardError.contains(
+        ScriptProtocol.versionMismatchText(
+          program: ScriptProtocol.version, uniterm: ScriptProtocol.version + 1)),
+      run.standardError)
+    XCTAssertFalse(run.standardError.contains("Relaunch"), run.standardError)
 
     XCTAssertThrowsError(try socket.readFrame(limit: ScriptHelperMessage.bodyLimit(type:))) {
       error in
@@ -251,7 +259,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
   /// loaded, and nothing is running. Startup runs from the process launch to the helper's first
   /// message after its hello.
   func testTheHelperRestingFootprintAndStartupTime() async throws {
-    let listener = try ScriptListener.start(
+    let listener = try ScriptListener.startForTests(
       directory: directory.appendingPathComponent("measure", isDirectory: true))
 
     defer { listener.stop() }

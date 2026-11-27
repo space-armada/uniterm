@@ -32,7 +32,7 @@ final class ScriptOpenRunTests: XCTestCase {
     let center = StatusCenter()
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) })
     opener = CapturingOpener()
     host.fileOpener = opener
@@ -198,7 +198,11 @@ final class ScriptOpenRunTests: XCTestCase {
     let run = try await run(["/abs/y"], socket: path)
 
     XCTAssertEqual(run.status, 70, run.standardError)
-    XCTAssertTrue(run.standardError.contains(ScriptProtocol.mismatchText), run.standardError)
+    XCTAssertTrue(
+      run.standardError.contains(
+        ScriptProtocol.versionMismatchText(
+          program: ScriptProtocol.version, uniterm: ScriptProtocol.version + 1)),
+      run.standardError)
 
     let sentNothingAfterTheHello = await seen.value
 

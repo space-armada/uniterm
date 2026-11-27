@@ -24,7 +24,8 @@ final class ControllersWindowTests: XCTestCase {
     try FileManager.default.createDirectory(at: sockets, withIntermediateDirectories: true)
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: sockets), issueProducer: { _ in nil },
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: sockets),
+      issueProducer: { _ in nil },
       controllers: ControllerSettings(
         runsRoot: folder.appendingPathComponent("runs"),
         helper: BundleHelperIdentity(helperURL: folder.appendingPathComponent("none")),

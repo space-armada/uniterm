@@ -23,7 +23,7 @@ final class ScriptRunCommandTests: XCTestCase {
     directory = try ScriptFixtures.makeSocketDirectory()
 
     let center = StatusCenter()
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     host = ScriptHost(
       listener: listener, issueProducer: { center.issueProducer(kind: .script, name: $0) })
@@ -247,7 +247,7 @@ final class ScriptRunAppQuitTests: XCTestCase {
   /// the app never sends, then the app quits. The run exits with the connection-lost status and a
   /// message that names the cause.
   func testARunWhoseAppQuitsExitsNonzeroAndSaysWhy() async throws {
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
     let process = try ScriptFixtures.start(
       socket: listener.path, script: ScriptFixtures.script("post-status"))
 
@@ -279,7 +279,7 @@ final class ScriptRunAppQuitTests: XCTestCase {
   /// never yields, so only the watchdog can end it. The helper must exit soon after the app closes
   /// the connection, with the same status and message.
   func testAHelperBusyInALoopStillExitsWhenTheConnectionCloses() async throws {
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
     let marker = directory.appendingPathComponent("looping")
     let exited = expectation(description: "the helper exits")
     let process = try ScriptFixtures.start(

@@ -28,7 +28,7 @@ final class ScriptHostAPITests: XCTestCase {
     windows = FakeWindowAPI()
 
     let center = StatusCenter()
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     host = ScriptHost(
       listener: listener, issueProducer: { center.issueProducer(kind: .script, name: $0) },
@@ -295,7 +295,7 @@ final class ScriptHostAPITests: XCTestCase {
   /// Catches a host built without a window layer that crashes, or answers a call it cannot serve.
   func testAHostWithoutWindowsRefusesTheCalls() async throws {
     let center = StatusCenter()
-    let other = try ScriptListener.start(
+    let other = try ScriptListener.startForTests(
       directory: directory.appendingPathComponent("bare", isDirectory: true))
     let bare = ScriptHost(
       listener: other, issueProducer: { center.issueProducer(kind: .script, name: $0) })

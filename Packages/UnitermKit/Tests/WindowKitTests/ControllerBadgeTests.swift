@@ -35,7 +35,7 @@ final class ControllerBadgeTests: XCTestCase {
 
     let center = StatusCenter()
     let host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) },
       windows: fixture.scripting)
 

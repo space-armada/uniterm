@@ -31,7 +31,7 @@ final class ScriptReplTests: XCTestCase {
     let center = center!
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows,
       reaper: .inert)
     host.start()
@@ -766,7 +766,7 @@ final class ScriptReplTests: XCTestCase {
     let directory = try ScriptFixtures.makeSocketDirectory()
     let center = center!
     let host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, reaper: reaper)
 
     host.start()

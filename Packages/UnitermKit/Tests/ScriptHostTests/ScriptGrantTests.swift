@@ -37,7 +37,7 @@ final class ScriptGrantTests: XCTestCase {
 
     windows = FakeWindowAPI()
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows)
     host.start()
 

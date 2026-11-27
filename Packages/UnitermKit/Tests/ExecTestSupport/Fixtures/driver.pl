@@ -200,6 +200,25 @@ if ($mode eq "script") {
     hello($protocol, $schema);
     print "this is not json\n";
     serve();
+} elsif ($mode eq "stale-hello") {
+    # A hello from another protocol, with keys and a schema shape the current protocol lacks.
+    read_app_hello();
+    send_message({type => "hello", protocol => $rest[0] + 0, applet => $type,
+                  schema => {major => 1, minor => 0}, extra => "from a later hello"});
+    command("set-deck", {titles => ["stale"]});
+    serve();
+} elsif ($mode eq "unknown-key") {
+    # A command with a key this protocol does not have, such as one that a changed meaning renamed.
+    read_app_hello();
+    hello($protocol, $schema);
+    send_message({type => "command", id => $next_id++, name => "set-deck",
+                  arguments => {titles => ["misread"]}, tab => 3});
+    serve();
+} elsif ($mode eq "unknown-type") {
+    read_app_hello();
+    hello($protocol, $schema);
+    send_message({type => "retire-me", id => $next_id++});
+    serve();
 } elsif ($mode eq "partial") {
     read_app_hello();
     hello($protocol, $schema);
