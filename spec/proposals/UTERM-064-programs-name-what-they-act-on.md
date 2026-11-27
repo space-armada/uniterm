@@ -96,8 +96,8 @@ scripting API, not in an ADR. The user chose this on 2026-11-26.
 
 ### Tab identities are never reused
 
-Decision: this proposal asks the user to amend ADR-02 so its retirement rule reaches tabs. The amendment applies once
-the user approves its text.
+Decision: ADR-02 is amended so its retirement rule reaches tabs. The user approved the text below on 2026-11-27, and M1
+applies it to ADR-02.
 
 > Every place a program can address has an identity, including a tab inside an applet. A tab's identity is never
 > reused within a launch, and once the tab is gone it resolves to nothing. A pane-tree node's identity is retired
@@ -296,7 +296,7 @@ None.
 - The title filter matches only titles the caller may see
 - A driver's pane results include its own pane after Disconnect, as its tab results do
 - A disconnected pane the caller may address keeps its own refusal text, since it reveals nothing the caller lacks
-- ADR-02 carries the amendment the user approved, or the milestone waits for it
+- ADR-02 carries the amendment the user approved on 2026-11-27
 
 ## Decision Log
 
@@ -332,6 +332,7 @@ None.
 - 2026-11-27: Accepted after its review. ADR candidate: a program names every place by an opaque identity it was given,
   never built from parts. Declined: ADR-16 covers naming places, and ADR-02's amendment covers reuse. The ADR-02
   amendment text still waits for the user's approval, and M1 waits with it.
+- 2026-11-27: The user approved the ADR-02 amendment text. M1 applies it.
 
 ## References
 
