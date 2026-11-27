@@ -243,6 +243,12 @@ may name `./trip`. CLAUDE.md asks that such an attribute flow explicitly, and th
 - A second request that reaches the panel in one run is refused. A request refused for its bounds, a malformed list, or
   a full panel may be sent again
 - A Revoke pushes the `read` ended frame, and a later path command says the grant ended
+- A second `request-read` sent while the first waits is refused at once, and never joins the first one's panel row
+- A `request-read` after a Revoke in the same run is refused with the "needs a new run" text, and a request still
+  waiting when Revoke lands never grants
+- A denied read request stays denied for the run, and its denial offers no Ask Again
+- A path command sent before the user answers is refused as having no grant, and no scoped read runs before the success
+  reply is written
 - An app built before this proposal refuses `request-read` by name, before any effect
 - A driver holds at most 4 concurrent walks, counted per driver channel
 - A saved layout holds no scope, and a restored pane's Run asks again
@@ -288,6 +294,9 @@ may name `./trip`. CLAUDE.md asks that such an attribute flow explicitly, and th
   hello field, no frame at all, widening mid-run, and a grant display on the run strip. Left "Relative paths from a
   driver" open for the user, since CLAUDE.md asks that a choice about an attribute's explicit flow be the user's.
   Routed the frame, resend, revocation, and badge checks to M1. (autonomous)
+- 2026-11-26: Re-check of those four decisions converged with no design-level defect. Routed four checks to M1: a
+  second request while one waits, a request after a Revoke, no Ask Again after a Deny, and no read before the success
+  reply.
 
 ## References
 
