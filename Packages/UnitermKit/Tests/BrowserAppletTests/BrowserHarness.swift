@@ -18,12 +18,10 @@ final class EventHost: AppletHost {
   private let events = AsyncStream.makeStream(of: Void.self)
 
   func applet(
-    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String,
-    presenting record: StatusRecordID?
+    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String
   ) -> StatusRecordID? {
     defer { events.continuation.yield() }
-    return recording.applet(
-      applet, send: delivery, level: level, text: text, presenting: record)
+    return recording.applet(applet, send: delivery, level: level, text: text)
   }
 
   func appletDidExit(_ applet: any Applet) { recording.appletDidExit(applet) }
@@ -207,8 +205,7 @@ final class BrowserHarness {
     return harness
   }
 
-  /// `starting` is false for a test that decides when the pane starts, such as one that detaches
-  /// it first.
+  /// `starting` is false for a test that decides when the pane starts.
   init(
     server: FixtureServer, applet: BrowserApplet, starting: Bool = true, downloads: URL? = nil
   ) {

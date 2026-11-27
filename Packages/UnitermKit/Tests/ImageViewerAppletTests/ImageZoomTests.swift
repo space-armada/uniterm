@@ -378,9 +378,9 @@ final class ImageZoomTests: XCTestCase {
     XCTAssertTrue(warnings(calmHost).isEmpty)
   }
 
-  /// Catches a detached animation that keeps its zoomed frames. Detach pauses and gives back every
-  /// frame made for the zoom, leaving the backdrop, and reattach asks for the zoomed frames again.
-  func testDetachReleasesTheZoomedFramesAndReattachRestoresThem() async throws {
+  /// Catches an animation off screen that keeps its zoomed frames. Leaving the screen pauses and gives back every
+  /// frame made for the zoom, leaving the backdrop, and coming back asks for the zoomed frames again.
+  func testLeavingTheScreenReleasesTheZoomedFramesAndReturningRestoresThem() async throws {
     let (animated, _) = try await openAnimation(size: 1200)
     let backdrop = try XCTUnwrap(animated.shot).bytes
 
@@ -390,7 +390,7 @@ final class ImageZoomTests: XCTestCase {
     XCTAssertTrue(sharp)
     XCTAssertGreaterThan(animated.bitmapBudget.held(by: animated.lease), backdrop)
 
-    animated.detach()
+    animated.leaveScreen()
 
     XCTAssertFalse(animated.isAnimating)
     XCTAssertNil(animated.zoomLevel)
@@ -405,10 +405,10 @@ final class ImageZoomTests: XCTestCase {
 
     for _ in 0..<5 { await Task.yield() }
 
-    XCTAssertEqual(frameSummary(animated), held, "a detached pane asks for no frames")
+    XCTAssertEqual(frameSummary(animated), held, "a pane off screen asks for no frames")
     XCTAssertEqual(animated.bitmapBudget.held(by: animated.lease), backdrop, "nothing refills")
 
-    animated.reattach()
+    animated.returnToScreen()
 
     let back = await Harness.eventually {
       self.framesAreSharp(animated) && self.framesAdvance(animated)
@@ -959,11 +959,13 @@ final class ImageZoomTests: XCTestCase {
       released, "footprint \(client.currentFootprint ?? 0) against resting \(resting)")
   }
 
-  // MARK: Detach and display scale
+  // MARK: Off screen and display scale
 
-  /// Catches a detached pane that keeps its detail. Detach lets go of the tiles in the app and the
-  /// decode in the helper, and keeps only the backdrop. Reattach asks for the tiles again.
-  func testDetachReleasesTheTilesAndTheHelpersDecodeAndReattachRestoresThem() async throws {
+  /// Catches a pane off screen that keeps its detail. Leaving the screen lets go of the tiles in the app and the
+  /// decode in the helper, and keeps only the backdrop. Coming back asks for the tiles again.
+  func testLeavingTheScreenReleasesTheTilesAndTheHelpersDecodeAndReturningRestoresThem()
+    async throws
+  {
     let (applet, _) = try await open(try writeLarge())
     let backdrop = try XCTUnwrap(applet.shot).bytes
 
@@ -975,7 +977,7 @@ final class ImageZoomTests: XCTestCase {
     let withLevel = try XCTUnwrap(applet.client.currentFootprint)
     XCTAssertGreaterThan(withLevel, 80 << 20, "the helper holds the 1:1 decode")
 
-    applet.detach()
+    applet.leaveScreen()
 
     XCTAssertEqual(applet.tiles.count, 0)
     XCTAssertEqual(applet.content.tileCount, 0)
@@ -987,7 +989,7 @@ final class ImageZoomTests: XCTestCase {
     }
     XCTAssertTrue(released, "the helper let go of the decode")
 
-    applet.reattach()
+    applet.returnToScreen()
 
     let back = await Harness.eventually { self.tilesSettled(applet) }
     XCTAssertTrue(back)

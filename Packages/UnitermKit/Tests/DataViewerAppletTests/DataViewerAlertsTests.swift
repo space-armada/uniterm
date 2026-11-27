@@ -7,8 +7,7 @@ import XCTest
 
 @testable import DataViewerApplet
 
-/// How the data viewer's alerts reach the bar while the pane is detached, and what a restore load
-/// says. The host sends no detach or reattach today, so the tests call the events directly.
+/// How the data viewer's alerts reach the bar, and what a restore load says.
 @MainActor
 final class DataViewerAlertsTests: XCTestCase {
   private let amount = ColumnIdentity.named("amount")
@@ -36,79 +35,6 @@ final class DataViewerAlertsTests: XCTestCase {
 
   private func loaded(_ applet: DataViewerApplet) async -> Bool {
     await eventually { applet.session.phase == .loaded }
-  }
-
-  // MARK: Detached
-
-  /// Catches a detached viewer that shows a load notice nobody can see, or one that waits to record
-  /// it. The record is made when the load settles. Reattach shows the notice through that record
-  /// and adds no second history entry.
-  func testADetachedViewerRecordsItsLoadNoticesAndShowsThemOnReattach() async throws {
-    let scratch = try Scratch(self)
-    let file = try oversized(scratch)
-    let applet = DataViewerApplet(startDirectory: nil, budget: makeBudget())
-    let host = RecordingHost()
-    applet.host = host
-
-    applet.detach()
-    try applet.replaceSource(with: file, startDirectory: scratch.url.path)
-    let done = await loaded(applet)
-
-    XCTAssertTrue(done)
-    XCTAssertTrue(host.posts.isEmpty, "\(host.posts)")
-    XCTAssertTrue(host.attentions.isEmpty)
-    XCTAssertEqual(host.records.map(\.text), [cut])
-    XCTAssertEqual(host.records.map(\.level), [.warning])
-
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.text), [cut], "reattach added a history entry")
-    XCTAssertEqual(host.presented.map(\.text), [cut])
-    XCTAssertEqual(host.presented.map(\.delivery), [.message])
-  }
-
-  /// Catches a stale notice after a newer load. File A cuts a cell while the pane is detached. File
-  /// B replaces it and loads clean. Reattach presents nothing about A, and A's record stays.
-  func testANewerLoadDropsTheReplacedLoadsHeldNoticesButNotItsRecords() async throws {
-    let scratch = try Scratch(self)
-    let first = try oversized(scratch)
-    let second = try scratch.write("small.csv", "note\nsmall\n")
-    let applet = DataViewerApplet(startDirectory: nil, budget: makeBudget())
-    let host = RecordingHost()
-    applet.host = host
-
-    applet.detach()
-    try applet.replaceSource(with: first, startDirectory: scratch.url.path)
-    _ = await loaded(applet)
-
-    XCTAssertEqual(host.records.map(\.text), [cut])
-
-    try applet.replaceSource(with: second, startDirectory: scratch.url.path)
-    _ = await loaded(applet)
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.text), [cut], "the replaced load's record is kept")
-    XCTAssertTrue(host.presented.isEmpty, "\(host.presented)")
-  }
-
-  /// Catches a pane closed while detached that loses what it recorded.
-  func testAViewerClosedWhileDetachedKeepsItsRecords() async throws {
-    let scratch = try Scratch(self)
-    let file = try oversized(scratch)
-    let applet = DataViewerApplet(startDirectory: nil, budget: makeBudget())
-    let host = RecordingHost()
-    applet.host = host
-
-    applet.detach()
-    try applet.replaceSource(with: file, startDirectory: scratch.url.path)
-    _ = await loaded(applet)
-
-    applet.close()
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.text), [cut])
-    XCTAssertTrue(host.presented.isEmpty)
-    XCTAssertTrue(host.posts.isEmpty)
   }
 
   // MARK: Restore
@@ -164,29 +90,6 @@ final class DataViewerAlertsTests: XCTestCase {
 
     XCTAssertEqual(host.posts.map(\.text), [cut])
     XCTAssertTrue(host.attentions.isEmpty)
-  }
-
-  /// Catches a restore warning recorded while detached that loses its policy on return. It keeps
-  /// warning attention and takes no turn, and its history entry is not added again.
-  func testARestoreWarningRecordedWhileDetachedKeepsItsPolicyOnReattach() async throws {
-    let scratch = try Scratch(self)
-    let host = RecordingHost()
-    let applet = try restored(path: try oversized(scratch), host: host)
-
-    applet.detach()
-    applet.start(origin: .restore)
-    _ = await loaded(applet)
-
-    XCTAssertEqual(host.records.map(\.text), [cut])
-    XCTAssertTrue(host.attentions.isEmpty)
-    XCTAssertTrue(host.posts.isEmpty)
-
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.text), [cut])
-    XCTAssertEqual(host.presented.map(\.text), [cut])
-    XCTAssertEqual(host.presented.map(\.delivery), [.attention])
-    XCTAssertTrue(host.posts.isEmpty)
   }
 
   // MARK: Later loads

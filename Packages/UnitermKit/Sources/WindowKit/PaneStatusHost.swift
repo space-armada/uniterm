@@ -19,20 +19,6 @@ final class PaneStatusHost: AppletHost {
   private weak var bound: (any Applet)?
   private var lastTitle: String
 
-  /// A record this host admitted, and whether it has been shown. An applet presents a record by
-  /// ID. The host honors only its own records, once each. An ID it did not issue, or one that
-  /// left the history, is delivered as a new record of this pane instead, so no pane can mark or
-  /// show another's.
-  ///
-  /// The ledger keeps an entry exactly while the history keeps its record. Retention has one rule,
-  /// so a record the pane still holds cannot fall off the ledger and come back as a duplicate.
-  private struct Issued {
-    var id: StatusRecordID
-    var presented: Bool
-  }
-
-  private var ledger: [Issued] = []
-
   init(pane: NodeID, applet: any Applet, window: MainWindowController) {
     self.pane = pane
     self.window = window
@@ -47,40 +33,9 @@ final class PaneStatusHost: AppletHost {
   }
 
   func applet(
-    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String,
-    presenting record: StatusRecordID?
+    _ applet: any Applet, send delivery: StatusDelivery, level: StatusLevel, text: String
   ) -> StatusRecordID? {
-    guard let window else { return nil }
-
-    var target: StatusRecordID?
-
-    if record != nil { pruneLedger(window) }
-
-    if let record, let index = ledger.firstIndex(where: { $0.id == record }) {
-      guard !ledger[index].presented else { return record }
-
-      ledger[index].presented = true
-      target = record
-    }
-
-    let id = window.statusCenter.deliver(
-      delivery, level: level, source: source, text: text, presenting: target)
-
-    if target == nil, let id {
-      ledger.append(Issued(id: id, presented: delivery != .historyOnly))
-
-      pruneLedger(window)
-    }
-
-    return id
-  }
-
-  /// Drops the entries whose records the history no longer keeps. A lookup prunes first, so a
-  /// record that retention evicted is never honored, whenever the pane last admitted one.
-  private func pruneLedger(_ window: MainWindowController) {
-    let retained = Set(window.statusCenter.history.map(\.id))
-
-    ledger.removeAll { !retained.contains($0.id) }
+    window?.statusCenter.deliver(delivery, level: level, source: source, text: text)
   }
 
   func appletDidExit(_ applet: any Applet) {

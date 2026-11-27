@@ -6,8 +6,8 @@ typealias SlideshowSleep = @MainActor @Sendable (Duration) async throws -> Void
 
 /// The slideshow: a fixed timer that selects the next image and lets the usual load follow.
 ///
-/// Playing is the pane's intent, not saved state. Detaching stops the timer and keeps the intent,
-/// so reattaching resumes a slideshow that was playing and starts none that was not.
+/// Playing is the pane's intent, not saved state. Going off screen stops the timer and keeps the
+/// intent, so coming back resumes a slideshow that was playing and starts none that was not.
 extension ImageViewerApplet {
   static let realSleep: SlideshowSleep = { duration in
     try await Task.sleep(for: duration)
@@ -31,7 +31,7 @@ extension ImageViewerApplet {
     isPlaying = true
     refresh()
 
-    if !isDetached { runSlideshowTimer() }
+    if !isOffScreen { runSlideshowTimer() }
   }
 
   func stopSlideshow() {
@@ -78,7 +78,7 @@ extension ImageViewerApplet {
 
   /// Selects the next image. It wraps only once the folder has been listed to its end.
   func slideshowTick() {
-    guard isPlaying, !closed, !isDetached, let target = listing.slideshowTarget else { return }
+    guard isPlaying, !closed, !isOffScreen, let target = listing.slideshowTarget else { return }
 
     travelsForward = true
     listing.select(target)

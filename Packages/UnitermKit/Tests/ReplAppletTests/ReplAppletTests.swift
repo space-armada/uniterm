@@ -885,13 +885,13 @@ extension ReplAppletTests {
 
     XCTAssertTrue(message.contains("did not start"), message)
     XCTAssertTrue(message.contains("Restart"), message)
-    XCTAssertEqual(recorder.admitted.count, 1)
-    XCTAssertEqual(recorder.admitted.first?.level, .warning)
+    XCTAssertEqual(recorder.sent.count, 1)
+    XCTAssertEqual(recorder.sent.first?.level, .warning)
 
     refused.restart()
 
     XCTAssertEqual(engine.sessions.count, 1, "a retry started a REPL while still over")
-    XCTAssertEqual(recorder.admitted.count, 1, "the warning repeated")
+    XCTAssertEqual(recorder.sent.count, 1, "the warning repeated")
     XCTAssertNil(running.endedMessage, "a running REPL was ended for the total")
     XCTAssertEqual(killed.all, [])
 
@@ -923,7 +923,7 @@ extension ReplAppletTests {
     let refused = (0..<3).map { _ in makeApplet(services: services, host: recorder) }
 
     XCTAssertTrue(refused.allSatisfy { $0.endedMessage != nil })
-    XCTAssertEqual(recorder.admitted.count, 1)
+    XCTAssertEqual(recorder.sent.count, 1)
 
     knobs.footprint = 10
 
@@ -933,7 +933,7 @@ extension ReplAppletTests {
 
     _ = makeApplet(services: services, host: recorder)
 
-    XCTAssertEqual(recorder.admitted.count, 2, "a new episode did not warn")
+    XCTAssertEqual(recorder.sent.count, 2, "a new episode did not warn")
   }
 
   /// Catches a restored pane that retries a refused start by itself. The pane starts once, is

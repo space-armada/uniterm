@@ -212,25 +212,25 @@ final class LiveReloadTests: XCTestCase {
     applet.close()
   }
 
-  /// Catches a detached pane that reloads for each change, or never. Changes collect and the
-  /// reattach reloads once.
-  func testADetachedPaneReloadsOnceAtReattach() async throws {
+  /// Catches a pane off screen that reloads for each change, or never. Changes collect and the
+  /// return reloads once.
+  func testAPaneOffScreenReloadsOnceWhenItReturns() async throws {
     let scratch = try Scratch(self)
     let file = try scratch.write("a.rtf", try DocumentFixtures.rtf(body: "alpha"))
     let applet = try await open(file, in: scratch, policy: Self.silent)
 
-    applet.detach()
+    applet.leaveScreen()
 
     for body in ["bravo", "charlie", "delta"] {
       try DocumentFixtures.rtf(body: body).write(to: file)
       applet.fileChanged(FileSignature.of(path: file.path))
     }
 
-    XCTAssertFalse(applet.isLoading, "a detached pane starts no reload")
+    XCTAssertFalse(applet.isLoading, "a pane off screen starts no reload")
     XCTAssertEqual(applet.helperStarts, 1)
     XCTAssertTrue(applet.content.textView.string.contains("alpha"))
 
-    applet.reattach()
+    applet.returnToScreen()
 
     let shown = await Harness.eventually { applet.content.textView.string.contains("delta") }
     XCTAssertTrue(shown)

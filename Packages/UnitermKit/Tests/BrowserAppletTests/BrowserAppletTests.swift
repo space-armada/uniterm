@@ -584,7 +584,7 @@ final class BrowserAppletTests: XCTestCase {
     XCTAssertFalse(applet.tab.webView.isLoading)
     XCTAssertNil(applet.tab.webView.url)
 
-    let warnings = host.recording.admitted.filter { $0.level == .warning }
+    let warnings = host.recording.sent.filter { $0.level == .warning }
 
     XCTAssertEqual(warnings.count, 1)
     XCTAssertTrue(warnings.first?.text.contains("file:///etc/hosts") ?? false)
@@ -613,7 +613,7 @@ final class BrowserAppletTests: XCTestCase {
 
     XCTAssertFalse(applet.tab.webView.isLoading)
     XCTAssertNil(applet.tab.webView.url)
-    XCTAssertEqual(host.recording.admitted.filter { $0.level == .warning }.count, 2)
+    XCTAssertEqual(host.recording.sent.filter { $0.level == .warning }.count, 2)
   }
 
   /// Catches a capture request that the delegate answers with anything but a denial, and a web

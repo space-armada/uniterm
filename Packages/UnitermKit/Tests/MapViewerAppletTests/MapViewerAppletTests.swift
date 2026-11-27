@@ -467,8 +467,6 @@ final class MapViewerAppletTests: XCTestCase {
     XCTAssertEqual(applet.title, "Map")
 
     applet.start(origin: .user)
-    applet.detach()
-    applet.reattach()
     applet.close()
     applet.content.onRegionSettled?(region(1, 1))
   }

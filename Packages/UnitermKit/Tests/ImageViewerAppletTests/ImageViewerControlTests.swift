@@ -786,17 +786,17 @@ final class ImageViewerControlTests: XCTestCase {
     return waited.fields
   }
 
-  /// Catches a zoom on a detached pane whose wait hangs until the pane comes back. The pane asks
+  /// Catches a zoom on a pane off screen whose wait hangs until the pane comes back. The pane asks
   /// the helper for one tile and draws nothing. The handle stays pending until that tile arrives,
-  /// then ends `done`, and the pane lets the tile go. Reattach brings the detail back.
-  func testAZoomOnADetachedStillEndsOnceItsOneTileArrives() async throws {
+  /// then ends `done`, and the pane lets the tile go. Coming back on screen brings the detail back.
+  func testAZoomOnAStillOffScreenEndsOnceItsOneTileArrives() async throws {
     let (applet, _) = pane()
 
     try await large(applet)
 
     let backdrop = try XCTUnwrap(applet.shot).bytes
 
-    applet.detach()
+    applet.leaveScreen()
 
     let started = send("zoom", ["scale": .number(1)], to: applet)
     let handle = try XCTUnwrap(started.handle)
@@ -808,19 +808,19 @@ final class ImageViewerControlTests: XCTestCase {
 
     XCTAssertEqual(reply["state"], .string("done"))
     XCTAssertEqual(reply["fit"], .bool(false))
-    XCTAssertEqual(applet.content.tileCount, 0, "a detached pane draws no tile")
+    XCTAssertEqual(applet.content.tileCount, 0, "a pane off screen draws no tile")
     XCTAssertTrue(applet.tiles.entries.isEmpty, "the tile went once the zoom ended")
     XCTAssertEqual(applet.bitmapBudget.held(by: applet.lease), backdrop)
 
-    applet.reattach()
+    applet.returnToScreen()
 
     let back = await Harness.eventually { applet.content.tileCount > 0 }
-    XCTAssertTrue(back, "reattach shows the zoom's detail")
+    XCTAssertTrue(back, "coming back shows the zoom's detail")
   }
 
-  /// Catches a zoom already running when the pane detaches that never ends. Its first tile is still
+  /// Catches a zoom already running when the pane leaves the screen that never ends. Its first tile is still
   /// on the way, and the handle ends `done` once it arrives off screen.
-  func testAZoomStillWaitingForItsTileWhenThePaneDetachesEnds() async throws {
+  func testAZoomStillWaitingForItsTileWhenThePaneLeavesTheScreenEnds() async throws {
     let (applet, _) = pane()
 
     try await large(applet)
@@ -831,7 +831,7 @@ final class ImageViewerControlTests: XCTestCase {
 
     XCTAssertFalse(applet.client.tileRegionsOutstanding.isEmpty, "the first tile is on the way")
 
-    applet.detach()
+    applet.leaveScreen()
 
     XCTAssertEqual(waitNow(handle, on: applet, scope: scope), ["state": .string("pending")])
 
@@ -843,11 +843,11 @@ final class ImageViewerControlTests: XCTestCase {
     XCTAssertEqual(applet.bitmapBudget.held(by: applet.lease), backdrop)
   }
 
-  /// Catches a zoom on a detached animation whose wait hangs, or that throws away the frames the
+  /// Catches a zoom on an animation off screen whose wait hangs, or that throws away the frames the
   /// pane holds. The pane keeps its frames and asks for the frame on screen at the zoom's level.
-  /// The handle ends `done` once it arrives, and the pane goes back to its backdrop. Reattach plays
+  /// The handle ends `done` once it arrives, and the pane goes back to its backdrop. Coming back plays
   /// the zoomed frames.
-  func testAZoomOnADetachedAnimationEndsOnceOneFrameArrivesAtItsLevel() async throws {
+  func testAZoomOnAnAnimationOffScreenEndsOnceOneFrameArrivesAtItsLevel() async throws {
     let (applet, _) = pane()
     let gif = try ImageFixtures.write(
       ImageFixtures.animatedGIF(
@@ -863,7 +863,7 @@ final class ImageViewerControlTests: XCTestCase {
 
     let backdrop = try XCTUnwrap(applet.shot).bytes
 
-    applet.detach()
+    applet.leaveScreen()
 
     let drained = await Harness.eventually { applet.client.outstandingFrames.isEmpty }
     XCTAssertTrue(drained)
@@ -884,18 +884,18 @@ final class ImageViewerControlTests: XCTestCase {
     XCTAssertTrue(applet.frames.values.allSatisfy { $0.zoomLevel == nil && $0.bytes == 0 })
     XCTAssertEqual(applet.bitmapBudget.held(by: applet.lease), backdrop)
 
-    applet.reattach()
+    applet.returnToScreen()
 
     let sharp = await Harness.eventually {
       applet.isAnimating && applet.zoomLevel == 1200
         && applet.frames.values.contains { $0.zoomLevel == 1200 }
     }
-    XCTAssertTrue(sharp, "reattach plays the zoomed frames")
+    XCTAssertTrue(sharp, "coming back plays the zoomed frames")
   }
 
-  /// Catches a zoom on a detached pane that ends `done` for a decode the helper refuses, or never
+  /// Catches a zoom on a pane off screen that ends `done` for a decode the helper refuses, or never
   /// ends. The tile is past the helper's cap, so the handle fails with the zoom limit.
-  func testAZoomTheHelperRefusesOnADetachedPaneFailsWithTheZoomLimit() async throws {
+  func testAZoomTheHelperRefusesOnAPaneOffScreenFailsWithTheZoomLimit() async throws {
     let (applet, _) = panes.make(settings: Harness.settings(maxImageBytes: 2 << 20))
 
     applet.content.backingScaleSource = { 2 }
@@ -905,7 +905,7 @@ final class ImageViewerControlTests: XCTestCase {
 
     _ = try await run("show", ["path": .string(url.path)], to: applet)
 
-    applet.detach()
+    applet.leaveScreen()
 
     let started = send("zoom", ["scale": .number(1)], to: applet)
     let handle = try XCTUnwrap(started.handle)

@@ -9,8 +9,7 @@ import XCTest
 
 @testable import MapViewerApplet
 
-/// How the map's alerts reach the bar while the pane is detached, and what a restore load says.
-/// The host sends no detach or reattach today, so the tests call the events directly.
+/// How the map's alerts reach the bar, and what a restore load says.
 @MainActor
 final class MapAlertsTests: XCTestCase {
   private func mixedFile(_ scratch: GeoScratch) throws -> URL {
@@ -28,87 +27,6 @@ final class MapAlertsTests: XCTestCase {
     applet.host = host
 
     return applet
-  }
-
-  // MARK: Detached
-
-  /// Catches a detached map that shows a load notice nobody can see, or that waits to record it.
-  /// The record is made when the load settles. Reattach shows the notice through that record and
-  /// adds no second history entry.
-  func testADetachedMapRecordsItsLoadNoticesAndShowsThemOnReattach() async throws {
-    let scratch = try GeoScratch(self)
-    let file = try mixedFile(scratch)
-    let applet = MapViewerApplet(startDirectory: nil)
-    let host = RecordingHost()
-    applet.host = host
-
-    applet.detach()
-    applet.replaceSource(with: file, startDirectory: scratch.url.path)
-    await applet.opening?.value
-
-    let texts = applet.statusNotices.map(\.text)
-
-    XCTAssertFalse(texts.isEmpty, "the file must leave a notice for this test to mean anything")
-    XCTAssertTrue(host.posts.isEmpty)
-    XCTAssertTrue(host.attentions.isEmpty)
-    XCTAssertEqual(host.records.map(\.text), texts)
-    XCTAssertEqual(host.records.map(\.level), applet.statusNotices.map(\.level))
-
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.text), texts, "reattach added history entries")
-    XCTAssertEqual(host.presented.map(\.text), texts)
-    XCTAssertTrue(host.presented.allSatisfy { $0.delivery == .message })
-  }
-
-  /// Catches a stale notice after a newer load. File A skips a shape while the pane is detached.
-  /// File B replaces it and loads clean. Reattach presents nothing about A, and A's records stay.
-  func testANewerLoadDropsTheReplacedLoadsHeldNoticesButNotItsRecords() async throws {
-    let scratch = try GeoScratch(self)
-    let first = try mixedFile(scratch)
-    let second = try scratch.write(
-      "clean.geojson", GeoFixtures.collection([GeoFixtures.point("B", 2, 2)]))
-    let applet = MapViewerApplet(startDirectory: nil)
-    let host = RecordingHost()
-    applet.host = host
-
-    applet.detach()
-    applet.replaceSource(with: first, startDirectory: scratch.url.path)
-    await applet.opening?.value
-
-    let recorded = host.records.map(\.text)
-
-    XCTAssertFalse(recorded.isEmpty, "the first file must leave a notice")
-
-    applet.replaceSource(with: second, startDirectory: scratch.url.path)
-    await applet.opening?.value
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.text), recorded, "the replaced load's records are kept")
-    XCTAssertTrue(host.presented.isEmpty, "\(host.presented)")
-  }
-
-  /// Catches a map closed while detached that loses what it recorded. The records were made when
-  /// the events happened, so the host keeps them, and a close shows nothing.
-  func testAMapClosedWhileDetachedKeepsItsRecords() async throws {
-    let scratch = try GeoScratch(self)
-    let file = try mixedFile(scratch)
-    let applet = MapViewerApplet(startDirectory: nil)
-    let host = RecordingHost()
-    applet.host = host
-
-    applet.detach()
-    applet.replaceSource(with: file, startDirectory: scratch.url.path)
-    await applet.opening?.value
-
-    let recorded = host.records.map(\.text)
-    applet.close()
-    applet.reattach()
-
-    XCTAssertFalse(recorded.isEmpty)
-    XCTAssertEqual(host.records.map(\.text), recorded)
-    XCTAssertTrue(host.presented.isEmpty)
-    XCTAssertTrue(host.posts.isEmpty)
   }
 
   // MARK: Restore
@@ -197,33 +115,6 @@ final class MapAlertsTests: XCTestCase {
 
     XCTAssertFalse(host.posts.isEmpty)
     XCTAssertTrue(host.attentions.isEmpty)
-  }
-
-  /// Catches a restore warning recorded while detached that loses its policy on return. It keeps
-  /// warning attention and takes no turn, and its history entry is not added again.
-  func testARestoreWarningRecordedWhileDetachedKeepsItsPolicyOnReattach() async throws {
-    let scratch = try GeoScratch(self)
-    let file = try mixedFile(scratch)
-    let host = RecordingHost()
-    let applet = try restored(path: file, host: host)
-
-    applet.detach()
-    applet.start(origin: .restore)
-    await applet.opening?.value
-
-    let warnings = applet.statusNotices.filter { $0.level == .warning }.map(\.text)
-
-    XCTAssertFalse(warnings.isEmpty)
-    XCTAssertEqual(host.records.map(\.text), warnings)
-    XCTAssertTrue(host.attentions.isEmpty)
-    XCTAssertTrue(host.posts.isEmpty)
-
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.text), warnings)
-    XCTAssertEqual(host.presented.map(\.text), warnings)
-    XCTAssertTrue(host.presented.allSatisfy { $0.delivery == .attention })
-    XCTAssertTrue(host.posts.isEmpty)
   }
 
   // MARK: Later loads

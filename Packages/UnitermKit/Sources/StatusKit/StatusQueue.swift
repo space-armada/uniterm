@@ -111,48 +111,6 @@ public struct StatusQueue: Sendable {
       raisesSignal: raisesSignal)
   }
 
-  /// Presents a record that `record` admitted earlier, without admitting it again. An applet does
-  /// this when a pane returns to the screen and shows what it held back.
-  ///
-  /// `showsMessage` queues a turn on the bar, coalescing as `post` does. `raisesSignal` marks the
-  /// record unseen. A record that retention has dropped since has no row left to mark, so its
-  /// signal goes to the loss summary instead, where only the summary's control clears it.
-  ///
-  /// The queue refuses an ID it never issued, and a retained record that another source made. It
-  /// cannot tell who made a record that retention has dropped, so the pane's host keeps that
-  /// ledger. Returns false when it refused.
-  @discardableResult
-  public mutating func present(
-    level: StatusLevel, source: StatusSource, text: String, record id: UInt64,
-    showsMessage: Bool, raisesSignal: Bool, at now: TimeInterval
-  ) -> Bool {
-    guard id >= 1, id < nextID else { return false }
-
-    if let retained = history.first(where: { $0.id == id }), retained.source.key != source.key {
-      return false
-    }
-
-    advance(at: now)
-
-    if raisesSignal { markUnseen(id: id, level: level) }
-
-    guard showsMessage else { return true }
-
-    let source = source.boundingLabel(to: policy.maximumLabelBytes)
-    let text = StatusText.bounded(text, maximumBytes: policy.maximumTextBytes)
-
-    guard !isPresented(level: level, key: source.key, text: text) else { return true }
-
-    let message =
-      history.first { $0.id == id }
-      ?? StatusMessage(id: id, level: level, source: source, text: text, postedAt: now)
-
-    pending.append(Pending(message: message, folded: []))
-    boundPending()
-    advance(at: now)
-    return true
-  }
-
   /// Applies whatever the passage of time allows. Returns true when the displayed message changed.
   @discardableResult
   public mutating func advance(at now: TimeInterval) -> Bool {

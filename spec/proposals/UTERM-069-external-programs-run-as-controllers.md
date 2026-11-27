@@ -611,6 +611,7 @@ None.
   user sees each one and can deny it. That is the user misconfiguring their own program, which the design does not
   guard against. The bug filed for it, `20261126-unanswered-reviews-fill-connection-slots`, is rejected for that
   reason.
+- 2026-11-27: Scheduled as M1-M2 in queue.md, after UTERM-018 M1-M2 and before UTERM-019 M1-M2.
 
 ## References
 

@@ -56,9 +56,8 @@ it, so it is not written yet. Every applet implements:
 
 - A view the pane hosts, a title, and status bar segments.
 - `start`, `focus`, and a palette update.
-- `detach`, `reattach`, and `close`. uniterm sends these lifecycle events, and each applet owns its response, per
-  ADR-05. On detach an applet pauses audio, video, and alerts at once. uniterm keeps no closed applet alive. An applet
-  that keeps work going after close owns its bound and a visible indicator.
+- `close`. uniterm sends this lifecycle event, and each applet owns its response, per ADR-05. uniterm keeps no closed
+  applet alive. An applet that keeps work going after close owns its bound and a visible indicator.
 - `isRunningSomething` and `runningLabels`. Closing a pane, a window, or the app asks first when an affected pane is
   running something, and the dialog names it.
 - `describe()`, an inert description with a type and a per-type version. Undo and layout restore both rebuild the
@@ -89,6 +88,9 @@ restoring must not run that program again.
 
 - 2026-10-31: Drafted from the original write-up without an interview. The open questions hold everything undecided.
 - 2026-11-01: Added "The applet contract" with context from UTERM-001's implementation.
+- 2026-11-27: The user retired the `detach` and `reattach` lifecycle events, and ADR-05 is amended to match. "The applet
+  contract" said "`detach`, `reattach`, and `close`. uniterm sends these lifecycle events, and each applet owns its
+  response, per ADR-05. On detach an applet pauses audio, video, and alerts at once." It now lists `close` alone.
 
 ## References
 

@@ -61,9 +61,9 @@ final class PageDialog {
 
 /// The dialogs a pane's pages have raised and the user has not answered, oldest first.
 ///
-/// A dialog waits while its pane is detached, and while its tab is not the selected one. It is
-/// bounded, so a page that raises dialogs in many frames cannot grow the list without end. A
-/// dialog over the bound is dismissed at once. The bound guards memory only. A page that keeps
+/// A dialog waits while its tab is not the selected one. The list is bounded, so a page that
+/// raises dialogs in many frames cannot grow it without end. A dialog over the bound is dismissed
+/// at once. The bound guards memory only. A page that keeps
 /// asking is stopped by the user, through the offer on its second and later dialogs.
 @MainActor
 final class PageDialogs {

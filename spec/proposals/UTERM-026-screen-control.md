@@ -138,9 +138,10 @@ key is a window key uniterm owns, and the user may remap it, per ADR-04.
 
 Decision: zoom is a pane operation. A user command, Zoom Pane, zooms the focused pane, plus a controller zoom under a
 permission kind of its own. A controller's zoom behaves as the user's zoom, so the zoomed pane takes focus. Amended
-2026-11-20; see Decision Log.
+2026-11-27; see Decision Log.
 
-- Zoom is a view state of the window over an unchanged tree. The hidden panes get detach, and reattach when zoom ends.
+- Zoom is a view state of the window over an unchanged tree. Zoom only hides the other panes. They get no lifecycle
+  event and keep running, and audio or video playing in one carries on.
 - The user's zoom acts on the focused pane, so it never hides focus.
 - `(uniterm/zoom-pane pane)` zooms a remote-controlled member of the caller's group. The zoomed pane takes focus, in the
   key window or any other. In a window that is not key, that window's focus mark moves to the zoomed pane. So returning
@@ -367,10 +368,11 @@ None.
 
 **Status:** NOT STARTED
 
-Amended 2026-11-20; see Decision Log.
+Amended 2026-11-27; see Decision Log.
 
 - A pane fills its window and returns, and the other panes keep their state
-- Zoom sends detach to each hidden pane and reattach when it ends, and a playing video or audio pauses while hidden
+- Zoom sends a hidden pane no lifecycle event. Its applet keeps running, and a playing video or audio carries on while
+  hidden
 - A layout request that makes new panes in a zoomed window ends zoom, and its last new pane takes focus, as the user's
   splits do
 - A script's `open-pane` in a zoomed window ends zoom, and its new pane takes focus, as the user's split does
@@ -660,6 +662,14 @@ Amended 2026-11-20; see Decision Log.
   builds read' accepts. `policy.json` holds neither kind, since packages cannot declare them, so package approvals keep
   working." The rationale said refusing the kinds in packages "keeps `policy.json` readable on older builds". The risk
   was "An older build stops honoring every file approval", rated medium impact, and is now rated low.
+- 2026-11-27: The user retired the `detach` and `reattach` lifecycle events, and ADR-05 is amended to match. Hiding a
+  view sends an applet nothing, whether a window is hidden, minimized, or covered, or zoom hides a pane. A hidden
+  window's applets already keep running, as macOS apps do, and zoom hides a view the same way. Stopping sound would also
+  change a pane's state when the user only asked for a bigger view of another pane.
+  - Amended "Pane zoom". Its first bullet said "Zoom is a view state of the window over an unchanged tree. The hidden
+    panes get detach, and reattach when zoom ends." The hidden panes now get no lifecycle event and keep running.
+  - Amended M1. Its check said "Zoom sends detach to each hidden pane and reattach when it ends, and a playing video or
+    audio pauses while hidden". It now checks that a hidden pane gets no event and its video or audio carries on.
 
 ## References
 

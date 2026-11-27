@@ -317,29 +317,6 @@ final class TerminalAppletTests: XCTestCase {
     XCTAssertEqual(failing(.user).posts.map(\.0), [.warning])
   }
 
-  /// Catches a start failure that shows while the pane is detached. It is recorded at once and
-  /// shown with the restore policy on return.
-  func testAStartFailureWhileDetachedIsRecordedAndShownOnReattach() {
-    let engine = FakeEngine()
-    engine.failure = Refused()
-    let host = RecordingHost()
-    let applet = TerminalApplet(engine: engine, directoryExists: { _ in true })
-    applet.host = host
-    retained.append(applet)
-
-    applet.detach()
-    applet.start(origin: .restore)
-
-    XCTAssertTrue(host.posts.isEmpty)
-    XCTAssertTrue(host.attentions.isEmpty)
-    XCTAssertEqual(host.records.map(\.1).count, 1)
-
-    applet.reattach()
-
-    XCTAssertEqual(host.records.count, 1, "reattach added a history entry")
-    XCTAssertEqual(host.presented.map(\.0), [.attention])
-  }
-
   func testLongNotificationIsCapped() {
     let (_, _, host, session) = makeApplet()
 
@@ -389,76 +366,6 @@ final class TerminalAppletTests: XCTestCase {
     request.resolve(allow: false)
 
     XCTAssertEqual(answers.all, [true])
-  }
-
-  /// Catches a detached terminal that still shows alerts the user cannot see, and one that waits
-  /// to record them. Notifications that arrive while detached go to the history at once, with no
-  /// message and no signal. Reattach shows every held one, oldest first, through the records
-  /// already made. The session stays alive and visible, since a shell has nothing else to pause.
-  /// It cannot show that the bell is held, since the terminal posts no bell alert at all.
-  func testDetachRecordsNotificationsAndReattachShowsEachHeldOne() {
-    let (applet, engine, host, session) = makeApplet()
-
-    applet.detach()
-    session.onEvent?(.notification(title: "", body: "first"))
-    session.onEvent?(.notification(title: "", body: "second"))
-    session.onEvent?(.bell)
-
-    XCTAssertTrue(host.posts.isEmpty)
-    XCTAssertTrue(host.attentions.isEmpty)
-    XCTAssertEqual(host.records.map(\.1), ["first", "second"])
-    XCTAssertTrue(session.visible)
-    XCTAssertFalse(session.closed)
-
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.1), ["first", "second"], "reattach added history entries")
-    XCTAssertEqual(host.presented.map(\.2), ["first", "second"])
-    XCTAssertEqual(host.presented.map(\.3), [1, 2])
-    XCTAssertEqual(host.presented.map(\.0), [.message, .message])
-    XCTAssertEqual(engine.sessions.count, 1)
-
-    session.onEvent?(.notification(title: "", body: "live"))
-
-    XCTAssertEqual(host.posts.map(\.1), ["live"])
-  }
-
-  /// Catches a pane that closes while detached and loses what it held. The history keeps the
-  /// records made when the notifications arrived. The applet shows nothing after the close.
-  func testAPaneClosedWhileDetachedKeepsItsRecords() {
-    let (applet, _, host, session) = makeApplet()
-
-    applet.detach()
-    session.onEvent?(.notification(title: "", body: "kept"))
-    applet.close()
-    applet.reattach()
-
-    XCTAssertEqual(host.records.map(\.1), ["kept"])
-    XCTAssertTrue(host.posts.isEmpty)
-    XCTAssertTrue(host.presented.isEmpty)
-  }
-
-  /// Catches an unbounded wait for a chatty program. The terminal holds a bounded number, counts
-  /// the rest, and says so on reattach. Every notification is still in the history.
-  func testAFloodOfNotificationsWhileDetachedIsBoundedAndCounted() {
-    let (applet, _, host, session) = makeApplet()
-
-    applet.detach()
-
-    for index in 0..<20 {
-      session.onEvent?(.notification(title: "", body: "n\(index)"))
-    }
-
-    XCTAssertEqual(host.records.count, 20)
-
-    applet.reattach()
-
-    XCTAssertEqual(host.presented.count, 8)
-    XCTAssertEqual(host.records.count, 20)
-    XCTAssertEqual(host.posts.count, 1)
-    XCTAssertEqual(
-      host.posts.first?.1,
-      "12 more alerts arrived while this pane was hidden. The history has them.")
   }
 
   func testRunningStateComesFromTheSession() {

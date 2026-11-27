@@ -431,9 +431,9 @@ final class ImageViewerNavigationTests: XCTestCase {
   }
 
   /// Catches a slideshow that keeps running off screen, or that restarts when it was not playing.
-  /// Detaching stops the timer and keeps the intent. Reattaching resumes a show that was playing and
+  /// Leaving the screen stops the timer and keeps the intent. Coming back resumes a show that was playing and
   /// starts none that was not.
-  func testTheSlideshowPausesOnDetachAndResumesOnlyIfItWasPlaying() async throws {
+  func testTheSlideshowPausesOffScreenAndResumesOnlyIfItWasPlaying() async throws {
     try write("a.png", "b.png")
 
     let sleeper = ManualSleeper()
@@ -444,21 +444,21 @@ final class ImageViewerNavigationTests: XCTestCase {
     let armed = await Harness.eventually { sleeper.waitingCount == 1 }
     XCTAssertTrue(armed)
 
-    applet.detach()
+    applet.leaveScreen()
     let paused = await Harness.eventually { sleeper.waitingCount == 0 }
     XCTAssertTrue(paused)
     XCTAssertFalse(applet.isSlideshowTimerRunning)
     XCTAssertTrue(applet.isPlaying, "the intent to play is kept")
 
-    applet.reattach()
+    applet.returnToScreen()
     let resumed = await Harness.eventually { sleeper.waitingCount == 1 }
     XCTAssertTrue(resumed)
 
     applet.togglePlayback()
     XCTAssertFalse(applet.isPlaying)
 
-    applet.detach()
-    applet.reattach()
+    applet.leaveScreen()
+    applet.returnToScreen()
 
     XCTAssertFalse(applet.isSlideshowTimerRunning, "a show that was not playing stays stopped")
 
@@ -873,9 +873,9 @@ final class ImageViewerNavigationTests: XCTestCase {
     XCTAssertTrue(stepped, "the step hung on a prefetch the scheduler dropped")
   }
 
-  /// Catches a detach during a prefetch's file open stranding the job. The open is held, the pane
-  /// detaches and reattaches, and a step to that image still shows it.
-  func testADetachDuringAPrefetchOpenDoesNotStrandTheNextStep() async throws {
+  /// Catches a prefetch's file open stranded when the pane leaves the screen. The open is held, the pane
+  /// leaves the screen and returns, and a step to that image still shows it.
+  func testLeavingTheScreenDuringAPrefetchOpenDoesNotStrandTheNextStep() async throws {
     try write("a.png", "b.png")
 
     let gate = OpenGate()
@@ -900,12 +900,12 @@ final class ImageViewerNavigationTests: XCTestCase {
     let held = await Harness.eventually { applet.prefetchTask != nil }
     XCTAssertTrue(held)
 
-    applet.detach()
-    applet.reattach()
+    applet.leaveScreen()
+    applet.returnToScreen()
     applet.step(.next)
 
     let stepped = await Harness.eventually(seconds: 5) { applet.committedName == "b.png" }
-    XCTAssertTrue(stepped, "the step hung on a job the detach abandoned")
+    XCTAssertTrue(stepped, "the step hung on a job that leaving the screen abandoned")
 
     await gate.release()
   }

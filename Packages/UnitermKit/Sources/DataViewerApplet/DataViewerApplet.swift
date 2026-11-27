@@ -37,7 +37,7 @@ public final class DataViewerApplet: Applet, SourceReplacing {
   /// The notices already posted to the status bar for the file shown now.
   private var posted = AppletNotices()
 
-  /// Reaches the status bar for every alert, and holds them back while the pane is detached.
+  /// Reaches the status bar for every alert.
   private var alerts = AppletAlerts()
 
   /// The origin of the load shown now. Each load sets its own, so a replacement never inherits
@@ -169,7 +169,6 @@ public final class DataViewerApplet: Applet, SourceReplacing {
     // A sheet is a load of its own. The old sheet's notices are spent, and the file was found
     // once already.
     posted.reset()
-    alerts.replaceLoad()
     resolvedNotice = nil
     loadOrigin = .user
     sortOrigin = .user
@@ -257,7 +256,7 @@ public final class DataViewerApplet: Applet, SourceReplacing {
     table.onNotice = { [weak self] notice in
       guard let self else { return }
 
-      alerts.deliver(notice, origin: .user, ofLoad: false, from: self, to: host)
+      alerts.deliver(notice, origin: .user, from: self, to: host)
     }
 
     nested = table
@@ -304,7 +303,6 @@ public final class DataViewerApplet: Applet, SourceReplacing {
     sortOrigin = origin
     resolvedNotice = nil
     posted.reset()
-    alerts.replaceLoad()
     closePopovers()
 
     let generation = openGeneration
@@ -375,21 +373,11 @@ public final class DataViewerApplet: Applet, SourceReplacing {
   public func close() {
     closed = true
     sourceSwap.cancel()
-    alerts.discard()
     closePopovers()
     opening?.cancel()
     opening = nil
     session.onChange = nil
     session.close()
-  }
-
-  /// The data viewer holds back its alerts while detached. See `AppletAlerts`.
-  public func detach() {
-    alerts.detach()
-  }
-
-  public func reattach() {
-    alerts.reattach(from: self, to: host)
   }
 
   public func focus() {

@@ -159,8 +159,7 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
   /// ride in the description's undo-only part, so a reopened pane brings them back.
   private var closedTabs: [TerminalDescription.ClosedTab] = []
 
-  /// Notifications reach the status bar through this. It records them in the history when they
-  /// arrive and holds them back while the applet is detached.
+  /// Notifications reach the status bar through this.
   private var alerts = AppletAlerts()
 
   /// The pane's control state, as the host last pushed it. Every session gets the clipboard policy
@@ -415,8 +414,6 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
   }
 
   public func close() {
-    alerts.discard()
-
     for tab in tabs {
       if let identity = tab.processIdentity {
         host?.applet(self, sessionEnded: tab.id, pid: identity.pid, started: identity.started)
@@ -428,22 +425,6 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
       tab.session?.close()
       tab.session = nil
     }
-  }
-
-  /// A terminal makes no sound and plays no video, so it pauses no output. It holds back what the
-  /// user would notice but cannot see: notifications from OSC 9 and OSC 777 are recorded in the
-  /// history when they arrive and are not shown. The bell raises no alert here, so there is
-  /// nothing to hold. A shell keeps running whether or not anyone can see it, as a user expects.
-  ///
-  /// The applet keeps a bounded number of held notifications, and `reattach` shows them. When the
-  /// bound drops some, one more message counts them. A pane that closes while detached keeps its
-  /// history records.
-  public func detach() {
-    alerts.detach()
-  }
-
-  public func reattach() {
-    alerts.reattach(from: self, to: host)
   }
 
   public func focus() {

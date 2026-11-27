@@ -320,7 +320,6 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   public func close() {
     closed = true
     events.close()
-    alerts.discard()
     downloads.cancelAll()
     dialogs.dismissAll()
     content.dialogView.hide()
@@ -340,29 +339,6 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
     content.tabBar.onNew = nil
     content.dialogView.onAnswer = { _, _ in }
     content.dialogView.onStop = { _ in }
-  }
-
-  /// The pane left the screen. Media in every tab pauses and stays blocked, and a dialog that a
-  /// page raised waits to be shown. Downloads keep going.
-  public func detach() {
-    alerts.detach()
-
-    for tab in tabs { tab.setMediaSuspended(true) }
-
-    syncDialog(restoringFocus: false)
-  }
-
-  /// A pane that was detached at `start`, or that selected a tab while detached, loads the selected
-  /// tab now. A tab that already loaded asks nothing new.
-  ///
-  /// Media comes out of suspension so the user can start it again. What was paused stays paused.
-  public func reattach() {
-    alerts.reattach(from: self, to: host)
-
-    for tab in tabs { tab.setMediaSuspended(false) }
-
-    loadIfNeverLoaded()
-    syncDialog(restoringFocus: false)
   }
 
   public func focus() {
@@ -477,7 +453,6 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
 
     if target === tab {
       content.markAddress(invalid: false)
-      alerts.replaceLoad()
     }
 
     target.load(url, assumed: assumed, byUser: true)
@@ -655,7 +630,6 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
       id: .make(), record: BrowserDescription.Tab(), dataStore: dataStore, hsts: services.hsts,
       clock: services.clock, hang: services.hang)
     opened.delegate = self
-    opened.setMediaSuspended(alerts.isDetached)
 
     let position = min(selectedIndex + 1, tabs.count)
     tabs.insert(opened, at: position)
@@ -703,12 +677,9 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
     selectTab(at: (selectedIndex + step + tabs.count) % tabs.count)
   }
 
-  /// A restored tab nobody has looked at loads when it is first selected, and only while the pane
-  /// is attached. A detached pane is off screen, so it loads nothing until it comes back.
+  /// A restored tab nobody has looked at loads when it is first selected.
   private func loadIfNeverLoaded() {
-    guard started, !closed, !alerts.isDetached, !tab.hasBegunLoading, !tab.isStopped else {
-      return
-    }
+    guard started, !closed, !tab.hasBegunLoading, !tab.isStopped else { return }
 
     loadStored(tab)
   }
@@ -937,7 +908,7 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   }
 
   func tabIsViewed(_ tab: BrowserTab) -> Bool {
-    !closed && started && !alerts.isDetached && tab === self.tab
+    !closed && started && tab === self.tab
   }
 
   /// A web view that stopped answering holds input that was not sent. Only the tab the user is
@@ -971,7 +942,7 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
     dialogs.dismissAll(for: lost)
     lost.isAskingToOpenApp = false
 
-    let showsStopped = !recovering && lost === tab && started && !alerts.isDetached
+    let showsStopped = !recovering && lost === tab && started
 
     if showsStopped { lost.showStopped() }
 
@@ -1020,10 +991,10 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   }
 
   /// Shows the selected tab's oldest waiting dialog, or hides the one on show when it is not that
-  /// tab's, or the pane is detached. A pane the user is not typing in keeps the keyboard where it
-  /// is, so a page cannot take the focus.
+  /// tab's. A pane the user is not typing in keeps the keyboard where it is, so a page cannot take
+  /// the focus.
   func syncDialog(restoringFocus: Bool) {
-    let wanted = closed || alerts.isDetached ? nil : dialogs.first(for: tab)
+    let wanted = closed ? nil : dialogs.first(for: tab)
     let view = content.dialogView
 
     if view.shown === wanted {
@@ -1068,7 +1039,6 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
 
     popup.delegate = self
     popup.loadOrigin = .user
-    popup.setMediaSuspended(alerts.isDetached)
 
     let position = byUser ? openerIndex + 1 : endOfScriptGroup(of: opener) + 1
 
@@ -1270,7 +1240,6 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
       opened.delegate = self
       opened.loadOrigin = .user
       opened.scriptGroup = page
-      opened.setMediaSuspended(alerts.isDetached)
 
       tabs.insert(opened, at: position)
 
@@ -1278,7 +1247,7 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
 
       position += 1
 
-      if started, !alerts.isDetached { opened.load(url) }
+      if started { opened.load(url) }
     }
 
     refresh()
@@ -1339,12 +1308,11 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   }
 
   /// A download's outcome reaches the user whichever tab is selected, and whichever pane has
-  /// focus. A detached pane records it at once and shows it on reattach.
+  /// focus.
   private func deliverDownload(_ level: StatusLevel, _ text: String) {
     guard !closed else { return }
 
-    alerts.deliver(
-      AppletNotice(level, text), origin: .user, ofLoad: false, from: self, to: host)
+    alerts.deliver(AppletNotice(level, text), origin: .user, from: self, to: host)
   }
 
   /// Whether a finished download is there to reveal.

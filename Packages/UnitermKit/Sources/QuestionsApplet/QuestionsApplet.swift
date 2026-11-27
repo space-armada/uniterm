@@ -410,10 +410,6 @@ public final class QuestionsApplet: Applet {
     content.tabBar.onClose = nil
   }
 
-  public func detach() {}
-
-  public func reattach() {}
-
   public func focus() {
     guard !closed else { return }
 

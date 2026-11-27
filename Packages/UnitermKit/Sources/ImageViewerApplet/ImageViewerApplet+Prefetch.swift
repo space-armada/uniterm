@@ -31,7 +31,7 @@ struct PrefetchJob {
 /// a larger decode.
 extension ImageViewerApplet {
   func maybePrefetch() {
-    guard !closed, !isDetached, phase == .showing, loadingName == nil, prefetch == nil,
+    guard !closed, !isOffScreen, phase == .showing, loadingName == nil, prefetch == nil,
       prefetchTask == nil, !isZoomedPastFit, client.isRunning, let folder, let held = shot,
       let at = listing.position(ofName: held.name)
     else { return }

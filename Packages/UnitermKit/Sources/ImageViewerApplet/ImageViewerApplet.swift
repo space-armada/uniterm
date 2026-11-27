@@ -140,7 +140,9 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
   var currentFrame = 0
   var waitingFor: Int?
   var playing: Task<Void, Never>?
-  var isDetached = false
+
+  /// True while the content is off screen. See `leaveScreen`.
+  var isOffScreen = false
 
   /// The longer side the animation's frames are decoded at while the pane is zoomed past what a fit
   /// frame shows, or nil while frames are fit size. Frames made for another level are stale.
@@ -349,7 +351,6 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     loading?.cancel()
     loadGeneration += 1
     loadOrigin = origin
-    alerts.replaceLoad()
     stopSlideshow()
     clearImage()
     cancelNavigation()
@@ -867,7 +868,7 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
   var frameIndex: Int { currentFrame }
 
   func startAnimating() {
-    guard plan.isAnimated, !isDetached, !closed, playing == nil else { return }
+    guard plan.isAnimated, !isOffScreen, !closed, playing == nil else { return }
 
     fillWindow()
     scheduleNextFrame()
@@ -950,9 +951,9 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
   }
 
   /// The frames a zoom needs: the window ahead of the frame on screen, or that one frame alone in a
-  /// detached pane, which asks for nothing more.
+  /// pane off screen, which asks for nothing more.
   private var framesWanted: [Int] {
-    isDetached ? [currentFrame] : plan.window(from: currentFrame, ahead: Self.framesAhead)
+    isOffScreen ? [currentFrame] : plan.window(from: currentFrame, ahead: Self.framesAhead)
   }
 
   /// True when every frame the zoom needs is held at its level.
@@ -961,10 +962,10 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
   }
 
   /// Asks for the first frame of the window that is not held at the current size. Frame requests
-  /// yield to a still. A frame already in flight or waiting is not asked for twice. A detached pane
+  /// yield to a still. A frame already in flight or waiting is not asked for twice. A pane off screen
   /// asks only for the one frame a program's zoom waits on.
   func fillWindow() {
-    guard let info, !framesFrozen, !isDetached || (zoomLevel != nil && awaitsProgramZoom) else {
+    guard let info, !framesFrozen, !isOffScreen || (zoomLevel != nil && awaitsProgramZoom) else {
       return
     }
 
@@ -1023,8 +1024,8 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
       return
     }
 
-    // A detached pane decodes a zoomed frame only to answer a program's zoom, and never draws it.
-    if index == currentFrame, !isDetached || frame.zoomLevel == nil {
+    // A pane off screen decodes a zoomed frame only to answer a program's zoom, and never draws it.
+    if index == currentFrame, !isOffScreen || frame.zoomLevel == nil {
       content.swap(image: image, zoomed: frame.zoomLevel != nil)
     }
 
@@ -1054,7 +1055,6 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     cancelNavigation()
     stopSlideshow()
     stopAnimating()
-    alerts.discard()
     clearImage()
     client.shutdown()
     bitmapBudget.release(lease)
@@ -1062,22 +1062,23 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     openFile = nil
   }
 
-  /// Pauses an animation and the slideshow, and holds back alerts while the pane is off screen. The
-  /// slideshow remembers that it was playing.
-  public func detach() {
-    isDetached = true
-    alerts.detach()
+  /// The content went off screen. An animation and the slideshow pause, and the slideshow
+  /// remembers that it was playing. Alerts still go out at once.
+  ///
+  /// Nothing in the app calls this yet. It is kept for a hidden tab.
+  func leaveScreen() {
+    isOffScreen = true
     stopAnimating()
     pauseSlideshowTimer()
     abandonPrefetchOpening()
     content.cancelPinch()
-    releaseZoomForDetach()
+    releaseZoomOffScreen()
   }
 
-  public func reattach() {
-    isDetached = false
-    alerts.reattach(from: self, to: host)
-    restoreZoomAfterReattach()
+  /// The content is back on screen. It undoes what `leaveScreen` did.
+  func returnToScreen() {
+    isOffScreen = false
+    restoreZoomOnScreen()
 
     if phase == .showing, plan.isAnimated { startAnimating() }
 

@@ -442,8 +442,8 @@ final class ImageViewerAppletTests: XCTestCase {
   // MARK: Animation
 
   /// Catches an animation that does not play, or that keeps playing off screen. The GIF steps its
-  /// frames, stops on detach, and resumes on reattach only because it was playing.
-  func testAnAnimationPlaysAndPausesOnDetach() async throws {
+  /// frames, stops off screen, and resumes on return only because it was playing.
+  func testAnAnimationPlaysAndPausesOffScreen() async throws {
     let gif = ImageFixtures.animatedGIF(
       colors: [ImageFixtures.red, ImageFixtures.green, ImageFixtures.blue],
       delays: [0.05, 0.05, 0.05])
@@ -458,10 +458,10 @@ final class ImageViewerAppletTests: XCTestCase {
     let advanced = await Harness.eventually { applet.isAnimating && applet.frameIndex != 0 }
     XCTAssertTrue(advanced)
 
-    applet.detach()
+    applet.leaveScreen()
     XCTAssertFalse(applet.isAnimating)
 
-    applet.reattach()
+    applet.returnToScreen()
     XCTAssertTrue(applet.isAnimating)
   }
 

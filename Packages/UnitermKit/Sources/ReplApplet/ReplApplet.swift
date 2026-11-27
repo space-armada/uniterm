@@ -189,10 +189,6 @@ public final class ReplApplet: Applet, InputOwning {
     stopHelper()
   }
 
-  public func detach() {}
-
-  public func reattach() {}
-
   public func focus() {
     if let session, session.view.superview != nil {
       session.view.window?.makeFirstResponder(session.view)

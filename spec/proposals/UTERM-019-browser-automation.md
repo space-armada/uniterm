@@ -154,8 +154,8 @@ Decision: a script with browser script answers alert, confirm, and prompt dialog
 - A dialog opening appears as a page event. An answer-dialog command accepts, dismisses, or supplies prompt text.
 - Waiting for the answer never blocks the main thread, per ADR-08. WebKit's completion handler is held, as
   `PageDialog` already holds it.
-- A detached pane holds back the user's view of its dialogs until reattach, per ADR-05. The script may still answer
-  them, per "An unanswered dialog". Amended 2026-11-11; see Decision Log.
+- A tab that is not selected holds back the user's view of its dialogs until it is selected. The script may still
+  answer them, per "An unanswered dialog". Amended 2026-11-27; see Decision Log.
 
 Rationale: a page that calls `confirm()` stops until it gets an answer. Without this, a script cannot get past it.
 
@@ -461,14 +461,14 @@ What happens when a script does not answer a dialog.
 
 Decision: a dialog in a controller tab shows to the user as it does today, and a script with browser script may answer
 first. The first answer wins. A dialog in a controller tab takes focus as any tab's dialog does. (autonomous)
-Amended 2026-11-21; see Decision Log.
+Amended 2026-11-27; see Decision Log.
 
-- The dialog appears when its tab is selected and its pane attached, as today. When the script answers first, the
+- The dialog appears when its tab is selected, as today. When the script answers first, the
   user's view of it closes. When the user answers first, answer-dialog on it returns a structured error.
 - A dialog in a controller tab takes the first responder exactly as any tab's dialog does. The in-pane dialog takes it
   when the pane held focus. A controller tab has no exception.
-- A detached pane holds back only the user's view, per ADR-05. A script may answer a dialog in a detached pane, so a
-  controller's own `confirm()` never stalls its run. Amends "Dialogs in controller tabs".
+- A tab that is not selected holds back only the user's view. A script may answer a dialog there, so a controller's
+  own `confirm()` never stalls its run. Amends "Dialogs in controller tabs".
 - At run end or revocation, an unanswered dialog simply stays with the user.
 
 Rationale: holding a dialog for the script would leave the user looking at a frozen page with no dialog and no
@@ -764,8 +764,7 @@ None.
 - **A key press may reach a web view that has not become first responder** — likelihood: low, impact: low. "Trusted
   input" now focuses a tab before a key goes to it, so the web view holds first-responder status when the key arrives.
   The earlier risk, that WebKit refuses keys delivered without it, no longer applies. What remains is a focus move that
-  fails, such as in a detached pane. Mitigation: M6 requires a structured error then. Amended 2026-11-21; see Decision
-  Log.
+  fails. Mitigation: M6 requires a structured error then. Amended 2026-11-27; see Decision Log.
 - **Page data in replies is hostile input** — likelihood: high, impact: medium. A page controls what run-script
   returns. Mitigation: the app's serializer enforces a per-result byte cap and a nesting cap, Janet reads the text with
   core `parse` and never evaluates it, and drivers read JSON with their own parsers, per "Result encoding".
@@ -786,9 +785,9 @@ None.
   can write the clipboard, open pop-ups, and enter fullscreen. ADR-09 keeps clipboard writes a separate power, and
   public WebKit API cannot block a page's clipboard write. Accepted: browser input's review text names these powers,
   and browser input is its own permission.
-- **Unselected or detached tabs may not render or take input** — likelihood: medium, impact: medium. Only the selected
-  tab's web view is in the window, so a snapshot can come out blank and input can be lost. Mitigation: the M4 and M6
-  checks require each command to work there or return a structured error.
+- **Unselected tabs may not render or take input** — likelihood: medium, impact: medium. Only the selected tab's web
+  view is in the window, so a snapshot can come out blank and input can be lost. Mitigation: the M4 and M6 checks
+  require each command to work there or return a structured error. Amended 2026-11-27; see Decision Log.
 - **WebKit may not target a held frame, or paint off-screen content** — likelihood: medium, impact: medium.
   Mitigation: M3's and M4's first checks prove each one. A failure falls back to the main frame, or to rasterized PDF
   output, and is recorded.
@@ -873,7 +872,7 @@ Starts after UTERM-005 M8.
 
 **Status:** NOT STARTED
 
-Amended 2026-11-23; see Decision Log.
+Amended 2026-11-27; see Decision Log.
 
 - A held `WKFrameInfo` still targets its frame later, including a cross-origin frame, or the result is recorded and
   run-script goes main frame only
@@ -925,7 +924,8 @@ Amended 2026-11-23; see Decision Log.
 - An injected script runs at the chosen time in the chosen frames on later loads
 - An alert, a confirm, and a prompt in a controller tab each appear as an event, and answer-dialog answers them
 - A dialog waiting for its answer never blocks the main thread
-- A detached pane holds the user's view of its dialog until reattach, and the script can answer it meanwhile
+- A tab that is not selected holds the user's view of its dialog until it is selected, and the script can answer it
+  meanwhile
 - A dialog in a controller tab takes the first responder as any tab's dialog does, when its pane held focus
 - A click or key press that began on one dialog never answers a dialog shown after it
 - A dialog dismissed at once, over the held limit or after "stop dialogs", reports as already answered, and
@@ -965,6 +965,8 @@ Amended 2026-11-23; see Decision Log.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-27; see Decision Log.
+
 - A snapshot returns a handle, and its image of the tab's viewport is read in chunks. PDF output does the same for a
   document
 - A full-page snapshot renders known off-screen content, including fixed, transformed, and canvas layers, on the
@@ -973,7 +975,7 @@ Amended 2026-11-23; see Decision Log.
 - Retained result bytes are capped per result and per run, and a result over its cap is refused
 - User agent, zoom, and print-media emulation apply to the tab and are never saved in the layout
 - At run end or revocation, user agent, zoom, and print media reset before any run-end rebuild
-- A snapshot of an unselected tab or a tab in a detached pane either works or returns a structured error
+- A snapshot of an unselected tab either works or returns a structured error
 - Image and PDF encoding happens off the main thread
 - Find in page returns a handle, and its match result arrives under it. The check records whether find moves the scroll
   position or shows a highlight
@@ -994,12 +996,14 @@ Amended 2026-11-23; see Decision Log.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-27; see Decision Log.
+
 - A key event delivered to a controller tab's web view reaches the page as trusted input
 - Clicks, scrolls, and typing reach the page as trusted events
 - A synthesized click moves focus as the user's click does, and keys then go to that tab
 - A key press sent to an unfocused tab of the controller first focuses that tab, then reaches the page as trusted
   input. If the focus move fails, the result is a structured error and no key is delivered
-- Input to an unselected tab or a tab in a detached pane either reaches the page or returns a structured error
+- Input to an unselected tab either reaches the page or returns a structured error
 - Browser input's review text says trusted input lets a page open pop-ups, write the clipboard, enter fullscreen, and
   play sound
 - A synthesized click counts as the user's click for uniterm's own gates on downloads, pop-ups, and links to other
@@ -1186,6 +1190,18 @@ Amended 2026-11-23; see Decision Log.
   all its handles is never refused. UTERM-055 M1 raises it for capture reads.
 - 2026-11-23: From UTERM-056's acceptance. "Result encoding" said "a mismatch is refused at the hello in either direction".
   That holds only for the command's own messages.
+- 2026-11-27: The user retired the `detach` and `reattach` lifecycle events, and ADR-05 is amended to match. No pane is
+  ever detached, so every detached-pane case here is gone. The cases for a tab that is not selected stay.
+  - Amended "Dialogs in controller tabs". It said "A detached pane holds back the user's view of its dialogs until
+    reattach, per ADR-05." A tab that is not selected holds back the user's view now, as the browser's dialogs already
+    do.
+  - Amended "An unanswered dialog". It said "The dialog appears when its tab is selected and its pane attached", and "A
+    detached pane holds back only the user's view, per ADR-05. A script may answer a dialog in a detached pane".
+  - Amended two risks. One said a focus move fails "such as in a detached pane". The other was titled "Unselected or
+    detached tabs may not render or take input".
+  - Amended M3. Its check said "A detached pane holds the user's view of its dialog until reattach, and the script can
+    answer it meanwhile". It now checks the same for a tab that is not selected.
+  - Amended M4 and M6. Their checks said "an unselected tab or a tab in a detached pane".
 
 ## References
 
@@ -1193,7 +1209,7 @@ Amended 2026-11-23; see Decision Log.
 - [ADR-02](../adr/ADR-02-pane-tree-nodes-have-stable-ids.md): no addressing by index
 - [ADR-03](../adr/ADR-03-restored-state-never-runs-a-program.md): restore never runs a controller's scripts
 - [ADR-04](../adr/ADR-04-uniterm-owns-key-bindings-and-terminal-config.md): synthesized keys never reach window keys
-- [ADR-05](../adr/ADR-05-applet-lifecycle-events-and-applet-responses.md): a detached pane holds dialogs
+- [ADR-05](../adr/ADR-05-applet-lifecycle-events-and-applet-responses.md): applet lifecycle events
 - [ADR-08](../adr/ADR-08-ui-responsiveness.md): no main-thread wait on a script or WebKit
 - [ADR-09](../adr/ADR-09-control-authority-requires-authenticated-identity-and-explicit-scope.md): each power is its
   own permission

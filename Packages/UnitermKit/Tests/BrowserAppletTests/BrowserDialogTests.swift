@@ -10,8 +10,7 @@ import XCTest
 
 /// JavaScript alerts, confirmations, and prompts against a real web view. The page's script
 /// blocks until the dialog is answered, so each test runs the script in a task and answers through
-/// the pane's own dialog view. Nothing in the host sends `detach` or `reattach`, so the tests call
-/// them.
+/// the pane's own dialog view.
 @MainActor
 final class BrowserDialogTests: XCTestCase {
   private nonisolated static let handler: FixtureServer.Handler = { _ in
@@ -158,89 +157,7 @@ final class BrowserDialogTests: XCTestCase {
     _ = await result.value.value
   }
 
-  // MARK: Detach
-
-  /// Catches a dialog that shows while the pane is off screen. It waits, the page stays blocked,
-  /// and reattach shows it. The answer then reaches the page.
-  func testADialogRaisedWhileDetachedWaitsForReattach() async throws {
-    let harness = try await make()
-    defer { harness.stop() }
-
-    harness.applet.detach()
-
-    let result = start("confirm('later?')", harness)
-
-    await harness.host.until("the dialog is held") { !harness.applet.dialogs.isEmpty }
-
-    XCTAssertNil(shown(harness))
-    XCTAssertTrue(harness.applet.content.dialogView.isHidden)
-
-    harness.applet.reattach()
-
-    XCTAssertNotNil(shown(harness))
-
-    harness.applet.content.dialogView.accept()
-
-    let value = await result.value.value
-
-    XCTAssertEqual(value as? Bool, true)
-  }
-
-  /// Catches a dialog on screen when the pane detaches. It hides and is held, not answered, and
-  /// shows again on reattach.
-  func testDetachingHidesTheDialogOnShowAndKeepsIt() async throws {
-    let harness = try await make()
-    defer { harness.stop() }
-
-    let result = start("confirm('x')", harness)
-    await waitForDialog(harness)
-
-    harness.applet.detach()
-
-    XCTAssertNil(shown(harness))
-    XCTAssertEqual(harness.applet.dialogs.pending.count, 1)
-
-    harness.applet.reattach()
-
-    XCTAssertNotNil(shown(harness))
-
-    harness.applet.content.dialogView.cancel()
-
-    let value = await result.value.value
-
-    XCTAssertEqual(value as? Bool, false)
-  }
-
-  /// Catches a close of a detached pane that leaves a page's script blocked. Every held dialog,
-  /// in every tab, is answered, and none twice.
-  func testClosingADetachedPaneAnswersEveryHeldDialog() async throws {
-    let harness = try await make()
-    defer { harness.stop() }
-
-    for _ in 0..<2 {
-      harness.applet.openTab()
-      await harness.load("/", expecting: "Dialogs")
-    }
-
-    harness.applet.detach()
-
-    let first = start("alert('a'); 'a-done'", in: harness.applet.tabs[0], harness)
-    let second = start("confirm('b')", in: harness.applet.tabs[1], harness)
-    let third = start("String(prompt('c', 'd'))", in: harness.applet.tabs[2], harness)
-
-    await harness.host.until("three dialogs are held") { harness.applet.dialogs.pending.count == 3 }
-
-    harness.applet.close()
-
-    let a = await first.value.value
-    let b = await second.value.value
-    let c = await third.value.value
-
-    XCTAssertEqual(a as? String, "a-done")
-    XCTAssertEqual(b as? Bool, false)
-    XCTAssertEqual(c as? String, "null")
-    XCTAssertTrue(harness.applet.dialogs.isEmpty)
-  }
+  // MARK: Closing
 
   /// Catches a closed tab that leaves its page blocked on a dialog. The tab's dialogs are answered
   /// before its web view goes, and a dialog of another tab is not.
@@ -273,6 +190,35 @@ final class BrowserDialogTests: XCTestCase {
     let kept = await keep.value.value
 
     XCTAssertEqual(kept as? Bool, true)
+  }
+
+  /// Catches a pane close that leaves a page's script blocked. Every waiting dialog, in every tab,
+  /// is answered, and none twice. Only the selected tab's dialog was on show.
+  func testClosingThePaneAnswersEveryWaitingDialog() async throws {
+    let harness = try await make()
+    defer { harness.stop() }
+
+    for _ in 0..<2 {
+      harness.applet.openTab()
+      await harness.load("/", expecting: "Dialogs")
+    }
+
+    let first = start("alert('a'); 'a-done'", in: harness.applet.tabs[0], harness)
+    let second = start("confirm('b')", in: harness.applet.tabs[1], harness)
+    let third = start("String(prompt('c', 'd'))", in: harness.applet.tabs[2], harness)
+
+    await harness.host.until("three dialogs wait") { harness.applet.dialogs.pending.count == 3 }
+
+    harness.applet.close()
+
+    let a = await first.value.value
+    let b = await second.value.value
+    let c = await third.value.value
+
+    XCTAssertEqual(a as? String, "a-done")
+    XCTAssertEqual(b as? Bool, false)
+    XCTAssertEqual(c as? String, "null")
+    XCTAssertTrue(harness.applet.dialogs.isEmpty)
   }
 
   /// Catches a dialog from a tab the user is not looking at taking over the pane. It waits for its
