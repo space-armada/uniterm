@@ -76,8 +76,9 @@ Original question and candidates:
   undone: raw wheels elsewhere, and the `QuestionsUITests` Escape retry.
 
 Decision: every synthesized wheel. Every XCUI wheel in `UITests/` goes through the one base-class call that aims and
-settles. That is the launcher test's two wheels, the image viewer data table's three, and the image pane's one. The
-image viewer's sites have no flaky entry, so this is an addition. A check in `make check` fails when a UI test sends
+settles. That is the launcher test's two wheels, the image viewer data table's three, the image pane's one, and the
+terminal's one in `InputRecordingProofTest`. Amended 2026-11-27; see Decision Log. The image viewer's sites have no
+flaky entry, so this is an addition. A check in `make check` fails when a UI test sends
 an XCUI wheel outside the shared call, so a new wheel test gets the settle by default. The check is an addition too.
 Package tests that feed events straight into a view, such as `ImageViewerScrollTests`, send no XCUI wheel and are
 outside this decision.
@@ -261,31 +262,70 @@ None.
 
 ### M2: One way to send a wheel
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - The base class aims and settles a wheel in one call, and reports the pointer and the target's frame when the
   precondition never holds
 - The settle reads the target's frame on each poll
-- The call aims at the visible part of the target: its frame clipped to its enclosing scroll view and window. The wait
-  checks the same rectangle. A table whose frame spans its whole document, as the image viewer's data table does,
-  still gets a pointer inside its visible rows
-- The wheel is an `XCUICoordinate.scroll` at the point the hover used, and that point lies inside the rectangle the
-  wait checked. A coordinate built from the table's normalized frame would not, since that frame spans the document
+- The call aims at the visible part of the target: its frame clipped to the window. A target inside a scroll view is
+  that scroll view, so the frame is already clipped to it. The call fails, with its own message, on a target whose
+  frame is not within the window, so a table spanning its document cannot aim at the whole window. The wait checks the
+  same rectangle. The image viewer's data table gets a pointer inside its visible rows by aiming at its scroll view.
+  Amended 2026-11-27; see Decision Log
+- The wheel is an `XCUICoordinate.scroll` at the point the pointer settled on, which is the hover point when a hover was
+  needed. That point lies inside the rectangle the wait checked, or inside the one just read when the pointer already
+  stood there and no hover was sent. A coordinate built from the table's normalized frame would not, since that frame
+  spans the document. The coordinate is built from the window, so neither the hover nor the wheel resolves the target
+  again. Amended 2026-11-27; see Decision Log
 - A local trace of the runner's pointer moves and wheels, such as an `NSEvent` global monitor, shows no pointer move
   between the settle and the wheel, and the wheel's location inside the target. The result goes in the As built block
-- Every call site the scope question names uses it, and no raw wheel remains among them
+- Every call site the scope question names uses it, and no raw wheel remains among them. That is the launcher test's
+  two wheels, the image viewer data table's three, the image pane's one, and the terminal's one in
+  `InputRecordingProofTest`. Amended 2026-11-27; see Decision Log
 - A settle that times out fails with its own message, distinct from the test's own assertion
 - `make check` fails when a UI test sends `scroll(byDeltaX:deltaY:)` outside the shared call. It ignores comments,
   matches a call split across lines, and exempts only the one call inside the shared helper. It lands in the change
   that moves the last raw wheel
 - The diff touches only the UI test target, the check script, the Makefile, and `spec/flaky-tests.md`
 - When M2 lands, the launcher entry moves back to Potential, naming M2's change, since a change to the aim restarts
-  the count. It returns to Fixed once M2's count is met. Its N follows "Which observed rate sets the count". When the
-  window from the pointer change to M2 holds no failure, it sets no N, and the count is M1's
+  the count. Its N follows "Which observed rate sets the count". When the window from the pointer change to M2 holds
+  no failure, it sets no N, and the count is M1's
 - The check script has fixtures that show it rejects a raw wheel split across lines, ignores one in a comment, accepts
   the one call inside the shared helper, and rejects a raw wheel elsewhere in that file
-- Clean CI runs, as "What a clean run is" defines them, prove the change to the launcher entry's count from M1. Local
-  runs do not count
+
+**As built:**
+
+- `UITests/UITestWheel.swift` adds `sendWheel(deltaY:at:in:timeout:context:)` and `pointerLocation()` to
+  `UnitermUITestCase`, and the `WheelTrace` it feeds. The call reads the target's and the window's frames once, and
+  fails with "wheel settle:" when the target's frame is not within the window, since a table's frame spans its
+  document. When the pointer already stands inside the target's frame clipped to the window, it sends no hover.
+  Otherwise it hovers at the middle from a coordinate built on the window, and polls with `pollUntil` until the pointer
+  is inside the visible part, which it reads again on each poll. It then sends `XCUICoordinate.scroll` at the point the
+  pointer stands on. A wait that never holds fails with "wheel settle:" and the pointer, the aimed point, the visible
+  part, and the frames. The launcher's report goes in through `context`.
+- The launcher's two wheels, the data table's three aimed at its scroll view, the image pane's one, and the terminal's
+  one in `InputRecordingProofTest` use it. The terminal's one is a site the call-site text had not named. Amended
+  2026-11-27; see Decision Log. Its test already clicks at the terminal's center, so the call adds no pointer move
+  there, and what it proves, that each kind of recorded input reaches the app, is unchanged.
+- `scripts/check-ui-wheel.sh` fails on any `scroll(byDeltaX:` in `UITests` other than the one call in the helper's file
+  whose receiver is `wheelPoint`, and on a missing `UITests` directory. It blanks comments and string contents in one
+  pass. `--self-test` holds the fixtures: a split call, a comment, the helper's call, a raw wheel in the helper's file,
+  the helper's call shape in another file, a slash pair and a block comment opener inside strings, an escaped quote,
+  a call's text inside a string, and a missing directory. Each reject fixture asserts the reported file and line.
+  `make check` runs both, through `make check-ui-wheel`.
+- The trace runs when the runner's environment holds `UNITERM_WHEEL_TRACE=1`. It prints `WHEELTRACE` lines for the time
+  of each phase, the pointer and the visible rect at the settle, the pointer after the wheel, and each pointer move
+  and wheel a global `NSEvent` monitor delivered between them. Final local run: every summary read 0 events between
+  the settle and the wheel, and the pointer after the drain equalled the aimed point. Each pointer lay inside its
+  visible rect, given as x, y, width, height. The data table's three wheels, aimed at its scroll view, found the pointer
+  already inside at (864,699) in (102,487,896,506). The image pane's found it at (550,722) in (102,451,896,542), and
+  the terminal's at (864,456) in (386,165,956,582). Neither hovered. The launcher's wheel hovered, settled 0.07 s
+  later at (864,699) in (674,659,380,80), and the guard against a target overrunning the window never fired. The image
+  viewer test took 32.1 s against 20.2 s at the base. Most of the difference is the fresh frame read before each data
+  table wheel, which the precondition needs, and XCUI's 3.5 s per wheel against that table. CI logged it at 26 s to
+  33 s at earlier heads. The monitor may miss XCUI's own events, so the dependable evidence is the pointer after the
+  drain equalling the aimed point inside the visible rect. The history of the aim is in the Decision Log.
+- The launcher entry in `spec/flaky-tests.md` moved back to Potential.
 
 ### M3: The launcher count is met
 
@@ -308,6 +348,15 @@ None.
 - The launcher entry moved to Fixed in `spec/flaky-tests.md`, naming both changes and the count met.
 - The four missing job logs are judged by run time, as the Decision Log entry for 2026-11-27 records.
 - The count is M1's, since no window after the pointer change holds a failure.
+
+### M4: The wheel change holds in CI
+
+**Status:** NOT STARTED
+
+- Clean CI runs, as "What a clean run is" defines them, prove the change to the launcher entry's count from M1. Local
+  runs do not count
+- The launcher entry returns to Fixed once M2's count is met. Its N follows "Which observed rate sets the count". When
+  the window from the pointer change to M2 holds no failure, it sets no N, and the count is M1's
 
 ## Decision Log
 
@@ -436,6 +485,31 @@ None.
   Each ran 15:02 from start to finish. The test started 16:50 or later into the neighbouring jobs of the same PR
   (16:50 and 16:55), so a 15:02 job ended before the test could have started, and it is neutral. Had one been
   mid-test, the streak would have broken there.
+- 2026-11-27: M2 built (run best guess). Amended: first, "Which call sites move" and M2 name the terminal's wheel
+  in `InputRecordingProofTest`, which the decision's list left out, so the count of wheels is seven and not six. It
+  sends one wheel after a click at the terminal's center. The shared call's hover and settle add a move to that same
+  center, so what the test proves is unchanged. "Which call sites move" said: "That is the launcher test's two wheels,
+  the image viewer data table's three, and the image pane's one." Second, M2's last bullet moved to a new M4, "The
+  wheel change holds in CI", verbatim: "Clean CI runs, as "What a clean run is" defines them, prove the change to the
+  launcher entry's count from M1. Local runs do not count." The `/work-queue` run never pushes, so no CI run can happen
+  inside it, as with M3's split. M4 also takes the clause "It returns to Fixed once M2's count is met", which M2 had in
+  its bullet about the launcher entry, since only CI runs can meet it. M2's bullet keeps the move back to Potential.
+  M4 has its own queue row after M2's. Third, the check script's exemption is its helper file's one call whose receiver
+  is `wheelPoint`. The self-test fixtures are in the script, so the diff stays inside M2's file list.
+- 2026-11-27: Amended M2's aim bullets after a first UI run (run best guess). The first build resolved the data table
+  through XCUI about five times per wheel, to read its frame, its origin, the hover, each poll, and the wheel. That
+  cost 3.5 s between the settle and the wheel, and 34 s over the image viewer test's 20 s. The call now takes the scroll
+  view as its target for a table, and builds its coordinate from the window. A frame is read from the target once, and
+  again on each poll. Its separate `clippedTo` argument is gone, since the scroll view's own frame is the visible part.
+  M2 said: "The call aims at the visible part of the target: its frame clipped to its enclosing scroll view and
+  window." and "A table whose frame spans its whole document ... still gets a pointer inside its visible rows." The
+  second holds because the call now enforces it: it fails on a target whose frame is not within the window, and the
+  table's caller aims at its scroll view.
+- 2026-11-27: Amended M2's wheel bullet again after a second UI run (run best guess). The data table wheels cost 3.4 s
+  in the hover and 3.5 s in the wheel, against about 0.1 s and 0.5 s for the other panes, so XCUI's own events cost
+  that much against an app with a 2000-row table. The call now sends no hover when the pointer already stands inside
+  the visible part it just read, and wheels at the pointer's position. Otherwise it hovers and waits as before. M2
+  said: "The wheel is an `XCUICoordinate.scroll` at the point the hover used".
 
 ## References
 

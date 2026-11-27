@@ -452,7 +452,7 @@ final class ImageViewerUITests: UnitermUITestCase {
   }
 
   /// Catches a scroll that moves a zoomed image against the way a table moves. Both panes get
-  /// the same `scroll(byDeltaX:deltaY:)`. The data viewer's table is an NSScrollView, so which way
+  /// the same `sendWheel`. The data viewer's table is an NSScrollView, so which way
   /// its rows go names the direction on this machine under its scroll setting. The image must
   /// move the same way. If the table's rows move up, the image shows content from further down, so
   /// green rises at a fixed point. If they move down, green falls.
@@ -504,12 +504,15 @@ final class ImageViewerUITests: UnitermUITestCase {
     }
 
     // Park in the middle, whichever way the first scroll goes, so the next one cannot hit an end.
-    table.scroll(byDeltaX: 0, deltaY: -600)
-    table.scroll(byDeltaX: 0, deltaY: 300)
+    let tableScroller = window.scrollViews.containing(.table, identifier: "data-viewer-table")
+      .firstMatch
+
+    sendWheel(deltaY: -600, at: tableScroller, in: window)
+    sendWheel(deltaY: 300, at: tableScroller, in: window)
 
     let before = try XCTUnwrap(try firstVisibleRow(), "no visible row")
 
-    table.scroll(byDeltaX: 0, deltaY: 100)
+    sendWheel(deltaY: 100, at: tableScroller, in: window)
 
     let after = try XCTUnwrap(try firstVisibleRow(), "no visible row after the scroll")
 
@@ -535,7 +538,7 @@ final class ImageViewerUITests: UnitermUITestCase {
 
     let start = try color(of: pane, settle: 2)
 
-    pane.scroll(byDeltaX: 0, deltaY: 100)
+    sendWheel(deltaY: 100, at: pane, in: window)
 
     let scrolled = try color(of: pane)
     let change = scrolled.green - start.green
