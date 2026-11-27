@@ -72,6 +72,9 @@
 | [UTERM-068](UTERM-068-browser-content-blocking.md) | Native browser ad blocking with custom rules, a starter list, and subscriptions | accepted |
 | [UTERM-069](UTERM-069-external-programs-run-as-controllers.md) | A program uniterm cannot trace to a tab runs as a controller with an external source, replacing Grant Access | accepted |
 | [UTERM-070](UTERM-070-a-viewer-keeps-its-file-when-the-new-one-fails-to-load.md) | A viewer pane keeps its old file when the new one passes the open check and fails its load | draft |
+| [UTERM-071](UTERM-071-the-layout-file-keeps-windows-and-nodes-it-cannot-read.md) | The layout file keeps the windows and nodes it cannot read, and a part a build does not hold survives a save | draft |
+| [UTERM-072](UTERM-072-the-hsts-store-keeps-entries-it-cannot-read.md) | The browser's HSTS file keeps the entries it cannot read, and one bad entry no longer empties the list | draft |
+| [UTERM-073](UTERM-073-open-with-shows-the-choices-it-cannot-read.md) | The Open With chooser shows a saved choice it cannot read, and offers to clear it | draft |
 
 ## Dependency Graph
 
@@ -138,6 +141,9 @@ UTERM-067 ← UTERM-004
 UTERM-068 ← UTERM-005, UTERM-053
 UTERM-069 ← UTERM-004, UTERM-015, UTERM-021, UTERM-054, UTERM-063, UTERM-067
 UTERM-070 ← UTERM-015, UTERM-062
+UTERM-071 ← UTERM-067
+UTERM-072 ← UTERM-005, UTERM-067
+UTERM-073 ← UTERM-015, UTERM-067
 ```
 
 ## Not Yet Filed

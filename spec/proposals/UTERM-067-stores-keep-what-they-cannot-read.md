@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-26
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -301,12 +301,42 @@ None.
 
 ### M1: Every store checked against ADR-18
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Every store a build writes for itself and reads back is listed, found from the code
 - Each store's result against ADR-18 P1 to P5 and C1 is recorded in the As built block, with what it would take to
   meet the ADR
 - Each store that falls short and is not a trust store has a proposal filed, or is recorded as meeting C1
+
+**As built:**
+
+Found by searching `Sources/`, `App/`, and `Helpers/` for Application Support and Caches paths, `UserDefaults`,
+atomic writes, Keychain, bookmarks, and archivers. A store is a file or key a build writes for itself and reads in a
+later launch. Results are P1 to P5, then the fix.
+
+| Store | Result | To meet ADR-18 |
+|---|---|---|
+| Controller trust: `controllers/policy.json`, `files.json` | P1 falls short, since one entry fails the file. P2 falls short, since an unreadable file moves aside and the aside copies stop at a number. P3 and P4 meet, since the reader is strict. P5 meets only for a moved-aside file | M2 of this proposal |
+| Layout: `uniterm/layout.json`, with `layout.lock`, `launch.marker`, `layout.aside-N.json` | Applet payloads meet P1 to P5 through the verbatim path. A newer schema version moves the whole file aside. ADR-06 bumps the version for an additive change, such as a new node kind, so only the panes nested in a new node depend on it. That falls short of P1 for the other windows, except where C1 applies, and UTERM-071 holds the question open. An unknown node kind, or any node that fails a check, moves the whole file aside, which falls short of P1. Aside copies stop at five, which falls short of P2. A pane control, an exec field, or a window member this build does not hold is dropped on the next save, which falls short of P2 and P4, with no sign, which falls short of P5. P3 meets | UTERM-071 |
+| Applet payloads inside the layout: terminal tabs, REPL history, browser tabs, viewer records, map documents | Meet P1 to P5. An unknown type, a newer version, or an unreadable description becomes a placeholder pane that keeps its exact bytes and says so | None |
+| Browser HSTS list: `uniterm/Browser/hsts.json` | P1 falls short, since one bad entry empties the list. P2 falls short, since the next change overwrites the file. A version other than 1 leaves the file untouched, which meets P2. P4 falls short, since `Codable` drops unknown keys. P5 falls short. P3 meets | UTERM-072 |
+| Settings in `UserDefaults`: appearance, search engine, script-file mode, status bar, palette | Meets. Each key is one entry. An invalid value falls back in memory and the stored value stays. The Settings window and a status notice show an invalid value | None |
+| Open With choices: the `openWithChoices` key | P1 to P4 meet. Each entry reads alone, and a save writes back every other entry as stored. P5 falls short: `choices()` drops a value that is not a string, so the chooser can neither show nor clear it | UTERM-073 |
+| Terminal scrollback: `uniterm/terminal/scrollback/<id>.txt` | Meets. Each file stands alone and holds plain text, and a restore reads it once and deletes it by design, so P2 does not apply to the file. The sweep of files older than 30 days leaves a layout kept aside past 30 days naming a file that is gone. That is a gap in how long a kept-aside layout stays usable, not in this store, and UTERM-071's question on kept-aside copies holds it | None, see UTERM-071 |
+| Signing keys in the login Keychain | Meets. Each key is one item. A bad item errors for that key alone, and uniterm never replaces one | None |
+| Terminal config `uniterm/terminal/ghostty-<pid>.conf`, sent content `uniterm/sent/`, socket folder `uniterm/run/`, controller runs under `Caches/dev.uniterm.app/controller-runs` | Not stores. Each is written by a running instance for itself, regenerated or deleted when its instance ends, and never read by a later build | None |
+| WebKit website data | Owned by WebKit, not by uniterm | None |
+| Map command pins, held in the closed-pane undo stack | Not a store. `LayoutCodec` never writes the undo-only part of a description, so it lives in memory | None |
+| Signature files `controller.json.sig` and `<script>.sig`, and files a viewer saves | Not stores. A user's command or save makes each one, and it is a document with its own format | None |
+
+The trust stores, the layout file, the HSTS list, and Open With are the stores that fall short. UTERM-071, UTERM-072,
+and UTERM-073 are filed as drafts, one per store, since their fixes touch different readers.
+
+ADR-18's guarantee starts at version 1, so none of these stores breaks it today. The drafts bring the stores in line
+before then, as "Every store is checked" asks. None is required before version 1. UTERM-068 will add a rules
+store and a subscriptions store. Each follows ADR-18 from its first version.
+
+M2 has no dependency on either draft.
 
 ### M2: The trust stores keep what they cannot read
 
@@ -456,6 +486,15 @@ None.
   UTERM-063, and UTERM-066 are amended to match, and UTERM-004 and UTERM-021 carry "Superseded in part by UTERM-067"
   markers. Not scheduled.
 - 2026-11-26: Scheduled as UTERM-067 M1-M2 in queue.md.
+- 2026-11-27: M1 done. UTERM-071 for the layout file, UTERM-072 for the HSTS list, and UTERM-073 for Open With are
+  filed as drafts, one per store, since each has its own reader. (run best guess)
+- 2026-11-27: A newer layout schema version is recorded as falling short of P1 except where C1 applies, since ADR-06
+  bumps the version for additive changes. UTERM-071 holds the question. The first draft of this entry said it met C1,
+  which contradicted ADR-06. (run best guess)
+- 2026-11-27: The settings keys are recorded as meeting ADR-18, since each key is one entry, an invalid value falls back
+  in memory, and the Settings window shows it. (run best guess)
+- 2026-11-27: Scrollback is recorded as meeting ADR-18, since a file is read once and deleted by design. The effect on
+  a layout kept aside past 30 days goes to UTERM-071. (run best guess)
 
 ## References
 
