@@ -30,7 +30,7 @@
 | UTERM-055 M1 | UTERM-028 M1, UTERM-054 M5, UTERM-019 M3 | Needs UTERM-028 M1's driver grant and queued-frame drop, and UTERM-054's capture. Its frames land in place at version 0, after UTERM-063 M2, which UTERM-028 M1 already waits for. UTERM-019 M3 gains the check for the `data` and `offset` keys, and builds the read hold M1 reuses. Also waits on the open bug `20261122-capture-bypasses-image-viewer-read-scope` |
 | UTERM-029 M1-M3 | UTERM-024 M2, UTERM-025, UTERM-026, UTERM-030 M2, UTERM-032 M1 | Extends the presenter with UTERM-026's notes window, UTERM-030 M2's slide images, and UTERM-032 M1's input file |
 | UTERM-043 M2 | UTERM-019 M6, UTERM-024, UTERM-028, UTERM-041, UTERM-042 | Split from M1: each check runs when the feature it names has landed. UTERM-019 M3 precedes M6 in its rows |
-| UTERM-018 M1-M5 | None | |
+| UTERM-018 M1-M2 | None | Split from M3-M5: M1 builds the walk and the shared metric that UTERM-061 and UTERM-064 reuse. M2's links open browser tabs, which need no viewer tabs |
 | UTERM-061 M1-M2 | None | Reuses the shared nearest-pane metric and tie rule that UTERM-018 M1 builds |
 | UTERM-040 M1-M3 | None | |
 | UTERM-039 M1 | None | |
@@ -38,10 +38,11 @@
 | UTERM-048 M1 | None | Split from M2-M5: the shared snapshot needs nothing from UTERM-041 or the open bugs |
 | UTERM-050 M1-M3 | None | Fixes `20261122-terminal-directory-check-blocks-main-thread.md`, which holds UTERM-048 M2 |
 | UTERM-048 M2-M5 | UTERM-041 M1 | Split from M1: M3's tab IDs and M5's markers need UTERM-041 M1. M2 is also blocked until `bugs/20261122-terminal-directory-check-blocks-main-thread.md` and `bugs/20261122-approval-text-leaves-zero-width-scalars-raw.md` are fixed. The directory-check fix still needs a design call |
-| UTERM-049 M1-M3 | UTERM-018 M5 | M2 routes through UTERM-018's walk when no pane takes a tab file in place. M3's program open uses UTERM-018 M5's script file open |
 | UTERM-051 M1-M3 | None | |
 | UTERM-052 M1-M2 | None | |
 | UTERM-053 M1 | UTERM-041 M1, UTERM-052 M2 | Needs UTERM-041 M1's scrolling tab bar and UTERM-052 M2's record choke point |
 | UTERM-059 M1 | UTERM-052 M2 | Needs UTERM-052 M2's saved-state revision. Placed after UTERM-053 M1, so every write to the terminal's tabs reaches the one place the revision observers watch |
 | UTERM-058 M1-M3 | UTERM-053 M1 | M1 measures after UTERM-053 M1's read-through view. Placed after UTERM-059 M1, so M2's terminal ID map joins a terminal whose writes already move the revision |
-| UTERM-062 M1-M6 | UTERM-063, UTERM-064 | Blocked until UTERM-064 is accepted and queued. Amend UTERM-018 M3 and UTERM-006 M5 first, per its Impacts |
+| UTERM-062 M1-M6 | UTERM-063, UTERM-064 | Blocked until UTERM-064 is accepted and queued. UTERM-006 M5 must name a tab before it is built, which UTERM-065 carries |
+| UTERM-018 M3-M5 | UTERM-062 M5 | Split from M1-M2: a routed open adds a tab under UTERM-062, so these start once every viewer takes an open as a tab |
+| UTERM-049 M1-M3 | UTERM-018 M5 | M2 routes through UTERM-018's walk when no pane takes a tab file in place. M3's program open uses UTERM-018 M5's script file open |

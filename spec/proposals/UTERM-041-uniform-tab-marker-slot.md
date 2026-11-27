@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-21
-**Updated:** 2026-11-23
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -77,7 +77,9 @@ clears when the grant ends. Chosen by the user on 2026-11-21.
   user's choice.
 - In an applet that takes commands or sent content on its one tab, such as a text viewer, that tab carries it while a
   live controller may address the pane. A terminal tab never carries it, since a terminal takes neither. See "What
-  'can act on' covers" and "Access mode or live controller". Amended 2026-11-21; see Decision Log.
+  'can act on' covers" and "Access mode or live controller". Once UTERM-062 gives the viewers tabs, a viewer tab in a
+  group pane carries it only when the controller owns that tab, as in a browser. Amended 2026-11-21 and 2026-11-26; see
+  Decision Log.
 - The marker follows the grant, never the content. A tab the controller opened loses it when the grant ends, and a tab
   the user opened never carries it. Drafting detail, not the user's choice.
 
@@ -169,9 +171,9 @@ the owner must also own the tab. (autonomous) Amended 2026-11-21; see Decision L
 
 - A driver's own pane carries no authority marker. The driver commands it through its attached channel, which is not
   a grant, and it keeps that channel after the user revokes it. The pane's exec strip and the badge's "Driver:" line
-  already show it. Only the image and map viewers accept a driver (their `controlSupport` declarations), and each has
-  one tab, so no user tab sits beside a driven one. If a multi-tab applet ever accepts a driver, this exclusion needs
-  another look.
+  already show it. A driver attaches to a pane, not a tab, and reaches every tab of its own pane, as UTERM-062 "What a
+  program may reach in a viewer pane with tabs" settles. So the exemption covers every tab of a driver's own pane, also
+  once the image and map viewers hold several tabs. Amended 2026-11-26; see Decision Log.
 
 - With remote control enabled and no controller connected, no tab is marked.
 - `controllers(of:)` is not the source. It keeps a group owner after the user disconnects a member pane, so Revoke
@@ -698,6 +700,11 @@ None.
   publishes exactly one tab and has no bar." The questions applet shows the shared bar at a fixed height, always, with
   one tab per pending question. The user chose that it follows the shared hide rule, over keeping its bar as a named
   exception. The decision gained a bullet saying so, and M1 gained a check for one, zero, and two pending questions.
+- 2026-11-26: From UTERM-062, which gives the viewers tabs. The driver-pane exemption rested on each driven viewer having
+  one tab, and said it needed another look for a multi-tab applet. It holds at the pane level: a driver reaches every
+  tab of its own pane, so every tab there is exempt. In a group pane, a viewer tab carries the authority marker only
+  when the controller owns it, as a browser tab does. Where a driver's chip shows in a pane with a tab bar is not
+  settled here.
 
 ## References
 

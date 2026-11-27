@@ -48,8 +48,9 @@
   multi-tab applet accepts a driver. It also puts the marker on a viewer's one tab. Both premises end here. Under "What
   a program may reach", a driver reaches every tab of its own pane, so its exemption can stand at the pane level, while
   group panes mark the tabs a program owns.
-- UTERM-028, UTERM-056 — accepted, not started. They negotiate versions on the exec wire and ScriptWire. Before 1.0
-  no wire carries a compatibility promise, so this proposal changes those wires in place and waits on neither.
+- UTERM-028, UTERM-056 — UTERM-063 holds every external wire at version 0, so this proposal changes those wires in
+  place and waits on neither. UTERM-028 lands in place too, and UTERM-056 is deferred until ScriptWire's
+  declaration.
 - UTERM-006 — M5, exec driver reads, assumes one source per image pane.
 - UTERM-061 — the viewers' tab commands join the titles shared across applet types.
 
@@ -231,8 +232,8 @@ Then they add a tab under "Every user open adds a tab". (autonomous, addition)
 Rationale: a live preview that calls `show-markdown` on every keystroke keeps one tab, since it replaces the tab it
 names. Adding a tab per call would flood the pane. Once tabs exist, the user has no replace inside a tab, so a program's
 replace has no user act to differ from, and the new `open` command matches the user's add under ADR-15. A routed open
-makes a new pane today, so a tool that opens a file on every save already floods panes. A tab is milder. Before 1.0 no
-wire carries a compatibility promise, so these commands change meaning in place. See "Callers that cannot name a tab".
+makes a new pane today, so a tool that opens a file on every save already floods panes. A tab is milder. Every
+external wire is at version 0 under UTERM-063, so these commands change meaning in place. See "Callers that cannot name a tab".
 Leaves undone: the data viewer has no command schema, so no program command adds a data tab. A program fills one with
 `send` into a tab it names. It brings in an `open` command in three viewer schemas.
 
@@ -405,8 +406,8 @@ None. Every question is settled.
   for applets with one tab.
 - **Programs built against an earlier build stop working** — likelihood: high, impact: low.
   Every program command to a viewer must now name a tab, and the replace commands answer with an identity. A driver or
-  native controller written for today's wires fails until it is rewritten. Accepted: uniterm is at 0.1.0, no wire
-  carries a compatibility promise before 1.0, and the only such programs are the user's own. The user chose this at
+  native controller written for today's wires fails until it is rewritten. Accepted: every external wire is at
+  version 0 under UTERM-063, which makes no compatibility promise, and the only such programs are the user's own. The user chose this at
   the review gate.
 - **Program-opened text and map tabs have no memory bound** — likelihood: low, impact: medium.
   A loaded tab stays loaded, and each keeps its own web view or map view. A run at the rate bound accumulates them, and
@@ -632,6 +633,13 @@ None. Every question is settled.
   2026-11-26: Declined: it fails Architecture. The rule governs where an open lands, which UTERM-018 decides for every
   open, and only the viewers change here. The browser already adds a tab.
 - 2026-11-26: Scheduled as M1-M6 in queue.md, at the end. The row waits on UTERM-063 and UTERM-064.
+- 2026-11-26: The proposals this one impacts were amended to match. UTERM-018 adds a tab on a routed open, a batch
+  works like a drop, its replaced-document Reopen is withdrawn, and its M3 to M5 start after this proposal's M5.
+  UTERM-009 carries its superseded-in-part markers. UTERM-040's pin commands name a tab. UTERM-041's driver-pane
+  exemption covers the whole pane, and viewer group tabs carry the marker by owner. UTERM-042's set close asks Save,
+  Don't Save, or Cancel for map tabs with edits. UTERM-054's tab scope counts a driver's own pane as wholly its own,
+  and its open question gained tab titles. Two passages now cite UTERM-063 for version 0 instead of "before 1.0".
+  UTERM-006 M5 is left to UTERM-065, which already names a tab.
 
 ## References
 

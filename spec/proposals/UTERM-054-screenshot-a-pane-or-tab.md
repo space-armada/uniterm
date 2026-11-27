@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-22
-**Updated:** 2026-11-23
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -243,8 +243,10 @@ tabs the controller opened. A questions pane holds up to 8 requesters' tabs, wit
 
 Decision: every tab whose content or title the image shows must be within the program's tab scope. A tab capture shows
 the selected tab. A pane capture also shows every title in the tab bar. The tab scope is the tabs the program opened,
-plus the source tab it acts for under ADR-14 P2. For an applet with one tab or no per-tab owners, a pane among the
-program's targets counts as wholly its own. The terminal has per-tab owners: see "A program's tab scope in a terminal
+plus the source tab it acts for under ADR-14 P2. A driver's own pane counts as wholly its own, since a driver attaches
+to the pane, not a tab. For an applet with no per-tab owners, a pane among the program's targets counts as wholly its
+own. Once UTERM-062 gives the viewers per-tab owners, a group pane's tab scope in a viewer is the tabs the program owns.
+Amended 2026-11-26; see Decision Log. The terminal has per-tab owners: see "A program's tab scope in a terminal
 pane". Amended 2026-11-22; see Decision Log. Only the applet knows its tabs' owners, so the capture capability takes the caller and
 applies the rule. (autonomous)
 
@@ -524,6 +526,9 @@ Sub-questions that follow from the first candidate:
   the map viewer's file layer.
 - For the map viewer: whether the capture is refused while the file layer shows, or the file layer and its pin list
   rows are left out of the image.
+- Once UTERM-062 gives the viewers tabs: whether a pane capture's tab bar shows the titles of tabs whose files the
+  caller may not read. UTERM-062 checks read scope per tab for titles, so a title the caller may not read is withheld
+  everywhere else.
 
 ## Risks
 
@@ -799,6 +804,10 @@ Lands before UTERM-019 M1 ships, and does not wait for M1 to M5 here.
   not.
 - 2026-11-23: From UTERM-056's acceptance. "Version skew" and the native-controller risk accepted the refusal for this
   proposal, with "the fix is a ScriptWire design call filed as a bug". They now accept it until UTERM-056 lands.
+- 2026-11-26: From UTERM-062, which gives the viewers tabs and per-tab owners. The tab scope rule counted a pane of an
+  applet with one tab as wholly the program's. Now a driver's own pane counts as wholly its own, and a viewer group
+  pane's tab scope is the tabs the program owns. The open question on a file the program may not read gained the
+  sub-question of tab titles in a pane capture.
 
 ## References
 

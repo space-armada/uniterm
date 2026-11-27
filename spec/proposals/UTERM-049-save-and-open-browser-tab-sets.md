@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-22
-**Updated:** 2026-11-23
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -670,6 +670,7 @@ Starts after UTERM-018 M5, which builds the script file open.
   `discard-save` frees the handle. The save has no completion event, since remote callers get no applet events. Caps
   match other ADR-11 handles. A revocation during the write lets it finish and fails the wait as ended. M3 gained
   checks for each outcome, the interruptions, discard, and the cap.
+- 2026-11-26: Its row moved after UTERM-018 M3-M5, which it depends on, when UTERM-018's row split around UTERM-062.
 
 ## References
 

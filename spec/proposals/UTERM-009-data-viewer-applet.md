@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-10-31
-**Updated:** 2026-11-06
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -43,7 +43,7 @@ Decision: files open from inside the pane now. Pipe and script input is deferred
   the pane. A drop accepts file URLs only.
 - A pane shows one file. Opening another file replaces it: the old load is cancelled, and the new file starts with no
   sort or filter. The open panel selects one file. A drop of several files is refused with a message asking for one
-  file, and the pane keeps what it showed.
+  file, and the pane keeps what it showed. Superseded in part by UTERM-062; see Decision Log.
 - A drawer of open documents beside the table, as Preview has, is an idea for later. This proposal does not commit to
   it. Building it needs its own proposal, since it changes what a pane and its description hold.
 - All loading goes through one internal entry point that takes a source. A source is a file URL, or a nested JSON value
@@ -137,8 +137,9 @@ Decision: rows stream off the main thread into memory, under one memory budget.
   the load.
 - Rows live in a compact in-memory store. The loaded rows are a snapshot, so a later change to the file cannot corrupt
   the view.
-- One memory budget covers every data viewer pane together. Each pane keeps a floor of 32 MiB even when the budget is
-  spent, so the app holds at most the budget plus one floor for each pane beyond it. A memory-pressure warning stops
+- One memory budget covers every data viewer pane together. Superseded in part by UTERM-062; see Decision Log. Each
+  pane keeps a floor of 32 MiB even when the budget is spent, so the app holds at most the budget plus one floor for
+  each pane beyond it. A memory-pressure warning stops
   loading early. When loading stops, the pane says it shows the first N rows of the file, or of the sheet for a
   workbook. Amended 2026-11-05; see Decision Log.
 - Sorting, filtering, and search run off the main thread on an immutable snapshot. A newer request cancels an older
@@ -720,6 +721,10 @@ None.
   history-only delivery, and presents the bounded rest on reattach. UTERM-017 also records one history entry when a
   load failure or a memory stop leaves the pane empty. M1 of UTERM-017 shipped that entry and the history-only
   delivery, and M3 changes the detached behavior.
+- 2026-11-26: Superseded in part by UTERM-062, which is accepted. A data viewer pane holds several files as tabs.
+  Opening a file adds a tab instead of replacing the pane's file, and a drop of several files adds one tab per file
+  instead of being refused. The memory budget applies to each file, not to every pane together. M1's check that a drop
+  of several files is refused no longer describes the applet once UTERM-062 M2 lands.
 
 ## References
 

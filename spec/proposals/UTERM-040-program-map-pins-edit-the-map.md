@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-21
-**Updated:** 2026-11-22
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -69,6 +69,8 @@ its M4 is not started. The fold decision settles how this proposal and M4 fit.
 
 Decision: `add`, `remove`, `clear`, and `set-layer` edit the map's document, through the path the user's pin actions use.
 
+- Each command names the map tab it edits, as UTERM-062 M1 requires of every program command to a viewer, and edits
+  that tab's document. Amended 2026-11-26; see Decision Log.
 - Each command is undoable, as the user's edit is. A command is one undo step.
 - A command marks the map unsaved. Closing a pane, a window, or the app asks Save, Don't Save, or Cancel, as UTERM-016
   "Unsaved work on close and quit" sets.
@@ -684,6 +686,9 @@ UTERM-040`, and UTERM-016 becomes `implemented`. UTERM-008 carries the markers f
   meaning, for applet command schemas. Declined: it applies ADR-13's principle, and ADR-13 scopes applet schemas out
   on purpose.
 - 2026-11-22: Scheduled as UTERM-040 M1-M3 in queue.md.
+- 2026-11-26: From UTERM-062, which gives the map viewer tabs. A pin command names the tab it edits and edits that
+  tab's document, so the question UTERM-062 raised of which tab a pin edit lands in has one answer. Undo stays per tab
+  under UTERM-062 M5.
 
 ## References
 

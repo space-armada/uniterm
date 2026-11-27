@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-21
-**Updated:** 2026-11-21
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -263,7 +263,8 @@ Decision: the menu holds Close Tab, Close Other Tabs, and Close Tabs to the Righ
 One new `Applet` call closes a set of tabs by ID. It asks one question for the whole set when any of them would ask
 on its own close, such as a running command, edited input, or a download. The question lists each such tab's reason,
 as a pane close lists `runningLabels`. A declined question closes
-none of them. Applets add no items of their own. (autonomous)
+none of them. When the set holds a map tab with unsaved edits, the question offers Save, Don't Save, and Cancel, and
+lists every such tab, per UTERM-062 "The map's unsaved edits across tabs". Amended 2026-11-26; see Decision Log. Applets add no items of their own. (autonomous)
 
 - Each tab's close button already closes its own tab and asks first, inside the applet. The new call exposes that to
   the host by ID.
@@ -530,6 +531,10 @@ Builds on M2 and on UTERM-041 M2, for the chip.
   now names which UTERM-041 milestone each of M2 and M3 needs. M2 is now "The tab menu, marker actions, and closing
   tabs", and M3 is "Controllers in the menu".
 - 2026-11-21: Scheduled as M1-M3 in queue.md.
+- 2026-11-26: From UTERM-062, which gives the map viewer tabs. A set close that includes a map tab with unsaved edits
+  asks Save, Don't Save, or Cancel for every such tab in one question, instead of Close or Cancel. The rationale in
+  "Panes with no tab bar" that drivers attach only to one-tab viewers no longer holds once UTERM-062 lands. Where a
+  driver's chip shows then is not settled here.
 
 ## References
 

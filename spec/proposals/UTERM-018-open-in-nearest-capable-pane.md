@@ -12,15 +12,16 @@
   permission, which script and controller URL opens use
 - UTERM-007: the text viewer's link policy, which today hands every web link to the default browser
 - UTERM-003 and UTERM-004: the host API and control powers a script or controller would open through
-- UTERM-013: Reopen, which a replaced document joins
+- UTERM-013: Reopen Closed Tab or Pane, which brings back a routed open's tab as it brings back any closed tab
+- UTERM-062: viewers hold several files as tabs, so a routed open adds a tab. M3, M4, and M5 start after its M5
 - ADR-02: panes are addressed by stable ID, which the walk uses to find the origin and its neighbors
 - ADR-09: a script or controller opening content in a pane needs an authenticated requester and an explicit grant
 
 ## Impacts
 
 - UTERM-015 — "How a file type maps to an applet" and the routed-pane placement: a routed file goes to the nearest
-  pane that opens its type, instead of always to a new pane beside the source. Its batch rule changes: leftovers split
-  the origin window before any new window opens. M6 "Terminal clicks": a Cmd-click on a web URL stops doing
+  pane that opens its type, instead of always to a new pane beside the source. Its batch rule changes: a batch works
+  like a drop, so each applet's files become tabs in one pane. M6 "Terminal clicks": a Cmd-click on a web URL stops doing
   nothing, and "Who may open by terminal click" no longer refuses web URLs on remote-marked output.
 - UTERM-007 — "Markdown rendering" and M1's link checks: a clicked web link goes through the walk instead of straight
   to the default browser.
@@ -28,13 +29,14 @@
   through the same rule.
 - UTERM-004 — "telling the nearest browser pane to open a page" becomes one case of this walk, under browser
   navigation. "Nearest" takes this proposal's tie rule in place of reading order, and shares the walk's metric code.
-- UTERM-013 — Reopen gains a replaced document as a kind of entry, beside closed tabs and closed panes.
+- UTERM-062 — "Every user open adds a tab" covers a routed open that lands on a pane. This proposal's routed opens
+  follow its rate bound on tab opens.
 
 ## Summary
 
 Every open in uniterm follows one rule. An open starts at the pane it came from and walks outward through the pane
-tree to the nearest pane that can handle it. That pane opens it the way it opens anything: the browser adds a tab, and
-a viewer replaces its document. When no pane in the window can open a URL, the user chooses between letting macOS
+tree to the nearest pane that can handle it. That pane opens it the way it opens anything: the browser and the viewers
+add a tab. When no pane in the window can open a URL, the user chooses between letting macOS
 handle it and cancelling. A file with no capable pane opens in a new pane beside the origin.
 
 The rule covers links clicked in any applet, files from Finder and File > Open, Cmd-clicks in the terminal, and
@@ -88,11 +90,10 @@ granted an unbound caller. See "Scripts and controllers". Amended 2026-11-09; se
 
 ### What a pane does with an open
 
-The pane interprets the open. A browser opens the URL as a new tab, after the current one, selected. A viewer
-replaces its document, exactly as its own Open… does. The replaced document stays reachable through Reopen
-(Cmd-Shift-T), the way a closed pane's description is. See "How Reopen restores a replaced document". A terminal pane
-is never a target. A folder for the terminal opens in a new terminal pane, as "Applets whose open makes a new pane"
-settles. Amended 2026-11-09; see Decision Log.
+The pane interprets the open. A browser opens the URL as a new tab, after the current one, selected. A viewer adds a
+tab and selects it, exactly as its own Open… does under UTERM-062 "Every user open adds a tab". Nothing the pane
+showed is replaced, so nothing needs to come back. A terminal pane is never a target. A folder for the terminal opens in a new terminal pane, as "Applets whose open makes a new pane"
+settles. Amended 2026-11-09 and 2026-11-26; see Decision Log.
 
 ### No capable pane
 
@@ -244,9 +245,9 @@ router finds several winners and would ask the user to pick, it asks first, then
 applet the user picked. When no pane of the winning applet is in the window, the open goes to "No capable pane".
 
 Rationale: one resolver keeps UTERM-015's meaning of saved choice, specificity, and rank. Distance always winning
-breaks UTERM-015's settled rule that a saved choice overrides rank. A `.json` saved for the data viewer would replace
-the document of a nearer text viewer. A folder from Finder would replace a nearby image viewer's slideshow, where today
-it makes a terminal pane. Ranking tiers by the applets present in the window would need a second resolver, and it
+breaks UTERM-015's settled rule that a saved choice overrides rank. A `.json` saved for the data viewer would land in
+a nearer text viewer. A folder from Finder would land in a nearby image viewer, where today it makes a terminal
+pane. Ranking tiers by the applets present in the window would need a second resolver, and it
 silently skips a saved choice whenever that applet has no pane in the window.
 
 ### Plain clicks and modifier clicks in the browser
@@ -286,18 +287,20 @@ UTERM-015 settles one pane per file for a batch from Finder, and a batch of many
 has no rule for a batch. If every file walked, 20 images would each replace the last in the nearest image viewer, and a
 batch with no capable pane would ask 20 times. Open: how a batch of files from one event walks.
 
-Decision: each file walks, in the event's order, and takes the nearest capable pane that this batch has not used yet.
-A file left over once the capable panes are used opens in a new pane in the origin window, splitting the largest pane.
-A batch file with no capable pane in the window is placed the same way. Once the origin window has no room, the
-remaining files go to a new window, splitting its largest pane. A file that still finds no room goes to a further new
-window, as UTERM-015 settles. Amended 2026-11-09; see Decision Log. The router's own prompts are asked once for the batch: the confirmation above 10 files,
-and one chooser for each ambiguous type.
+Decision: a batch works like a drop. The batch's files are grouped by the applet each one resolves to, in the event's
+order. Each group walks once, and the nearest pane of that applet adds a tab for each of its files, in order, and
+selects the last. A group with no capable pane in the window opens in one new pane of that applet in the origin
+window, splitting the largest pane, and that pane holds the group's files as tabs. Once the origin window has no room,
+such a pane goes to a new window, as UTERM-015 settles. A folder routed to the terminal still opens a new terminal pane
+of its own, since a terminal pane is never a target. The router's own prompts are asked once for the batch: the
+confirmation above 10 files, and one chooser for each ambiguous type. Amended 2026-11-09 and 2026-11-26; see Decision
+Log.
 
-Rationale: one file and two files behave the same way, and the settled "Sources" makes Finder files walk with no
-exception for count. Keeping UTERM-015's batch placement would open two selected files in a new window while one file
-walks. Walking only the first file would make which document gets replaced depend on Finder's order, which UTERM-015
-calls arbitrary. Walking each file alone would replace one viewer 20 times. Leftovers split the origin window, so a
-batch stays in the window the user is looking at until that window is full.
+Rationale: the user chose on 2026-11-26 that a batch works like a drop, once viewers hold tabs under UTERM-062. A drop
+of the same files onto a viewer adds one tab for each. One file and two files behave the same way, and the settled
+"Sources" makes Finder files walk with no exception for count. The earlier rule spread a batch over capable panes and
+split new panes for the rest, because each file would otherwise replace the last in one viewer. Adding tabs replaces
+nothing, so that reason is gone.
 
 ### Terminal links from remote output
 
@@ -326,51 +329,33 @@ offer only cancel.
 
 Decision: no prompt for files. When the window holds no pane of the applet that `FileRouter` resolves, the file opens
 in a new pane of that applet beside the origin pane, by UTERM-015's built placement. It opens in a new window when
-there is no room, a sheet is up, or no window exists. Batch leftovers keep the rule in "How a batch walks". The
-macOS-or-cancel prompt stays for URLs. A file type no applet declares is refused before any walk, as UTERM-015 settles.
+there is no room, a sheet is up, or no window exists. A batch group with no capable pane keeps the rule in "How a
+batch walks". The macOS-or-cancel prompt stays for URLs. A file type no applet declares is refused before any walk, as UTERM-015 settles.
 
 Rationale: "let macOS handle it" loops when the user made uniterm the file's default app. Launch Services sends the
 file back, from a sender that matches no Apple opener, so uniterm refuses it or asks to allow it, and then asks the
 same question again. Without that loop, macOS opens another app, which overrides the user's choice of uniterm.
 
-A prompt would also contradict the settled batch rule. A batch leftover already opens in a new pane with no question,
-so one fewer capable pane would add a question. A window of only terminals, the most common window, would prompt on
+A prompt would also contradict the settled batch rule. A batch group with no capable pane already opens in a new pane
+with no question, so one fewer capable pane would add a question. A window of only terminals, the most common window, would prompt on
 every routed file, where UTERM-015 opens it today with no prompt. Leaves undone: a file open has no one-step hand-off
 to another app. Finder's Open With still covers that.
 
 ### How Reopen restores a replaced document
 
-"What a pane does with an open" keeps a replaced document reachable through Reopen. Reopen today holds only closed
-tabs, which each applet keeps, and closed panes, which the window's ledger keeps with their placement. A replaced
-document closes no pane and has no placement. A replace can also be cancelled after the router asks for it: the map
-viewer asks "Discard and Open" in a detached task, so the router cannot tell whether the replace happened. Open: the
-entry, when it is recorded, and where Reopen puts the old document.
-
-Decision: the applet tells its host when a replace commits, after any discard question. It passes its description
-from before the replace. The window pushes that description onto its close ledger as a replaced-document entry,
-stamped from the shared counter. Reopen opens the old document in a new pane beside the pane that replaced it, so
-Reopen itself replaces nothing. `replaceSource` keeps its signature, and a cancelled replace records nothing.
-
-This covers every replace: a walk open, the pane's own Open…, and a drop. The menu title "Reopen Closed Tab or Pane"
-stays, since the old document comes back as a pane and UTERM-013 fixed the title so an App Shortcuts remap keeps
-matching. This amends UTERM-013's Reopen with a third kind of entry.
-
-Rationale: one owner, the window's ledger, already holds pane descriptions and survives the pane's close. Reporting
-the commit through the host needs no async outcome from `replaceSource`, which four applets implement and several
-callers use. Covering only walk opens would make the same replace reopenable or not depending on the gesture.
-
-Restoring in place would need the synchronous reopen contract to become async, for a dirty map viewer's discard
-question. Swapping in place pushes the current document as the newest entry. Repeated Reopen would then bounce between
-two documents and hide every older close.
+Withdrawn on 2026-11-26. A routed open adds a tab under UTERM-062, so no user open replaces a document, and there is no
+replaced document to restore. A tab a routed open added comes back through Reopen Closed Tab or Pane as any closed tab
+does. The decision the review settled here, a replaced-document entry on the window's close ledger, is in the Decision
+Log.
 
 ### Applets whose open makes a new pane
 
 The terminal declares folders at the owner rank, but it opens a folder by making a new terminal pane, never in place.
 Open: whether such an applet's existing panes count as capable, and where the new pane goes.
 
-Decision: for a file target, a pane is capable in place only when its applet can replace its source, which the
+Decision: for a file target, a pane is capable in place only when its applet takes a file as its source, which the
 applet contract already says through `SourceReplacing`. A URL target is capable in any pane whose applet declares its
-scheme, since the browser opens a URL as a new tab, not by replacing a source. No declaration field is added. The terminal's panes are therefore never candidates. A
+scheme, since the browser opens a URL as a new tab, not as its source. No declaration field is added. The terminal's panes are therefore never candidates. A
 folder whose winning applet is the terminal takes the file no-capable-pane path, a new terminal pane beside the
 origin, as UTERM-015 builds today. A script folder open of that kind makes a new terminal pane beside the script's
 source pane when the script holds pane control, and fails otherwise. Amended 2026-11-22; see Decision Log.
@@ -412,13 +397,12 @@ None.
   restored selected, the same as any tab. UTERM-005 accepted that in its risk that restore repeats a side-effecting GET.
   Script and controller opens reach only browser panes the requester created, under browser navigation. A terminal
   click on a remote web URL opens only after Cmd-hover has shown its target.
-- **Replacing a viewer's document surprises the user** — likelihood: medium, impact: low. A file opened from Finder
-  may replace what a nearby viewer showed. Mitigation: the replaced document stays reopenable through the window's
-  close ledger, a dirty map viewer still asks before discarding, and the walk only replaces in a pane of the applet
-  the router resolves for that file.
-- **A batch fragments the user's working window** — likelihood: medium, impact: low. Leftovers now split the origin
-  window, so ten images and one viewer split it nine times. Accepted: the user chose the files, the panes close in one
-  step each, and a batch above 10 files still asks first, naming how many open new panes.
+- **A routed open lands in a nearby viewer the user did not expect** — likelihood: medium, impact: low. A file opened
+  from Finder adds a tab to the nearest viewer of its type. Accepted: nothing the viewer showed is replaced, the new tab
+  closes in one step, and the walk only adds to a pane of the applet the router resolves for that file.
+- **A batch adds many tabs to one viewer** — likelihood: medium, impact: low. Twenty images from Finder become twenty
+  tabs in the nearest image viewer. Accepted: a drop of the same files does the same, a batch above 10 files still asks
+  first, and the shared tab bar scrolls under UTERM-041.
 - **A remote URL resolves on this Mac** — likelihood: low, impact: medium. A remote program can print a link to a
   local service, and the click sends it with the user's cookies. Mitigation: Cmd-hover shows the target and says a
   loopback, link-local, or private address resolves on this Mac. Accepted for the rest: a hostname that resolves
@@ -427,8 +411,8 @@ None.
   and remote marker. M5 rests on UTERM-004 M6, UTERM-005 M8, and UTERM-015 M4. Mitigation: each milestone names what it
   starts after. A change to those designs reaches this proposal when the milestone starts.
 - **Other proposals' settled rules drift from this one** — likelihood: medium, impact: medium. This proposal amends
-  UTERM-004's tie rule, UTERM-015's batch placement and remote-marker rule, and UTERM-013's Reopen, and the review edits
-  none of those files. Mitigation: each milestone that changes another proposal's rule has a check that the other
+  UTERM-004's tie rule, and UTERM-015's batch placement and remote-marker rule, and the review edits none of those
+  files. Mitigation: each milestone that changes another proposal's rule has a check that the other
   proposal records the change.
 - **UTERM-015's placement tests and behavior change** — likelihood: high, impact: medium. Its routed-pane placement is
   built and tested. Mitigation: a milestone amends UTERM-015 and moves its placement tests to the walk, in one change.
@@ -492,35 +476,27 @@ None.
 
 **Status:** NOT STARTED
 
-- A file from Finder, the Dock, or Cmd-O opens in the nearest pane that opens its type, and replaces that pane's
-  document
-- The replaced document comes back through Reopen, in a new pane beside the pane that replaced it, whether a walk,
-  the pane's own Open…, or a drop replaced it
-- A replace the user cancels at a discard question records nothing, and a pane's first load records nothing
-- A pane with a question already up refuses a second replace with a message, and never asks twice
-- Reopen of a replaced dirty map brings back its unsaved pins, the same as pane-close undo
-- When the pane that replaced the document is gone, Reopen places the old document by the no-origin anchor
+Starts after UTERM-062 M5, so every viewer takes an open as a tab.
+
+- A file from Finder, the Dock, or Cmd-O opens in the nearest pane that opens its type, which adds a tab and selects it
+- A routed open into a map viewer with unsaved edits adds a tab, asks nothing, and leaves the edited tab as it was
+- Reopen Closed Tab or Pane brings back a tab a routed open added, as it brings back any closed tab
+- Routed opens that add a tab follow UTERM-062's rate bound, keyed on the source pane for `uniterm open` and on the
+  sending app for a Launch Services sender
 - A folder routed to the terminal opens in a new terminal pane beside the origin, and no existing terminal pane is
   ever a candidate
-- A catalog test checks that a file target is matched in place only in applets that replace their source, and a URL
+- A catalog test checks that a file target is matched in place only in applets that take a file as a tab, and a URL
   target in any applet that declares its scheme
-- A batch waits for the batch confirmation and any type chooser to close before it splits the origin window
-- Once the origin window fills, a batch's remaining files open in a new window, and a file that finds no room there
-  opens in a further new window
-- A pane the batch itself created never counts as an unused capable pane
-- A catalog test checks that every applet declaring a URL scheme opens a URL as a new tab, not by replacing its source
-- When the pane beside a replaced-document entry has no room, Reopen still places the document by the fallback, and
-  never keeps the entry while building nothing
-- More than 20 replaces in one viewer push older entries off the shared ledger by its stated depth, and a test pins
-  which entries remain
-- The map viewer captures its description for the entry after "Discard and Open" is confirmed and before its unsaved
-  pins are dropped
-- UTERM-013's proposal records the replaced-document entry
+- A batch waits for the batch confirmation and any type chooser to close before it opens anything
+- A batch group with no capable pane opens in one new pane that holds its files as tabs, and in a new window once the
+  origin window has no room
+- A catalog test checks that every applet declaring a URL scheme opens a URL as a new tab
 - Each applet's own Open… still opens in its own pane
 - UTERM-015's routed-placement tests are amended to the walk, and its proposal records the change
-- Three images from Finder with one image viewer in the window replace that viewer's image with the first, and open the
-  other two as new panes in the same window
-- The batch confirmation above 10 files says how many files replace a document and how many open new panes
+- Three images from Finder with one image viewer in the window open as three tabs in that viewer, in Finder's order,
+  with the third selected, the same as a drop of the three
+- A batch of two images and two CSV files adds two tabs to the nearest image viewer and two to the nearest data viewer
+- The batch confirmation above 10 files says how many files open as tabs and how many new panes open
 - A batch asks the type chooser once for each ambiguous type
 - A file whose applet has no pane in the window opens, with no prompt, in a new pane of that applet beside the origin,
   or in a new window when there is no room, a sheet is up, or no window exists
@@ -531,7 +507,8 @@ None.
 
 **Status:** NOT STARTED
 
-Starts after UTERM-015 M6, which builds Cmd-hover, the binding to the shown target, and the remote marker.
+Starts after UTERM-015 M6, which builds Cmd-hover, the binding to the shown target, and the remote marker, and after
+UTERM-062 M5, so a clicked file adds a tab.
 
 - A Cmd-click on a web URL or OSC 8 link in a terminal pane opens through the walk
 - A Cmd-click on a path opens through the walk, under UTERM-015's rules for who may open
@@ -554,7 +531,7 @@ Starts after UTERM-015 M6, which builds Cmd-hover, the binding to the shown targ
 **Status:** NOT STARTED
 
 Starts after UTERM-004 M6, UTERM-005 M8, and UTERM-015 M4, which build the permission framework, browser navigation,
-and the path-reading power.
+and the path-reading power, and after UTERM-062 M5, so a script's file open adds a tab.
 
 - A script or controller can ask to open a URL under browser navigation, or a file under the path-reading power
 - The walk considers only panes the requester may address, and a URL open reaches only browser panes it created
@@ -574,6 +551,8 @@ and the path-reading power.
   with an error naming the power. When M5 lands before the browser declares file types, the check uses a test applet
   that declares a type and never takes a file in place
 - A URL a script opens lands as the user's open does, selected and taking focus, per UTERM-037
+- A script's file open into an existing viewer adds a tab under UTERM-062's rate bound, keyed on the run, and an open
+  past it is refused as busy
 - The open request travels in a versioned schema under UTERM-004's admission, so an unsupported version is refused
   before any effect
 
@@ -694,6 +673,16 @@ and the path-reading power.
 - 2026-11-26: Added an M1 check to reuse the shared metric and tie rule when UTERM-061 M1 built them first, and to
   check that the scripts' nearest-pane rule calls them. UTERM-061's review found M1 said only that UTERM-004's rule
   "can call the same code". Whichever of the two lands first builds the function.
+- 2026-11-26: Amended for UTERM-062, which gives the viewers tabs. A routed open now adds a tab, as the pane's own
+  Open… does. The user chose that a batch works like a drop: each applet's files become tabs in its nearest pane, and a
+  group with no capable pane opens in one new pane holding its files as tabs. This replaces the rule that spread a batch
+  over unused capable panes and split new panes for the rest. "How Reopen restores a replaced document" is withdrawn:
+  it settled a replaced-document entry on the window's close ledger, restored in a new pane beside the replacing pane,
+  with the map's "Discard and Open" captured first. No user open replaces a document now. M3 lost its replace, Reopen,
+  and second-replace checks, and gained UTERM-062's rate bound. M3, M4, and M5 start after UTERM-062 M5. The risks on
+  replacing a document and on fragmenting the window became risks on an unexpected tab and on many tabs.
+- 2026-11-26: Split its queue row. M1-M2 keeps its place, and M3-M5 moved after UTERM-062 M1-M6, since M3 to M5
+  route opens that now add a tab.
 
 ## References
 
