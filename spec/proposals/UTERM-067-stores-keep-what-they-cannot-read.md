@@ -455,6 +455,7 @@ None.
 - 2026-11-26: Accepted, the user's choice. Applied the amendments in Impacts: UTERM-024, UTERM-026, UTERM-032,
   UTERM-063, and UTERM-066 are amended to match, and UTERM-004 and UTERM-021 carry "Superseded in part by UTERM-067"
   markers. Not scheduled.
+- 2026-11-26: Scheduled as UTERM-067 M1-M2 in queue.md.
 
 ## References
 

@@ -660,6 +660,7 @@ None.
 - 2026-11-26: Amended the policy store bullet of "Version skew" for UTERM-067, which puts every approval in one store
   at a format above 2, with a kind on every entry. It ended before with: "UTERM-067 changes this under ADR-18." The
   in-flight risk said UTERM-067 is a draft. It is now accepted.
+- 2026-11-26: Scheduled as UTERM-066 M1 and UTERM-066 M2-M3 in queue.md.
 
 ## References
 

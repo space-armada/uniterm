@@ -234,6 +234,7 @@ unchanged-policy control, so that part of the test cannot establish isolation.
 Response-time attachment is a candidate for subresources. The initial top-level request has already been
 sent at that point. The full M1 proof still needs macOS 26.0 and must cover the top-level request policy,
 history, redirects, pop-ups, and the outgoing page through a successful handoff.
+- 2026-11-26: Scheduled as UTERM-068 M1-M4 in queue.md.
 
 ## References
 
