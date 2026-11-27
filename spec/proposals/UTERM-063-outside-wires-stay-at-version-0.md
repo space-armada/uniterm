@@ -1,6 +1,6 @@
 # UTERM-063: External Versions Stay at 0 Until Declared Stable
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-26
 **Updated:** 2026-11-27
 
