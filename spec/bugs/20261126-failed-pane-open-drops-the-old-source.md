@@ -78,7 +78,8 @@ viewers' applets. Each viewer's test target has a regression test that opens a g
 the old source, the description, and the warning. Each failed on the old code because the pane showed the bad file and
 described it.
 
-What stays open. A failure that only the full load reaches still shows in the pane after the swap, as before. Examples
+What stays open, filed as `20261127-chosen-open-check-misses-full-load-failures.md`. The user chose the `async throws`
+swap, and a check before a synchronous replace landed instead. A failure that only the full load reaches still shows in the pane after the swap, as before. Examples
 are a corrupt image the helper cannot decode, a document the helper rejects, and a JSON error far into a big table. The
 sync `replaceSource(with:)` is unchanged, so a script's send and a new pane's factory still replace at once.
 
