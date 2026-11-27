@@ -762,6 +762,148 @@ final class ImageViewerControlTests: XCTestCase {
     XCTAssertTrue(limited.content.viewport?.isFit == true, "the pane went back to fit")
   }
 
+  // MARK: Zoom off screen
+
+  /// Starts a wait on `handle` that holds until the handle ends, and returns its reply.
+  private func waitLong(_ handle: Int, on applet: ImageViewerApplet) async -> [String: JSONValue] {
+    let waited = send(
+      "wait", ["handle": .number(Double(handle)), "timeout-ms": .number(20_000)], to: applet)
+
+    await settled(waited)
+
+    return waited.fields
+  }
+
+  /// Catches a zoom on a detached pane whose wait hangs until the pane comes back. The pane asks
+  /// the helper for one tile and draws nothing. The handle stays pending until that tile arrives,
+  /// then ends `done`, and the pane lets the tile go. Reattach brings the detail back.
+  func testAZoomOnADetachedStillEndsOnceItsOneTileArrives() async throws {
+    let (applet, _) = pane()
+
+    try await large(applet)
+
+    let backdrop = try XCTUnwrap(applet.shot).bytes
+
+    applet.detach()
+
+    let started = send("zoom", ["scale": .number(1)], to: applet)
+    let handle = try XCTUnwrap(started.handle)
+
+    XCTAssertEqual(waitNow(handle, on: applet, scope: scope), ["state": .string("pending")])
+    XCTAssertEqual(applet.client.tileRegionsOutstanding.count, 1, "one tile is asked for")
+
+    let reply = await waitLong(handle, on: applet)
+
+    XCTAssertEqual(reply["state"], .string("done"))
+    XCTAssertEqual(reply["fit"], .bool(false))
+    XCTAssertEqual(applet.content.tileCount, 0, "a detached pane draws no tile")
+    XCTAssertTrue(applet.tiles.entries.isEmpty, "the tile went once the zoom ended")
+    XCTAssertEqual(applet.bitmapBudget.held(by: applet.lease), backdrop)
+
+    applet.reattach()
+
+    let back = await Harness.eventually { applet.content.tileCount > 0 }
+    XCTAssertTrue(back, "reattach shows the zoom's detail")
+  }
+
+  /// Catches a zoom already running when the pane detaches that never ends. Its first tile is still
+  /// on the way, and the handle ends `done` once it arrives off screen.
+  func testAZoomStillWaitingForItsTileWhenThePaneDetachesEnds() async throws {
+    let (applet, _) = pane()
+
+    try await large(applet)
+
+    let backdrop = try XCTUnwrap(applet.shot).bytes
+    let started = send("zoom", ["scale": .number(1)], to: applet)
+    let handle = try XCTUnwrap(started.handle)
+
+    XCTAssertFalse(applet.client.tileRegionsOutstanding.isEmpty, "the first tile is on the way")
+
+    applet.detach()
+
+    XCTAssertEqual(waitNow(handle, on: applet, scope: scope), ["state": .string("pending")])
+
+    let reply = await waitLong(handle, on: applet)
+
+    XCTAssertEqual(reply["state"], .string("done"))
+    XCTAssertEqual(applet.content.tileCount, 0)
+    XCTAssertTrue(applet.tiles.entries.isEmpty)
+    XCTAssertEqual(applet.bitmapBudget.held(by: applet.lease), backdrop)
+  }
+
+  /// Catches a zoom on a detached animation whose wait hangs, or that throws away the frames the
+  /// pane holds. The pane keeps its frames and asks for the frame on screen at the zoom's level.
+  /// The handle ends `done` once it arrives, and the pane goes back to its backdrop. Reattach plays
+  /// the zoomed frames.
+  func testAZoomOnADetachedAnimationEndsOnceOneFrameArrivesAtItsLevel() async throws {
+    let (applet, _) = pane()
+    let gif = try ImageFixtures.write(
+      ImageFixtures.animatedGIF(
+        colors: [ImageFixtures.red, ImageFixtures.green, ImageFixtures.blue, ImageFixtures.white],
+        delays: [0.06, 0.06, 0.06, 0.06], size: 1200),
+      named: "loop.gif", in: folder)
+
+    applet.content.backingScaleSource = { 2 }
+    _ = try await run("show", ["path": .string(gif.path)], to: applet)
+
+    let playing = await Harness.eventually { applet.isAnimating && applet.frames.count >= 2 }
+    XCTAssertTrue(playing)
+
+    let backdrop = try XCTUnwrap(applet.shot).bytes
+
+    applet.detach()
+
+    let drained = await Harness.eventually { applet.client.outstandingFrames.isEmpty }
+    XCTAssertTrue(drained)
+
+    let held = applet.frames.mapValues(\.bytes)
+    let started = send("zoom", ["scale": .number(1)], to: applet)
+    let handle = try XCTUnwrap(started.handle)
+
+    XCTAssertEqual(applet.frames.mapValues(\.bytes), held, "the held frames stay")
+    XCTAssertEqual(waitNow(handle, on: applet, scope: scope), ["state": .string("pending")])
+    XCTAssertEqual(
+      applet.client.outstandingFrames.map(\.maxPixel), [1200], "one frame at the zoom's level")
+
+    let reply = await waitLong(handle, on: applet)
+
+    XCTAssertEqual(reply["state"], .string("done"))
+    XCTAssertNil(applet.zoomLevel)
+    XCTAssertTrue(applet.frames.values.allSatisfy { $0.zoomLevel == nil && $0.bytes == 0 })
+    XCTAssertEqual(applet.bitmapBudget.held(by: applet.lease), backdrop)
+
+    applet.reattach()
+
+    let sharp = await Harness.eventually {
+      applet.isAnimating && applet.zoomLevel == 1200
+        && applet.frames.values.contains { $0.zoomLevel == 1200 }
+    }
+    XCTAssertTrue(sharp, "reattach plays the zoomed frames")
+  }
+
+  /// Catches a zoom on a detached pane that ends `done` for a decode the helper refuses, or never
+  /// ends. The tile is past the helper's cap, so the handle fails with the zoom limit.
+  func testAZoomTheHelperRefusesOnADetachedPaneFailsWithTheZoomLimit() async throws {
+    let (applet, _) = panes.make(settings: Harness.settings(maxImageBytes: 2 << 20))
+
+    applet.content.backingScaleSource = { 2 }
+
+    let url = try ImageFixtures.write(
+      ImageFixtures.png(width: 1500, height: 1000), named: "wide.png", in: folder)
+
+    _ = try await run("show", ["path": .string(url.path)], to: applet)
+
+    applet.detach()
+
+    let started = send("zoom", ["scale": .number(1)], to: applet)
+    let handle = try XCTUnwrap(started.handle)
+    let reply = await waitLong(handle, on: applet)
+
+    XCTAssertEqual(reply["state"], .string("failed"))
+    XCTAssertEqual(reply["code"], .string("zoom-limit"))
+    XCTAssertTrue(applet.content.viewport?.isFit == true)
+  }
+
   /// Catches a zoom that tells a caller whether a linked image outside its scope decodes. The user
   /// opened a folder in the controller's scope whose one member links to a file outside it. The
   /// pane shows that file, fails on it, or has not opened it yet. A zoom answers `done` in all

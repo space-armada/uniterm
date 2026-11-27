@@ -1,6 +1,7 @@
 # A program's zoom wait on a detached image pane never settles until the pane comes back
 
-**Status:** open. Traced on 2026-11-26 against the current code. The path is deterministic. No run was made.
+**Status:** fixed 2026-11-26
+**Fixed:** 2026-11-26
 **Estimate:** medium; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
 
 ## Observed
@@ -78,3 +79,25 @@ UTERM-062's rule that a hidden tab still asks the helper for the decodes its pro
 
 The fix also covers both gaps in "Estimate check": an animated image zoomed after detach, and a zoom still pending
 when the pane detaches. Each gets its own regression test.
+
+## Fix note
+
+2026-11-26. A detached pane now answers a program's pending zoom. It asks the helper for one tile of a still, or
+one frame of an animation at the zoom's level, and draws neither. The zoom's wait ends `done` when that tile or frame
+arrives. It fails with `zoom-limit` when the helper or a budget refuses it. Once the zoom settles, the pane lets the
+detail and the helper's decode go and keeps only its backdrop. Reattach shows the zoom as before. A detached pane
+with no program zoom waiting still asks for nothing.
+
+- `ImageViewerApplet+Zoom.swift`: `refreshTiles` and `tileArrived` run while detached when a program zoom waits.
+  `refreshTiles` asks for one tile there and shows none. `retargetFrames` no longer evicts held frames while detached.
+  `releaseZoomForDetach` keeps the helper's decode and asks for the one tile or frame when a zoom is still waiting at
+  detach.
+- `ImageViewerApplet.swift`: `fillWindow` asks for the frame on screen alone while detached. A detached pane never
+  draws a zoomed frame.
+- `ImageViewerApplet+Remote.swift`: `zoomIsSettled` counts that one frame as enough while detached. `observeRemote`
+  releases the detached detail once the zoom settles.
+- Tests in `ImageViewerControlTests.swift`: `testAZoomOnADetachedStillEndsOnceItsOneTileArrives`,
+  `testAZoomOnADetachedAnimationEndsOnceOneFrameArrivesAtItsLevel`,
+  `testAZoomStillWaitingForItsTileWhenThePaneDetachesEnds`, and
+  `testAZoomTheHelperRefusesOnADetachedPaneFailsWithTheZoomLimit`. Each read `pending` after a 20-second wait on the
+  unfixed code.

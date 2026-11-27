@@ -129,6 +129,19 @@ extension ImageViewerApplet {
 
     guard wanted != zoomLevel else { return }
 
+    // A detached pane keeps the frames it holds. It moves to a new level only to answer a
+    // program's zoom, and otherwise goes back to its backdrop until reattach retargets it.
+    if isDetached {
+      guard awaitsProgramZoom else {
+        releaseZoomedFrames()
+        return
+      }
+
+      zoomLevel = wanted
+      fillWindow()
+      return
+    }
+
     zoomLevel = wanted
 
     for (index, frame) in frames where frame.zoomLevel != wanted && index != currentFrame {
@@ -176,9 +189,12 @@ extension ImageViewerApplet {
   }
 
   /// Keeps the tiles around the viewport and asks for the nearest one that is missing.
+  ///
+  /// A detached pane draws no tiles. While a program waits on a zoom, it asks for one tile at the
+  /// zoom's level, so the helper accepts or refuses the zoom off screen.
   func refreshTiles() {
     guard let viewport = content.viewport, !viewport.isFit, !plan.isAnimated, let held = shot,
-      phase == .showing, !isDetached, !closed, !content.isPinching,
+      phase == .showing, !isDetached || awaitsProgramZoom, !closed, !content.isPinching,
       held.info.source == info?.source
     else { return }
 
@@ -194,6 +210,14 @@ extension ImageViewerApplet {
 
     for entry in tiles.retain(Set(wanted)) {
       bitmapBudget.giveBack(entry.bytes, lease: lease)
+    }
+
+    guard !isDetached else {
+      let asked = client.tileRegionsOutstanding.contains { $0.level == level.longerSide }
+
+      if tiles.entries.isEmpty, !asked { requestNextTile(from: wanted, in: level) }
+
+      return
     }
 
     showTiles(level)
@@ -236,7 +260,7 @@ extension ImageViewerApplet {
   func tileArrived(_ request: DecodeRequest, _ header: ImageHeader, _ pixels: Data) {
     guard let region = request.region, let viewport = content.viewport, !viewport.isFit,
       let level = tileLevel, region.level == level.longerSide, request.source == info?.source,
-      !isDetached
+      !isDetached || awaitsProgramZoom
     else {
       refreshTiles()
       return
@@ -335,12 +359,22 @@ extension ImageViewerApplet {
 
   /// A pane off screen keeps only its backdrop. Both the app and the helper let go of the tiles and
   /// the decode behind them.
+  ///
+  /// A program's zoom still waiting keeps the helper's decode. The pane asks for one tile, or one
+  /// frame at the zoom's level, and lets go of it once the zoom settles.
   func releaseZoomForDetach() {
     guard isZoomedPastFit else { return }
 
     releaseTiles()
-    client.releaseLevel()
     releaseZoomedFrames()
+
+    guard !awaitsProgramZoom else {
+      refreshTiles()
+      retargetFrames()
+      return
+    }
+
+    client.releaseLevel()
   }
 
   /// Puts an animation back on its fit-size backdrop and lets go of the frames made for the zoom.
