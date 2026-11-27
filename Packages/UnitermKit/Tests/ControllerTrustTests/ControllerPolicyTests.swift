@@ -427,6 +427,21 @@ final class ControllerPolicyTests: XCTestCase {
       "the policy file format did not change")
   }
 
+  /// Catches a policy file that a merged approval makes unreadable. Approvals add up past the count
+  /// one descriptor may declare, and a reader that applied that count would move the whole file
+  /// aside, losing every approval in it.
+  func testAMergedScopeWiderThanOneDescriptorRoundTripsThroughTheFile() throws {
+    var held: Set<ControllerPermission> = []
+
+    for index in 0...ReadScope.maxDirectories {
+      held = PermissionContainment.merged(held, with: [try reads("/work/\(index)")])
+    }
+
+    let policies = [Self.policy(held)]
+
+    XCTAssertEqual(try ControllerPolicyFile.decode(ControllerPolicyFile.encode(policies)), policies)
+  }
+
   // MARK: Browser powers
 
   /// Catches an approval of pane control, or of one browser power, that covers another power. ADR-09
