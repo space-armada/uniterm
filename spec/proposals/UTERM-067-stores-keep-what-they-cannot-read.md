@@ -1,6 +1,6 @@
 # UTERM-067: Stores Keep What They Cannot Read
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-26
 **Updated:** 2026-11-27
 

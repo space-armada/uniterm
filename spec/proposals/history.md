@@ -41,3 +41,4 @@
 | UTERM-063 M1-M2 | None | Placed before UTERM-043 M1, the first row that changes an external wire. In-place wire changes below it land after M2 |
 | UTERM-044 M3 | UTERM-044 M2 | Needs a shard to fail on CI. It advances only when one does |
 | UTERM-060 M6 | UTERM-060 M4 | Needs a shard to fail on CI. It advances only when one does |
+| UTERM-067 M1-M2 | None | Before UTERM-032 M2, which stores folder approvals in the one store M2 builds. Beside UTERM-063 M1-M2, so the two store breaks can ship together |
