@@ -125,8 +125,17 @@ one per role, each with its own powers. Revoking one leaves the other.
 
 Rationale: ADR-14 P8 says one granted power never silently grants another. Trusting a package to read the clipboard as
 a driver in a pane must not let it do so as a controller started from a shell. The code already keeps script-file and
-package approvals apart for the same reason. One entry per role keeps each approval about one role, and the window can
-still group a package's entries together.
+package approvals apart for the same reason. The window can still group a package's entries, so it reads as one
+program with two roles.
+
+One entry with a list of roles was weighed and rejected, for two reasons:
+
+- The roles carry different powers. As a driver, a package might hold the clipboard and a read scope. As a controller,
+  it might hold pane control. One entry would mix two approvals, so editing one role's powers would mean touching the
+  other role's entry.
+- It suits ADR-18. When a newer build adds a role an older build does not know, separate entries let the older build
+  skip that one whole entry and keep the rest. A list of roles would put an unknown value inside an entry the older
+  build otherwise reads, which ADR-18 P4 rules out.
 
 ## Design Decisions (Open)
 
@@ -326,12 +335,16 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   user's choice, which settles the open question on keeping driver and controller approvals apart. Removed that
   question. The older-build risk is now accepted, and the M2 skew checks became role checks.
 - 2026-11-26: ADR candidate (hard to reverse): a build never loses or disables stored data it can read because of
-  stored data it cannot read. What it cannot read, it keeps unchanged and acts on nothing from. Undecided. Raised by
-  the user, who asked whether to adopt it before v1.
+  stored data it cannot read. What it cannot read, it keeps unchanged and acts on nothing from. Raised by the user, who
+  asked whether to adopt it before v1. Written as ADR-18, proposed, on 2026-11-26. It stays proposed until the user
+  reviews it.
+- 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
+  the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
 ## References
 
 - ADR-03: restored state never runs a program unasked
 - ADR-06: description and layout versioning
 - ADR-14: a controller controls what it opened, within authenticated identity and explicit scope
+- ADR-18: stored data a build cannot read is kept, and never acted on (proposed)
 - UTERM-004, "Verified artifact and run binding"
