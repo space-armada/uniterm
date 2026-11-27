@@ -66,3 +66,4 @@
 | [20261126-image-zoom-wait-hangs-when-every-tile-is-refused](20261126-image-zoom-wait-hangs-when-every-tile-is-refused.md) | A program's zoom wait hangs when the budget refuses every tile it needs | open |
 | [20261126-host-never-sends-detach-or-reattach](20261126-host-never-sends-detach-or-reattach.md) | The host never sends an applet detach or reattach, so audio and alerts never pause off screen | open |
 | [20261126-failed-pane-open-drops-the-old-source](20261126-failed-pane-open-drops-the-old-source.md) | A failed Open in This Pane drops the pane's old file instead of keeping it | open |
+| [20261126-iso-gain-map-images-show-as-sdr](20261126-iso-gain-map-images-show-as-sdr.md) | An image with an ISO 21496-1 gain map shows as SDR in the image viewer | open |
