@@ -2,9 +2,9 @@
 
 | Milestones | Depends on | Note |
 |------------|------------|------|
-| UTERM-060 M5 | UTERM-060 M2 | Needs a Cmd-T stall with recording on, seen in an ordinary run. No run repeats the shortcut test to find one |
-| UTERM-060 M7 | UTERM-060 M6 | Split from M6: needs a CI `app` job to reach its time limit. It advances only when one does |
-| UTERM-045 M4 | UTERM-045 M2 | Needs clean CI runs after M2 lands. It advances only when the launcher test has run clean to M2's count |
+| UTERM-060 M5 | UTERM-060 M2 | Needs a Cmd-T stall with recording on, seen in an ordinary run. No run repeats the shortcut test to find one. `make ci-waiting-evidence` reports a CI failure of it |
+| UTERM-060 M7 | UTERM-060 M6 | Split from M6: needs a CI `app` job to reach its time limit. It advances only when `make ci-waiting-evidence` reports one |
+| UTERM-045 M4 | UTERM-045 M2 | Needs clean CI runs after M2 lands. It advances only when `make ci-waiting-evidence` reports the launcher test clean to M2's count |
 | UTERM-067 M1-M2 | None | Before UTERM-032 M2, which stores folder approvals in the one store M2 builds. Beside UTERM-063 M1-M2, so the two store breaks can ship together |
 | UTERM-043 M1 | None | Split from M2: M1 builds only on today's control code. M2 checks it against newer features |
 | UTERM-041 M1-M2 | None | |
