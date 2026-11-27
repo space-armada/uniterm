@@ -631,3 +631,126 @@ expect_split_error "zero tests fails" 1 "A 0" "test count must be a positive int
 
 # Invalid format fails.
 expect_split_error "invalid format fails" 1 "A" "invalid line format"
+
+# The waiting-evidence report reads only GitHub. The fake serves one file per endpoint and applies
+# the script's own --jq filter, so the filters are proved too. A log with no file is one GitHub no
+# longer serves.
+evidence="$scratch/evidence"
+mkdir -p "$evidence"
+evidence_gh="$scratch/evidence-gh"
+cat >"$evidence_gh" <<'FAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == api ]] || exit 2
+path="${2#repos/example/repo/}"
+case "$path" in
+  commits\?*page=1) file=commits.json ;;
+  commits\?*) file=empty-list.json ;;
+  commits/*/pulls) file=pulls.json ;;
+  actions/runs\?*page=1) file=runs.json ;;
+  actions/runs\?*) file=empty-runs.json ;;
+  actions/runs/*/attempts/*/jobs\?*)
+    path="${path#actions/runs/}"
+    file="jobs-${path%%/*}-$(sed -E 's|.*/attempts/([0-9]+)/.*|\1|' <<<"$path").json"
+    ;;
+  actions/runs/*/artifacts\?*)
+    path="${path#actions/runs/}"
+    file="artifacts-${path%%/*}.json"
+    ;;
+  actions/jobs/*/logs)
+    path="${path#actions/jobs/}"
+    file="log-${path%%/*}.txt"
+    ;;
+  *) exit 2 ;;
+esac
+[[ -f "$FAKE_EVIDENCE/$file" ]] || exit 1
+if [[ "${3:-}" == --jq ]]; then
+  jq -r "$4" "$FAKE_EVIDENCE/$file"
+else
+  cat "$FAKE_EVIDENCE/$file"
+fi
+FAKE
+chmod +x "$evidence_gh"
+
+evidence_job() {
+  local id="$1" shard="$2" conclusion="$3" started="$4" completed="$5" test_end="$6"
+  printf '{"id":%s,"name":"app (%s)","conclusion":"%s","started_at":"%s","completed_at":"%s","steps":[{"name":"Shard %s of 3","started_at":"%s","completed_at":"%s"}]}' \
+    "$id" "$shard" "$conclusion" "$started" "$completed" "$shard" "$started" "$test_end"
+}
+
+evidence_log() {
+  local job="$1" test="$2" result="$3"
+  printf "2026-11-27T00:00:00.0000000Z Test Case '-[uniterm_UITests.%s]' %s (1.000 seconds).\n" \
+    "$test" "$result" >>"$evidence/log-$job.txt"
+}
+
+wheel="LauncherUITests testAShortPaneKeepsTheFilterBoxAndScrollsToTheLastEntry"
+shortcut="ShortcutOwnershipUITests testARemapOntoAnAppletKeyWinsAndWarnsOnce"
+printf '[]' >"$evidence/empty-list.json"
+printf '{"workflow_runs":[]}' >"$evidence/empty-runs.json"
+printf '[]' >"$evidence/commits.json"
+printf '[{"merged_at":"2026-11-27T10:00:00Z"}]' >"$evidence/pulls.json"
+printf '{"artifacts":[]}' >"$evidence/artifacts-3.json"
+printf '      - id: tested\n        timeout-minutes: 5\n      - id: test\n        timeout-minutes: 38\n' \
+  >"$evidence/ci.yml"
+
+# Run 1 is from before the wheel change landed. Run 2 failed a shard and reran it. Run 3's first
+# shard ran to the test step's limit, and its log is gone.
+cat >"$evidence/runs.json" <<'RUNS'
+{"workflow_runs":[
+  {"id":1,"name":"ci","run_attempt":1,"created_at":"2026-11-27T09:00:00Z"},
+  {"id":2,"name":"ci","run_attempt":2,"created_at":"2026-11-27T11:00:00Z"},
+  {"id":3,"name":"ci","run_attempt":1,"created_at":"2026-11-27T12:00:00Z"},
+  {"id":4,"name":"other","run_attempt":1,"created_at":"2026-11-27T12:00:00Z"}]}
+RUNS
+printf '{"jobs":[{"id":9,"name":"package","conclusion":"success","started_at":"2026-11-27T09:00:00Z","completed_at":"2026-11-27T09:20:00Z"},%s]}' \
+  "$(evidence_job 10 0 failure 2026-11-27T09:00:00Z 2026-11-27T09:12:00Z 2026-11-27T09:11:00Z)" >"$evidence/jobs-1-1.json"
+printf '{"jobs":[%s,%s]}' \
+  "$(evidence_job 20 0 success 2026-11-27T11:00:00Z 2026-11-27T11:10:00Z 2026-11-27T11:09:00Z)" \
+  "$(evidence_job 21 1 failure 2026-11-27T11:00:00Z 2026-11-27T11:12:00Z 2026-11-27T11:11:00Z)" >"$evidence/jobs-2-1.json"
+printf '{"jobs":[%s,%s]}' \
+  "$(evidence_job 22 0 success 2026-11-27T11:00:00Z 2026-11-27T11:10:00Z 2026-11-27T11:09:00Z)" \
+  "$(evidence_job 23 1 success 2026-11-27T11:30:00Z 2026-11-27T11:42:00Z 2026-11-27T11:41:00Z)" >"$evidence/jobs-2-2.json"
+printf '{"jobs":[%s,%s]}' \
+  "$(evidence_job 30 0 cancelled 2026-11-27T12:00:00Z 2026-11-27T12:40:00Z 2026-11-27T12:38:00Z)" \
+  "$(evidence_job 31 1 success 2026-11-27T12:00:00Z 2026-11-27T12:10:00Z 2026-11-27T12:09:00Z)" >"$evidence/jobs-3-1.json"
+evidence_log 10 "$wheel" passed
+evidence_log 10 "$shortcut" failed
+evidence_log 20 "$shortcut" passed
+evidence_log 21 "$wheel" started
+evidence_log 21 "$wheel" failed
+evidence_log 22 "$wheel" failed
+evidence_log 23 "$wheel" passed
+evidence_log 31 "$wheel" passed
+
+expect_evidence() {
+  local name="$1" expected="$2"
+  CI_WAITING_EVIDENCE_GH="$evidence_gh" CI_WAITING_EVIDENCE_REPO=example/repo FAKE_EVIDENCE="$evidence" \
+    CI_WAITING_EVIDENCE_CACHE="$scratch/evidence-cache-$RANDOM" CI_WAITING_EVIDENCE_WORKFLOW="$evidence/ci.yml" \
+    bash "$root/scripts/ci-waiting-evidence.sh" >"$scratch/evidence-out" 2>&1 || {
+    echo "FAIL: $name: the report exited with an error" >&2
+    cat "$scratch/evidence-out" >&2
+    exit 1
+  }
+  if ! grep -qF -- "$expected" "$scratch/evidence-out"; then
+    echo "FAIL: $name: expected \"$expected\"" >&2
+    cat "$scratch/evidence-out" >&2
+    exit 1
+  fi
+  echo "PASS: $name"
+}
+
+expect_evidence "a wheel change that has not landed counts nothing" "WAITING: 0 of 33."
+expect_evidence "a shortcut test failure fires before the wheel change lands" "run 1 attempt 1, app (0)"
+
+printf '[{"sha":"abc","commit":{"message":"Send every UI test wheel through one settled call\\n\\nBody","committer":{"date":"2026-11-27T04:00:00Z"}}}]' \
+  >"$evidence/commits.json"
+expect_evidence "the count starts at the merge, restarts at a failure, and skips a carried job" \
+  "WAITING: at least 2 of 33, since it landed at 2026-11-27T10:00:00Z."
+expect_evidence "a failure that breaks the streak is named" "failed in run 2 attempt 1, app (1)"
+expect_evidence "a job at the test step's limit fires and names its missing upload" \
+  "run 3 attempt 1, app (0): the test step ran 38 minutes, and ui-test-results-shard-0-attempt-1 is missing"
+expect_evidence "a log GitHub no longer serves is listed, not counted" "Logs GitHub would not serve"
+
+printf '{"artifacts":[{"name":"ui-test-results-shard-0-attempt-1"}]}' >"$evidence/artifacts-3.json"
+expect_evidence "a job at the limit names its upload" "ui-test-results-shard-0-attempt-1 was uploaded"
