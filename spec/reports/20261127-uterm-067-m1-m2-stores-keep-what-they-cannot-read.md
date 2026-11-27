@@ -207,3 +207,51 @@ passed on the rebased tree, and the full package suite passed 3372 tests.
   `ScriptLimitsTests.testASecondCtrlCEndsAScriptStuckInACallTheInterruptNeverReaches`, 3374 of 3375 passing. That is the
   open bug `20261114-second-ctrl-c-test-flaky-under-full-suite`, which now carries this third sighting. The class
   passed alone right after, with `ControllerTrustTests`. Neither failure touches this row's code.
+
+Committed as "Cost one entry, not the policy file, for a bad string inside it". The row finished in "Mark UTERM-067
+implemented and move its finished row to history".
+
+## Final review of the run
+
+The final review covered the run's twelve commits, with an ADR review of the three ADRs the run edited.
+
+- adr-impact: no conflict across the two rows. An edition above this build's makes its entry kept unread, which meets
+  ADR-14 P10 and ADR-18 P3 and P4 together. The policy file's format is internal, so it may move while external versions
+  stay at 0. One advisory note: ADR-18 says its guarantee "starts at version 1" without saying whose. The proposals read
+  it as uniterm's version 1. Left for the user.
+- ADR review: ADR-13's amendment matches the user-approved text word for word, and meets the rules for amending an
+  accepted ADR. ADR-16 and ADR-18 are proposed, and their edits are sound.
+- Findings and dispositions:
+  - Left for the user: ADR-18's Context and Consequences still say the trust stores fail whole over one entry. That is
+    stale since "Keep every approval the trust store cannot read, in one policy file". The run does not edit that ADR.
+  - Fixed: ADR-16's consequence line cited a proposal section. It now cites ADR-13 C1.
+  - Dismissed: renaming ADR-13's file to match its new title. UTERM-063's check says the filename stays.
+  - Fixed: a public parse function in the strict JSON reader had lost its only caller. Folded back.
+  - PLAUSIBLE, traced, confirmed, fixed: the re-approval notice could be lost two ways. A change that retired the old
+    files wrote nothing the next read could announce. A refresh that overtook the first read dropped the notice that
+    read had taken. Each now has a test that fails without its fix. The first fix was incomplete at first, and its own
+    test caught that in the coordinator's full run.
+  - Fixed: UTERM-063's M1 As built gave the policy format as 2. It now points to UTERM-067 M2's move to 3, with the
+    Decision Log entry a correction of fact needs, since UTERM-063 is implemented.
+  - Fixed: three commit bodies opened by describing the old state. Reworded, with trees, authors, and dates kept.
+- Freeze: four hunks with origin `other`, on UTERM-001, UTERM-002, UTERM-004, and UTERM-009. None is this run's edit.
+  They are left for the user, as the first run's report also says.
+
+### Checks on the final tree
+
+- `make fmt-check lint check`: pass.
+- `caffeinate -dimsu make test-package`: 3377 tests, 10 skipped, 0 failures, in 287 s.
+- `ControllerConsentUITests`: 10 of 11 passed at 15:30. `testAnUnsafeReviewOffersThreeChoicesAndNoTrust` failed with
+  "the Pending Requests panel never opened", and the log shows WezTerm coming to the front inside that test. It passed
+  alone at 15:33. An earlier pass at 15:02 lost one test the same way to Messages, and all 11 passed at 15:05.
+- Every UI failure in the run sits beside a `[frontmost] Activation` line for another app. No UI failure came without
+  one.
+
+### Left open
+
+- Three `**Pending override:**` lines wait for the user: two on UTERM-019 and one on UTERM-050.
+- `.cg.yaml` has an uncommitted edit this run did not make. It names an absolute scratchpad path. Left alone.
+- The branch `agent/petunia-before-rebase-20261127` marks the head before the rebase. The coordinator made it as a
+  recovery point, against the run's rule not to create branches.
+- A peer session noted that shard 1's kept log from run 46055769038 holds 10 "confirmation delay timeout" lines, and
+  that the `testEscapeClosesTheEmptyPane` flaky entry says the log was not read. The artifact expires 2026-12-04.

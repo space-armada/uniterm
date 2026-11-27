@@ -10,14 +10,34 @@ was planned. The peer is landing this branch upstream in batches, so new CI runs
 
 | Row | Milestone | Run status | Note |
 |-----|-----------|------------|------|
-| UTERM-044 M3 | A failed shard reruns alone on CI | HELD | No failed CI shard at the run's start. Re-checked at the end |
-| UTERM-060 M5 | The recorder sees a Cmd-T stall | IN PROGRESS | 40 local runs of the shortcut test |
-| UTERM-060 M6 | A failed CI shard keeps its evidence | QUEUED | Waits on UTERM-060 M5, an earlier row of its proposal |
-| UTERM-045 M4 | The wheel change holds in CI | QUEUED | |
-| UTERM-063 M1 | Reset to version 0 and freeze | QUEUED | |
-| UTERM-063 M2 | Refuse stale programs by name | QUEUED | |
-| UTERM-067 M1 | Every store checked against ADR-18 | QUEUED | |
-| UTERM-067 M2 | The trust stores keep what they cannot read | QUEUED | |
+| UTERM-044 M3 | A failed shard reruns alone on CI | DONE, by a peer | A peer session closed it at the user's direction, from run 46055769038's rerun |
+| UTERM-060 M5 | The recorder sees a Cmd-T stall | HELD | 40 more local runs saw no stall. The user then ended such batches |
+| UTERM-060 M6 | A failed CI shard keeps its evidence | DONE, by a peer | The same peer session closed it, and split off UTERM-060 M7 |
+| UTERM-045 M4 | The wheel change holds in CI | HELD | The wheel change is on no CI run yet |
+| UTERM-063 M1 | Reset to version 0 and freeze | DONE | |
+| UTERM-063 M2 | Refuse stale programs by name | DONE | Row reviewed. UTERM-063 is implemented |
+| UTERM-067 M1 | Every store checked against ADR-18 | DONE | Drafts UTERM-071, UTERM-072, and UTERM-073 filed |
+| UTERM-067 M2 | The trust stores keep what they cannot read | DONE | Row reviewed. UTERM-067 is implemented |
+
+The run finished on 2026-11-27. Midway, at the user's request, the branch was rebased onto `upstream/main` at "Merge
+pull request #125", and one redundant snip was dropped. The run's commits, by subject, in order:
+
+- "Log a second batch of 40 shortcut test runs with no Cmd-T stall"
+- "File the bug that a failed CI shard collects its kept log twice"
+- "Reset every external version to 0 and fail the build when one moves"
+- "Refuse stale programs and swapped commands by name at version 0"
+- "Name what each UTERM-063 milestone moved and point its notes at the right entries"
+- "Mark UTERM-063 implemented and move its finished row to history"
+- "Check every store against ADR-18 and draft fixes for the ones that fall short"
+- "Keep every approval the trust store cannot read, in one policy file"
+- "File the bug that the reaper's log test reads no entries in some full runs"
+- "Log a third sighting of the second-Ctrl-C test flake"
+- "Cost one entry, not the policy file, for a bad string inside it"
+- "Mark UTERM-067 implemented and move its finished row to history"
+- "Show the re-approval notice even when a change or a second refresh comes first"
+- "Record the second work-queue run's final review in its reports"
+
+The final review is in [the UTERM-067 report](20261127-uterm-067-m1-m2-stores-keep-what-they-cannot-read.md).
 
 Row reports:
 
