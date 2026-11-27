@@ -82,6 +82,15 @@ guarantee the behavior of approved code.
   needs no grant. It may open its own pane or tab beside the requester and move focus only as the user's own open would.
   It changes nothing else of the user's. It still needs an authenticated requester, and P15 bounds it. What the
   requester does with an answer is a separate effect, and P7 governs it.
+- **C2** (relaxes P9): A script run by a shared interpreter may hold a remembered approval when uniterm itself
+  snapshots and verifies the script and every file its package declares, and starts the interpreter with a command line
+  those verified files fix. No argument comes before the script, and no environment key the interpreter or the loader
+  reads as a hook comes from outside the verified files. Settings that change where the interpreter finds its startup
+  files, such as `HOME`, are outside what uniterm verifies, and the user is told so. The proof of identity is uniterm's
+  own verification, not a name, path, or digest the script or its runner claims. The approval covers only the verified
+  files and the access they declare. The interpreter, its install, and whatever the script loads beyond its package are
+  outside it, and the user is told so. Verifying files cannot isolate a program from the system it runs on, so the
+  approval states its boundary rather than claim one it cannot hold.
 
 ## Consequences
 
@@ -121,6 +130,10 @@ guarantee the behavior of approved code.
   much of the user's session it may take, so the bound needed a principle of its own.
 - 2026-11-21: Added C1, which relaxes P7 for an effect that only shows the user something, or asks a question and
   returns the answer. Such an effect takes control of nothing the user holds, and P15 bounds it.
+- 2026-11-26: Added C2, which relaxes P9 for a script whose files uniterm itself snapshots and verifies, run with a
+  command line those files fix. P9 guards against a program claiming an approved script's identity, and a snapshot
+  uniterm verifies is not a claim. The approval covers only the verified files and says so, since no verification of
+  files can isolate a program from its system.
 
 ## References
 

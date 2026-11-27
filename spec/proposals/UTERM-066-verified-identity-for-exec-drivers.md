@@ -32,17 +32,10 @@
 
 ## ADR Deviations
 
-- ADR-14 P9, no carve-out: "Claimed names, paths, digests, and the identity of a shared interpreter are insufficient
-  proof of script identity." "Script files are verified too" verifies a script an interpreter driver names in its argv
-  by its digest, through a snapshot uniterm makes. The interpreter does not load it through a verifying loader.
-  UTERM-004 asks for "an equally verifiable loader" before another interpreter's scripts receive persistent trust. The
-  descriptor fixes the interpreter, its flags, and the script, and hook keys are refused. Any interpreter the user has
-  may run a driver. What a remembered approval still trusts without checking is the code the script imports at run
-  time, the interpreter's install, and its startup files, such as Python's `.pth` files and `sitecustomize`, per "Trust
-  covers what uniterm verified, and says so". The user chose this on 2026-11-26, and kept it
-  after the startup files were named, in "Trust covers what uniterm verified, and says so".
-  This proposal asks the user to amend ADR-14 with C2, per "ADR-14 gains a carve-out for verified scripts". Once
-  that is approved, this entry becomes "ADR-14 P9 under C2".
+- ADR-14 P9 under C2: "Script files are verified too" verifies a script an interpreter driver names, through a
+  snapshot uniterm makes, and starts the interpreter with a command line the descriptor fixes. C2 covers it. What a
+  remembered approval trusts without checking is the code the script imports at run time, the interpreter's install,
+  and its startup files, per "Trust covers what uniterm verified, and says so".
 
 ## Summary
 
@@ -254,8 +247,8 @@ silent grant, so none fails open.
 
 ### ADR-14 gains a carve-out for verified scripts
 
-Decision: this proposal asks the user to amend ADR-14 with a carve-out to P9. The amendment applies once the user
-approves its text. Until then, the script decisions stand as the deviation recorded under ADR Deviations.
+Decision: ADR-14 gains a carve-out to P9, C2, with the text below. The user approved it on 2026-11-26, and it is in
+ADR-14.
 
 > **C2** (relaxes P9): A script run by a shared interpreter may hold a remembered approval when uniterm itself
 > snapshots and verifies the script and every file its package declares, and starts the interpreter with a command line
@@ -267,7 +260,7 @@ approves its text. Until then, the script decisions stand as the deviation recor
 > loads beyond its package are outside it, and the user is told so. Verifying files cannot isolate a program from the
 > system it runs on, so the approval states its boundary rather than claim one it cannot hold.
 
-**Decided by:** new-proposal (autonomous), 2026-11-26
+**Decided by:** user, 2026-11-26
 
 Rationale: P9's concern is a program borrowing trust by claiming to be an approved script. A snapshot uniterm makes
 and verifies is not a claim. A carve-out keeps ADR-14 the full statement of its rule, where a deviation would leave the
@@ -462,6 +455,8 @@ None.
   promises only that no argument comes before the script and no hook key comes from outside the verified files, and
   says settings such as `HOME` are outside what uniterm verifies. The user turned down refusing `HOME` in package
   declarations.
+- 2026-11-26: The user approved C2, and it was added to ADR-14. The ADR Deviations entry now reads "ADR-14 P9 under
+  C2". It said before that this proposal departs from P9 with no carve-out.
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
