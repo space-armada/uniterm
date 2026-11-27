@@ -199,7 +199,10 @@ Candidates: rows hold their place and update in place; or a full snapshot until 
 Decision: a change the user did not cause never adds, removes, or reorders rows. It updates a row where it stands: its
 title text, its dimmed state and reason, and its outlined target pane. A row whose tab or pane closed stays put, and
 choosing it says it has closed, as the gone-tab and gone-pane messages do. A new tab does not appear until the user
-types. Typing or deleting a character sorts the list afresh.
+types. Typing or deleting a character sorts the list afresh. When the selected row dims in place, it loses the
+selection and no row is selected, so Return runs nothing. Down then selects the first selectable row below it, and Up
+the first above it. A command row that is refused when chosen, because its own check now fails, keeps the palette
+open, dims in place, and says why in the status bar. Amended 2026-11-26; see Decision Log.
 
 Rationale: the user chose it on 2026-11-26. A tab running one program after another retitles itself all the time, and a
 list that keeps re-sorting cannot be read or pointed at. A full snapshot would show titles and enabled states that are
@@ -357,7 +360,8 @@ None.
   equally near resolve to the pane that function names
 - A command never runs in a pane of another window, even when the window has no pane of its type
 - A row the walk enables runs when chosen. A row refused at run time says why in the status bar, including a command
-  whose own check fails after the last refresh, which today returns silently
+  whose own check fails after the last refresh, which today returns silently. That refused row keeps the palette open
+  and dims in place
 - The shared function reports to its caller when the origin pane is not in the tree, and never ranks from it. The
   palette then posts the gone-pane message. A script whose source pane is gone keeps today's answer: its authorized
   candidates in reading order, then pane ID
@@ -381,8 +385,9 @@ None.
   selection unchanged
 - Only real pointer movement selects a row. A re-sort after typing, an arrow-key scroll past the visible rows, and an
   in-place update never move the selection to the row under a resting pointer
-- When the selected row turns dimmed in place, the selection moves to the next selectable row below, else above, so
-  Return never runs a dimmed row. When that row is foreign, its outline shows before any Return
+- When the selected row turns dimmed in place, no row is selected and Return runs nothing. Down selects the first
+  selectable row below the dimmed one, and Up the first above it. When that row is foreign, its outline shows before
+  any Return
 - While the palette shows, a terminal that retitles itself, a pane that opens or closes, and a layout change move no
   row. Typing a character sorts the list afresh
 - Choosing a foreign row checks the command on the resolved pane, then focuses that pane, then runs the command. With a
@@ -506,6 +511,11 @@ None.
   there, and only two places, this walk and UTERM-018's, follow it.
 - 2026-11-26: Accepted after its review.
 - 2026-11-26: Scheduled as M1-M2 in queue.md, after UTERM-018 M1-M5.
+- 2026-11-26: The user chose two rules from the bug sweep's palette refusal bug. First, a selected row that dims in
+  place drops the selection, and Up or Down picks its neighbor. The M1 check said "the selection moves to the next
+  selectable row below, else above, so Return never runs a dimmed row." An automatic move let a second Return run a
+  command the user never chose. Second, a command refused when chosen keeps the palette open and dims in place, as a
+  stale tab row does, instead of hiding first as a gone pane does. "The palette list holds still" gained both rules.
 
 ## References
 
