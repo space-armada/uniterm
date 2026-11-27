@@ -2,7 +2,8 @@
 
 **Status:** open. Confirmed by reading the code, not by a test.
 
-**Estimate:** small; no open design decisions. Triaged 2026-11-26 by reading the code. Not built or run.
+**Estimate:** medium, with one non-trivial design call: whether the palette hides or stays up when a chosen
+command is refused. See "Estimate check".
 
 ## Observed
 
@@ -46,3 +47,24 @@ exists.
 Files the fix touches: `Packages/UnitermKit/Sources/WindowKit/Commands/CommandRegistry.swift`,
 `WindowKit/MainWindowController+Palette.swift`, `WindowKit/MainWindowController+Commands.swift`, and a test beside the
 CommandRegistry tests.
+
+## Estimate check
+
+2026-11-26, a design critique of the triage estimate during a bug sweep.
+
+- Missing decision, not trivial: whether the palette hides or stays up on a refusal. `choose` hides the palette before
+  it calls `run` (`MainWindowController+Palette.swift`, about lines 215-216). Two existing patterns point opposite
+  ways:
+  - Hide, then post. A pane-gone command does this (`CommandRegistry.swift`, about lines 215-217).
+  - Stay up, update the row in place, then post. A stale tab row does this in `chooseTab` (`+Palette.swift`, about
+    lines 230-236). UTERM-061 follows it for its own refusal.
+- Staying up needs the palette to check before it hides. It also means the selection moves past the dimmed row, per
+  UTERM-061 M1, so a second Return runs a different command.
+- Size is medium, not small. The fix touches `CommandRegistry.swift`, `+Palette.swift`, and `+Commands.swift`.
+  Changing `run`'s return type touches about six test sites. A new internal method that returns a reason enum, with
+  `run` wrapping it, avoids that.
+- The recorded decisions hold: palette rows only, a warning naming the command such as `"Clear Screen" did not run,
+  because it is not available now.`, and `run` reporting why it refused. Use an enum for the reason, not a flag.
+- The regression test belongs in `CommandPaletteTests.swift`. It drives `palette.onChoose` with a row that was enabled
+  and is now unavailable, as `TabSearchTests` drives stale tab rows.
+- UTERM-061 M1 rewrites `choose` and covers this refusal. A fix landed first is compatible, but M1 restructures it.
