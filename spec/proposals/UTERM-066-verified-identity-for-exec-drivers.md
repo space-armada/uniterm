@@ -23,7 +23,8 @@
 - UTERM-055 — "Which grant and targets an exec driver captures under": a verified driver may keep a remembered
   approval for capture.
 - UTERM-065 — "How long the grant lasts": its revisit hook names this proposal. A verified driver may keep a remembered
-  read scope.
+  read scope. "The driver asks at run time": a verified driver's request for directories its package did not declare
+  is denied, per "A verified driver declares the access it needs".
 - UTERM-048 — "A plain script or a driver is never labeled verified": a verified driver is labeled with its identity.
 - Driver clipboard and browser grants (UTERM-004, UTERM-019): a verified driver may keep remembered approvals for them.
 
@@ -110,6 +111,10 @@ the modules it imports, and the user's own setup are outside what uniterm verifi
 system libraries it links. The review text says what is verified and what is not, in plain words. uniterm asks again
 when the verified files change, not when the interpreter or the system changes.
 
+uniterm never attempts to inspect a script or its interpreter, whether to find what it imports, what it loads, or what
+it might do. The package holds exactly the files its author lists, and nothing uniterm infers. The trust boundary is
+the access a program declares, not anything uniterm works out about its code. Amended 2026-11-26; see Decision Log.
+
 **Decided by:** user, 2026-11-26
 
 Rationale: no driver can be fully isolated by verifying its files. A script runs inside an interpreter the user set up,
@@ -160,16 +165,19 @@ One entry with a list of roles was weighed and rejected, for two reasons:
   skip that one whole entry and keep the rest. A list of roles would put an unknown value inside an entry the older
   build otherwise reads, which ADR-18 P4 rules out.
 
+### A verified driver declares the access it needs
+
+Decision: a driver package declares in its descriptor every power it needs, as a controller does. The user reviews the
+declared powers when the driver starts. A request for a power the package did not declare is denied, whatever the
+driver's identity or trust. A driver with no package keeps asking at run time, as today.
+
+**Decided by:** user, 2026-11-26
+
+Rationale: the trust boundary is what a program declares, per "Trust covers what uniterm verified, and says so". A
+program whose declaration is wrong, and that asks for something it never declared, is denied rather than asked again.
+UTERM-004 already refuses an undeclared effect "even when the controller's identity is trusted".
+
 ## Design Decisions (Open)
-
-### What a driver package declares in `permissions`
-
-The descriptor requires `permissions`. It knows no command or capture kind, and accepts controller-only kinds such as
-`pane-control` and `host-launch`. UTERM-004 refuses undeclared effects even under trusted identity.
-
-- A. The driver declares its powers. It gets a review at start, and undeclared requests are refused, as for controllers.
-- B. The driver declares none. Each request is remembered on its own row, and a non-empty `permissions` is refused for
-  a driver.
 
 ### Where a package declaration can come from
 
@@ -263,6 +271,12 @@ The proposal changes four contracts. Each needs its skew behavior settled.
 - A package whose descriptor, digests, signature, or load commands fail is refused, and nothing runs
 - A package declaration that names a `DYLD_` environment key is refused before anything runs
 - A declaration with a bare executable launches as today, with no verified identity
+- A driver package declares its powers in its descriptor, which knows the driver's kinds. A driver package that
+  declares a controller-only kind, such as `pane-control` or `host-launch`, is refused
+- The user reviews a driver package's declared powers when it starts
+- A verified driver's request for a power its package did not declare is denied, with no prompt
+- uniterm never reads a packaged script or the interpreter to find what it imports or loads. A test shows a script
+  importing an unpackaged module runs with no warning or bundling from uniterm
 - Replacing the package's files after launch does not change what runs
 - Snapshotting runs off the main thread, and the snapshot stays until the driver exits and is removed after
 - A saved layout keeps a package declaration, and a restored pane runs nothing until the user presses Run
@@ -362,6 +376,13 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   an interpreter upgrade, and on a change to its startup files. Full isolation cannot be guaranteed from scripts, nor
   from a binary that links system libraries, and uniterm must not pretend otherwise. The substitution risk is now rated
   low likelihood and accepted for what lies outside the verified files, which ends its block on acceptance.
+- 2026-11-26: Amended "Trust covers what uniterm verified, and says so", by the user's choice. uniterm never attempts
+  to inspect a script or its interpreter, and the package holds exactly the files its author lists. The trust boundary
+  is the access a program declares. The decision did not say before whether uniterm may look into a script's imports.
+- 2026-11-26: Added "A verified driver declares the access it needs", the user's choice. A request for an undeclared
+  power is denied. It settles the open question on what a driver package declares as option A, and removes it. The
+  user turned down option B, where a driver declares nothing and each request is remembered on its own. Routed the
+  descriptor's driver kinds, the refusal of controller-only kinds, the start review, and the no-inspection test to M1.
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
