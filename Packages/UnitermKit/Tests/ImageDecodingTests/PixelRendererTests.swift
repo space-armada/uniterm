@@ -250,11 +250,61 @@ final class PixelRendererTests: XCTestCase {
     XCTAssertTrue(source.hasGainMap, "the ISO gain map was not noticed")
 
     let image = try PixelRenderer.render(source, frame: 0, maxPixel: 0)
-    let samples = image.pixels.withUnsafeBytes { Array($0.bindMemory(to: Float16.self)) }
-    let brightest = samples.enumerated().filter { $0.offset % 4 != 3 }.map(\.element).max() ?? 0
 
     XCTAssertEqual(image.space, .extendedLinearDisplayP3)
-    XCTAssertGreaterThan(brightest, 1.5, "highlights stopped at SDR white")
+    XCTAssertGreaterThan(brightestColor(of: image), 1.5, "highlights stopped at SDR white")
+  }
+
+  /// Catches Apple's older gain map being treated as plain SDR, such as by a change that looks for
+  /// the ISO format in its place. The JPEG is made here from flat colors with an all-white gain
+  /// map. CoreImage writes that map with no headroom, and a reader then boosts nothing, so the
+  /// test writes a headroom of 4 into the map's own metadata. SDR white then decodes near 4.
+  func testAnAppleGainMapDecodesAsHDR() throws {
+    let extent = CGRect(x: 0, y: 0, width: 64, height: 64)
+    let sdr = CIImage(color: CIColor(red: 1, green: 1, blue: 1)).cropped(to: extent)
+    let map = CIImage(color: CIColor(red: 1, green: 1, blue: 1)).cropped(to: extent)
+
+    let flat = try XCTUnwrap(
+      CIContext().jpegRepresentation(
+        of: sdr, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+        options: [.hdrGainMapImage: map]))
+
+    let written = try XCTUnwrap(CGImageSourceCreateWithData(flat as CFData, nil))
+    var info = try XCTUnwrap(
+      CGImageSourceCopyAuxiliaryDataInfoAtIndex(written, 0, kCGImageAuxiliaryDataTypeHDRGainMap)
+        as? [CFString: Any])
+    let metadata = try XCTUnwrap(
+      CGImageMetadataCreateMutableCopy(info[kCGImageAuxiliaryDataInfoMetadata] as! CGImageMetadata))
+
+    XCTAssertTrue(
+      CGImageMetadataSetValueWithPath(
+        metadata, nil, "HDRGainMap:HDRGainMapHeadroom" as CFString, "4" as CFString))
+    info[kCGImageAuxiliaryDataInfoMetadata] = metadata
+
+    let data = NSMutableData()
+    let destination = try XCTUnwrap(
+      CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil))
+
+    CGImageDestinationAddImageFromSource(destination, written, 0, nil)
+    CGImageDestinationAddAuxiliaryDataInfo(
+      destination, kCGImageAuxiliaryDataTypeHDRGainMap, info as CFDictionary)
+    XCTAssertTrue(CGImageDestinationFinalize(destination))
+
+    let source = try open(data as Data)
+
+    XCTAssertTrue(source.hasGainMap, "Apple's gain map was not noticed")
+
+    let image = try PixelRenderer.render(source, frame: 0, maxPixel: 0)
+
+    XCTAssertEqual(image.space, .extendedLinearDisplayP3)
+    XCTAssertGreaterThan(brightestColor(of: image), 1.5, "highlights stopped at SDR white")
+  }
+
+  /// The largest color component of a half-float image, leaving alpha out.
+  private func brightestColor(of image: RenderedImage) -> Float16 {
+    let samples = image.pixels.withUnsafeBytes { Array($0.bindMemory(to: Float16.self)) }
+
+    return samples.enumerated().filter { $0.offset % 4 != 3 }.map(\.element).max() ?? 0
   }
 
   /// Catches an animation that reports one frame, loses its delays, or decodes the wrong frame.
