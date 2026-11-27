@@ -39,3 +39,5 @@
 | UTERM-045 M3 | UTERM-045 M1 | Split from M1: the count gates M2. It advances only as pushed CI runs accumulate. A later run recounts |
 | UTERM-045 M2 | UTERM-045 M3, UTERM-044 M1 | Split from M1: starts once M3's clean count is met. After UTERM-044 M1, so its own count runs on shards and never spans that landing |
 | UTERM-063 M1-M2 | None | Placed before UTERM-043 M1, the first row that changes an external wire. In-place wire changes below it land after M2 |
+| UTERM-044 M3 | UTERM-044 M2 | Needs a shard to fail on CI. It advances only when one does |
+| UTERM-060 M6 | UTERM-060 M4 | Needs a shard to fail on CI. It advances only when one does |

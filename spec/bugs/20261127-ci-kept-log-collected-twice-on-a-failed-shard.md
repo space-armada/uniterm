@@ -36,4 +36,5 @@ its script. A test step stopped by its timeout never reaches its own collection,
 the follow-up is needed. No design call. The cost of the bug is one extra `log show` of about 7 s per failed shard, and a
 kept log whose window ends at the follow-up step rather than at the tests.
 
-Proving the fix needs a failed shard on CI after it lands, which UTERM-060 M6 already waits for.
+Proving the fix needs a failed shard on CI after it lands. Run 46055769038's `app (1)` shows the same double
+collection, at 19:32:26.9 and again at 19:32:34.7.
