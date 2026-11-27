@@ -1,6 +1,6 @@
 # UTERM-046: Make the Logged Package-Test Flakes Deterministic
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-21
 **Updated:** 2026-11-27
 
