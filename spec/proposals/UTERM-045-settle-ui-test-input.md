@@ -289,7 +289,7 @@ None.
 
 ### M3: The launcher count is met
 
-**Status:** IN PROGRESS
+**Status:** DONE
 
 - The launcher change has run clean in consecutive CI runs, as built, to the count the closing rule sets. The rate that
   sets the count follows "Which observed rate sets the count": 2 failures in 22 attempts, so 33 runs. Amended 2026-11-24;
@@ -300,6 +300,14 @@ None.
 - A CI failure with the pointer inside the list sends the proposal to the user to retarget or retract
 - A CI failure in which the settle's own wait timed out, or the pointer left the list after the settle, is recorded in
   the launcher entry, restarts the count, and reopens the aiming question
+
+**As built:**
+
+- The recount ran from 2026-11-25T07:27:48Z through 2026-11-26T05:25:54Z by the Rule's method. The streak reached 33
+  consecutive clean CI attempts, which meets the count. No attempt failed the launcher test.
+- The launcher entry moved to Fixed in `spec/flaky-tests.md`, naming both changes and the count met.
+- The four missing job logs are judged by run time, as the Decision Log entry for 2026-11-27 records.
+- The count is M1's, since no window after the pointer change holds a failure.
 
 ## Decision Log
 
@@ -415,6 +423,19 @@ None.
   help text, and how the recount reads attempts. M1 is DONE. M3 is IN PROGRESS, since the recount itself updates the
   figures. M2 waits on M3. The Risks section now says M2 starts only after M3's clean count. M1's title read "The
   launcher change holds in CI".
+- 2026-11-27: Recount from the previous cutoff, 2026-11-25T07:27:48Z. Ten clean attempts finished through
+  2026-11-26T05:25:54Z, so the streak is 33 and meets the count. Clean, by run: 45672965577 attempt 1 and attempt 4.
+  The test passed in both. Both failed on `QuestionsUITests.testEveryAnswerTypeReturnsItsShape`, which is logged under
+  its own entry. The other clean ones: 45674064633 attempt 3, 45686673599, 45713785782, 45719243800, 45749818748, 45752629043,
+  45755641410 attempt 1, and 45760228289. Neutral: 45672965577 attempts 2 and 3 and 45674064633 attempts 1 and 2,
+  whose `app` jobs were cancelled before the test could have started. 45755641410 attempt 2 carried all three shard
+  jobs from attempt 1, with the same start and finish times, so it counts once. 11 runs skipped the `app` job, among
+  them 45568507167, the push at 2026-11-25T07:29:15Z. No log holds a failure of the launcher test. Every head holds the
+  pointer change. The test ran in 6 unsharded `app` jobs, the 82nd of 215 tests. In the 4 sharded runs it ran in shard
+  1 of 3, fourth or fifth, never first. Run best guess: four cancelled jobs have no log, since their logs return 404.
+  Each ran 15:02 from start to finish. The test started 16:50 or later into the neighbouring jobs of the same PR
+  (16:50 and 16:55), so a 15:02 job ended before the test could have started, and it is neutral. Had one been
+  mid-test, the streak would have broken there.
 
 ## References
 

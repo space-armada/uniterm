@@ -403,51 +403,6 @@ Fixed by: "Wait for the form's focus before typing its answers" and "Give the Qu
 - Suspected cause: unknown. No cause is guessed from two sightings.
 - Status: unresolved. Two sightings in CI and no fix, so it sets no N and stays under Potential.
 
-### `LauncherUITests.testAShortPaneKeepsTheFilterBoxAndScrollsToTheLastEntry`
-
-- Seen: 2026-11-15, 2026-11-18, and 2026-11-19, once each in CI on PRs that did not touch the launcher. On
-  2026-11-21 it failed 5 of 10 CI `app` runs, 2 of them on main.
-- Seen locally: 2026-11-20, once in 5 runs of `LaunchServicesOpenUITests`, `LauncherUITests`, and `LayoutUITests`
-  together, with the same message. That run changed only the map applet and map tests. On that machine the first
-  wheel goes down, so the scroll direction does not explain this sighting. Its cause is not known.
-- Evidence: `LauncherUITests.swift:199` failed with "the scroll wheel did not scroll the list", with uniterm frontmost
-  and the launcher's filter box focused. The failure screenshot showed the list still at its top. Waiting for the list
-  to settle did not help. Locally it passed 15 of 15, and 10 of 10 with legacy scrollers forced as CI shows them.
-- First suspected cause: the test sent one wheel of -1000 to a list that starts at the top. Which way that moves the
-  list follows the machine's scroll direction setting, and CI runners differ in it. When the wheel went up, the list
-  could not move. Flipping the sign to +1000 on a local machine failed the first run with CI's message.
-- Tried: "Scroll the short launcher either way the machine's wheel goes". The wheel goes the other way when the first
-  one leaves the last entry out of view. A list that scrolls neither way still fails. After that change, the launcher
-  tests passed 7 of 7 locally, and 3 of 3 with the two wheels swapped.
-- Seen again after that change: 2026-11-21, at `LauncherUITests.swift:209`, the assertion after both wheels. It failed
-  CI on the merge of #82 into main, which carried the change, and on the first `app` runs of #83 and #87. Neither PR
-  touches the launcher. #83's rerun passed. So the scroll direction is not the whole cause.
-- Evidence: #83's CI step log shows both wheels sent to the launcher's only scroll view, 80 pt tall. Its screenshot
-  before the wheels shows the list at its top, as expected. No screenshot was kept after them.
-- Seen again: 2026-11-22, in the first CI `app` run of #90, with the new report. The focused list's scroller read 0
-  before and after both wheels, and its frames never changed. The screenshot after the first wheel shows the middle
-  pane's launcher scrolled to its last entry, and the one before the wheels shows it at its top. The first wheel went
-  to the middle pane's list. In #83, two of seven snapshots show the focused list moved 84 pt, so a wheel can also
-  land partly on the right list.
-- Suspected cause: a wheel goes to whatever is under the pointer when it is delivered, and the pointer had not yet
-  reached the focused list. A wrong-pane lookup does not fit, since the same lookup gave the focused list's frame just
-  before and after the first wheel. A local run that left the pointer over the middle pane first still passed, so the
-  race does not show on this machine.
-- Tried: the pointer now goes to the focused list's center, and the test waits until it is inside the list before any
-  wheel. The report also gives the pointer's position. If it fails again with the pointer inside the list, this cause
-  is wrong.
-- Recount through 2026-11-25T05:48Z, from the first sighting on: 2 failures in 22 CI attempts up to "Wait for the
-  launcher's last entry to come into view after a scroll", 4 in 20 up to "Scroll the short launcher either way the
-  machine's wheel goes", and 3 in 19 up to "Settle the pointer on the launcher list before the scroll test's wheels".
-  All 9 failures are wheel failures, by their message "the scroll wheel did not scroll the list".
-- The lowest rate is 2 in 22, so N is 11 and the count is 33. Since the pointer change, the test passed in 23
-  consecutive CI attempts through 2026-11-25T07:27:48Z. 5 of them came before "Poll UI test waits every quarter second
-  instead of XCTest's second". Four `app` jobs in that span were cancelled before the test started, and two were
-  skipped, so they neither count nor break the streak.
-- Method: the test's own `passed` and `failed` lines in every `app` job log, by attempt. A fix is held when the tree
-  CI tested holds it, which for a PR job is the merge of its head into its base.
-- Status: unresolved until 10 more clean CI runs reach the count of 33.
-
 ### `WindowsUITests.testCommandNOpensASecondWindowWithItsOwnShell`
 
 - Seen: 2026-11-21, once, in a full local `make test-app` run of 176 tests, the run that moved UI test waits to
@@ -870,3 +825,56 @@ Fixed by: "Wait for the app to be frontmost before UI tests type, and paste open
   the one-shot read in `testClosingTheLastWindowKeepsTheAppRunningAndCommandNOpensAgain`. `waitForTerminal` activates
   the app before the first key.
 
+### `LauncherUITests.testAShortPaneKeepsTheFilterBoxAndScrollsToTheLastEntry`
+
+Fixed by: "Scroll the short launcher either way the machine's wheel goes" and "Settle the pointer on the launcher list before the scroll test's wheels"
+
+- Seen: 2026-11-15, 2026-11-18, and 2026-11-19, once each in CI on PRs that did not touch the launcher. On
+  2026-11-21 it failed 5 of 10 CI `app` runs, 2 of them on main.
+- Seen locally: 2026-11-20, once in 5 runs of `LaunchServicesOpenUITests`, `LauncherUITests`, and `LayoutUITests`
+  together, with the same message. That run changed only the map applet and map tests. On that machine the first
+  wheel goes down, so the scroll direction does not explain this sighting. Its cause is not known.
+- Evidence: `LauncherUITests.swift:199` failed with "the scroll wheel did not scroll the list", with uniterm frontmost
+  and the launcher's filter box focused. The failure screenshot showed the list still at its top. Waiting for the list
+  to settle did not help. Locally it passed 15 of 15, and 10 of 10 with legacy scrollers forced as CI shows them.
+- First suspected cause, which proved partial: the test sent one wheel of -1000 to a list that starts at the top. Which way that moves the
+  list follows the machine's scroll direction setting, and CI runners differ in it. When the wheel went up, the list
+  could not move. Flipping the sign to +1000 on a local machine failed the first run with CI's message.
+- First fix: "Scroll the short launcher either way the machine's wheel goes". The wheel goes the other way when the first
+  one leaves the last entry out of view. A list that scrolls neither way still fails. After that change, the launcher
+  tests passed 7 of 7 locally, and 3 of 3 with the two wheels swapped.
+- Seen again after that change: 2026-11-21, at `LauncherUITests.swift:209`, the assertion after both wheels. It failed
+  CI on the merge of #82 into main, which carried the change, and on the first `app` runs of #83 and #87. Neither PR
+  touches the launcher. #83's rerun passed. So the scroll direction is not the whole cause.
+- Evidence: #83's CI step log shows both wheels sent to the launcher's only scroll view, 80 pt tall. Its screenshot
+  before the wheels shows the list at its top, as expected. No screenshot was kept after them.
+- Seen again: 2026-11-22, in the first CI `app` run of #90, with the new report. The focused list's scroller read 0
+  before and after both wheels, and its frames never changed. The screenshot after the first wheel shows the middle
+  pane's launcher scrolled to its last entry, and the one before the wheels shows it at its top. The first wheel went
+  to the middle pane's list. In #83, two of seven snapshots show the focused list moved 84 pt, so a wheel can also
+  land partly on the right list.
+- Cause: a wheel goes to whatever is under the pointer when it is delivered, and the pointer had not yet
+  reached the focused list. A wrong-pane lookup does not fit, since the same lookup gave the focused list's frame just
+  before and after the first wheel. A local run that left the pointer over the middle pane first still passed, so the
+  race did not show on that machine.
+- Recount through 2026-11-25T05:48Z, from the first sighting on: 2 failures in 22 CI attempts up to "Wait for the
+  launcher's last entry to come into view after a scroll", 4 in 20 up to "Scroll the short launcher either way the
+  machine's wheel goes", and 3 in 19 up to "Settle the pointer on the launcher list before the scroll test's wheels".
+  All 9 failures are wheel failures, by their message "the scroll wheel did not scroll the list".
+- The lowest rate is 2 in 22, so N is 11 and the count is 33. Since the pointer change, the test passed in 23
+  consecutive CI attempts through 2026-11-25T07:27:48Z. 5 of them came before "Poll UI test waits every quarter second
+  instead of XCTest's second". Four `app` jobs in that span were cancelled before the test started, and two were
+  skipped, so they neither count nor break the streak.
+- Method: the test's own `passed` and `failed` lines in every `app` job log, by attempt. A fix is held when the tree
+  CI tested holds it, which for a PR job is the merge of its head into its base.
+- Recount through 2026-11-26T05:25:54Z: 10 more clean CI attempts, in 9 runs, so the streak since the pointer change
+  reached 33. Six ran the full UI suite in one `app` job, where the test was the 82nd of 215. Four ran it sharded, in
+  shard 1 of 3, the second shard. There it ran fourth or fifth, after 3 or 4 other tests, and never first. Two of the
+  six failed on `QuestionsUITests.testEveryAnswerTypeReturnsItsShape`, which is logged under its own entry, so the
+  test's pass counts. Four `app` jobs were cancelled before the test could have started. 11 runs skipped the `app`
+  job, the last of them after the last clean attempt, at 2026-11-26T05:33Z. One rerun attempt only carried its first
+  attempt's shard jobs. None of those counts or breaks the streak. Every head held the pointer change. UTERM-044's
+  shards landed inside this span.
+- Fix: the pointer goes to the focused list's center, and the test waits until it is inside the list before any
+  wheel. The report also gives the pointer's position. 33 consecutive clean CI attempts since that change met the
+  count, which the lowest window rate of 2 failures in 22 attempts sets.

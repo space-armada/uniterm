@@ -14,7 +14,7 @@ already holds `upstream/main` through #118, so no rebase ran.
 | UTERM-060 M5 | The recorder sees a Cmd-T stall | HELD | 40 local runs saw no stall. Stays NOT STARTED |
 | UTERM-060 M6 | A failed CI shard keeps its evidence | HELD | No failed CI shard since run 45762275495 |
 | UTERM-046 M3 | Every test signal goes through a guarded sender | DONE | Row reviewed. UTERM-046 is implemented |
-| UTERM-045 M3 | The launcher count is met | QUEUED | |
+| UTERM-045 M3 | The launcher count is met | DONE | 33 clean runs met the count |
 | UTERM-045 M2 | One way to send a wheel | QUEUED | Waits on UTERM-045 M3 in this run |
 
 Row reports:
@@ -22,6 +22,10 @@ Row reports:
 - [UTERM-060 M5](20261127-uterm-060-m5-recorder-sees-a-cmd-t-stall.md)
 - [UTERM-060 M6](20261127-uterm-060-m6-failed-ci-shard-keeps-its-evidence.md)
 - [UTERM-046 M3](20261127-uterm-046-m3-guarded-test-signals.md)
+- [UTERM-045 M3](20261127-uterm-045-m3-launcher-count.md)
+
+The rows that changed only spec text, UTERM-060 M5 and UTERM-045 M3, had their milestone review stand as their row
+review. The final review covers them again over the whole range.
 
 ## UTERM-044 M3
 
