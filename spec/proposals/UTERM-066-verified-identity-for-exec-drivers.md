@@ -37,8 +37,8 @@
   descriptor fixes the interpreter, its flags, and the script, and hook keys are refused. Any interpreter the user has
   may run a driver. What a remembered approval still trusts without checking is the code the script imports at run
   time, the interpreter's install, and its startup files, such as Python's `.pth` files and `sitecustomize`, per "Trust
-  covers what uniterm verified, and says so". The user chose this on 2026-11-26, after
-  imports, the interpreter binary, flags, and hook keys were named. The startup files were found after that choice.
+  covers what uniterm verified, and says so". The user chose this on 2026-11-26, and kept it
+  after the startup files were named, in "Trust covers what uniterm verified, and says so".
   This proposal asks the user to amend ADR-14 with C2, per "ADR-14 gains a carve-out for verified scripts". Once
   that is approved, this entry becomes "ADR-14 P9 under C2".
 
@@ -181,16 +181,16 @@ UTERM-004 already refuses an undeclared effect "even when the controller's ident
 ### Where a package declaration can come from
 
 Decision: a package declaration may come from a layout file, from the UI, or from a program through the layout-request
-API, like any exec declaration. A controller's `host-launch` scope matches a package declaration by the package's
-identity: its ID with its version, or its ID with its signing key. A `host-launch` scope that names an executable path
-never covers a package.
+API, like any exec declaration. A controller's `host-launch` grant never covers a package's launch, so every launch of a
+package asks, through UTERM-004's launch approval.
 
 **Decided by:** new-proposal (autonomous), 2026-11-26
 
-Rationale: a declaration only places a driver in a pane. Nothing runs until the user presses Run, or a `host-launch`
-grant covers the launch, so a program declaring a package gains nothing by itself. Matching by identity follows the
-trust boundary of "A verified driver declares the access it needs": the grant names the package it covers, not a path
-anything can replace. UTERM-004 meant a host launch to name packaged entries.
+Rationale: a declaration only places a driver in a pane. Nothing runs until the user presses Run and approves the
+launch, so a program declaring a package gains nothing by itself. A `host-launch` grant that covered a package would
+skip the only prompt that shows its arguments. A controller could then start a trusted relay driver pointed at a host
+it chose, and use the driver's remembered powers without holding them, against ADR-14 P8. Keeping packages out of
+`host-launch` also leaves its scope and the policy format unchanged.
 
 ### A layout saves the package's absolute path
 
@@ -216,19 +216,21 @@ out could otherwise start a trusted package with arguments the user never saw, a
 would reach whatever host the arguments name. A remembered launch would also be a new remembered power, beyond the
 per-run powers this proposal covers.
 
-### A run is bound to the process uniterm spawned, until it execs
+### A run is bound to its channel and snapshot
 
-Decision: the app spawns the snapshot's entry itself, and binds the run to the process it spawned, that process's exec
-generation, and the snapshot it made. Every use of a remembered power checks the binding. When the process execs
-another program, its verified identity ends, and its remembered powers with it. Its channel stays, as for a driver with
-no package. A package declaration that names a `DYLD_` key is refused, so no library is injected at spawn.
+Decision: the app spawns the snapshot's entry itself, and binds the run to the channel it created and the snapshot it
+made, until the driver exits. Every use of a remembered power checks that binding. Code the driver starts, such as an
+interpreter's own re-launch or a child process, inherits the channel, and is outside what uniterm verified, as "Trust
+covers what uniterm verified, and says so" states. A package declaration that names a `DYLD_` key is refused, so no
+library is injected at spawn. Amended 2026-11-26; see Decision Log.
 
 **Decided by:** new-proposal (autonomous), 2026-11-26
 
 Rationale: the app already holds the driver's pipe, so there is no peer to authenticate, and a second launcher would
-add nothing. Without the exec check, a verified driver could exec any program and keep the powers trusted for the
-package. UTERM-004 already ends a controller's live binding when its executable is replaced. Watching the process's
-exec generation reads nothing of its code, so it keeps to "Trust covers what uniterm verified, and says so".
+add nothing. The channel is what the transport can establish, per ADR-14 P13. A rule that ended identity on exec would
+end it for a Homebrew Python before the script's first line, since its framework launcher re-spawns into Python.app,
+and for shims such as pyenv's. That would break "Any interpreter the user has may run a driver". It would also block
+nothing, since a driver can fork a child that execs anything with the inherited channel.
 
 ### Version skew
 
@@ -254,11 +256,12 @@ approves its text. Until then, the script decisions stand as the deviation recor
 
 > **C2** (relaxes P9): A script run by a shared interpreter may hold a remembered approval when uniterm itself
 > snapshots and verifies the script and every file its package declares, and starts the interpreter with a command line
-> those verified files fix. The proof of identity is uniterm's own verification, not a name, path, or digest the script
-> or its runner claims. The approval covers only the verified files and the access they declare. The interpreter, its
-> install, and whatever the script loads beyond its package are outside it, and the user is told so. Verifying files
-> cannot isolate a program from the system it runs on, so the approval states its boundary rather than claim one it
-> cannot hold.
+> those verified files fix. Nothing from outside the verified files may change how the interpreter starts: no
+> argument before the script, and no environment key the interpreter or the loader reads as a hook. The proof of
+> identity is uniterm's own verification, not a name, path, or digest the script or its runner claims. The approval
+> covers only the verified files and the access they declare. The interpreter, its install, and whatever the script
+> loads beyond its package are outside it, and the user is told so. Verifying files cannot isolate a program from the
+> system it runs on, so the approval states its boundary rather than claim one it cannot hold.
 
 **Decided by:** new-proposal (autonomous), 2026-11-26
 
@@ -287,7 +290,8 @@ None.
   user accepts breaking changes until then.
 - **A remote party behind a trusted driver** — likelihood: low, impact: medium. "Trust this version" of a packaged
   ssh-like driver remembers powers for whatever host its argv names. The approval binds the local code, not the remote
-  party. Mitigation: "The launch is never remembered" keeps the arguments in front of the user.
+  party. Mitigation: "The launch is never remembered", and a `host-launch` grant never covers a package, so every launch
+  shows its arguments to the user.
 - **A same-user process edits the snapshot** — likelihood: low, impact: medium. UTERM-004 notes that read-only files
   are not immutable against a malicious process of the same user. Accepted: the same holds for controllers today.
 - **The design depends on proposals still in flight** — likelihood: medium, impact: medium. UTERM-028 and UTERM-055 are
@@ -305,6 +309,11 @@ None.
 - A declaration that names a package snapshots it, verifies the copy, and spawns the snapshot's entry
 - A package whose descriptor, digests, signature, or load commands fail is refused, and nothing runs
 - A package declaration that names a `DYLD_` environment key is refused before anything runs
+- A layout request from a program can declare a package, and its launch still asks
+- A controller's `host-launch` grant never covers a package's launch
+- The launch approval and the review of declared powers come in one prompt, or launch first and review second
+- A moved package fails to launch, and the pane names the absolute path it looked at
+- The layout is written at envelope version 4, and an older build keeps a version 4 file aside
 - A declaration with a bare executable launches as today, with no verified identity
 - A driver package declares its powers in its descriptor, which knows the driver's kinds. A driver package that
   declares a controller-only kind, such as `pane-control` or `host-launch`, is refused
@@ -322,8 +331,8 @@ None.
 
 **Status:** NOT STARTED
 
-- The panel offers "Trust this version" and "Trust this identity" for a verified driver's clipboard, browser, command,
-  capture, and read-scope requests
+- The start review of declared powers offers "Trust this version" and "Trust this identity" for a verified driver's
+  clipboard, browser, command, capture, and read-scope powers
 - A remembered approval covers the next run of the same version or identity with no prompt
 - A changed package asks again under "Trust this version", and a package signed by another key asks again under "Trust
   this identity"
@@ -345,8 +354,8 @@ None.
   includes at least `PYTHONSTARTUP`, `PYTHONPATH`, `PYTHONHOME`, `PYTHONUSERBASE`, `PYTHONINSPECT`, `NODE_OPTIONS`,
   `NODE_PATH`, `RUBYOPT`, `RUBYLIB`, `PERL5OPT`, `PERL5LIB`, `PERLLIB`, `BASH_ENV`, `ENV`, and keys starting with
   `BASH_FUNC_`. A package declaration that names one is refused before anything runs
-- A Homebrew interpreter, a locally built one, and one in a virtual environment each run a verified script driver and
-  can keep a remembered approval
+- A Homebrew interpreter, a locally built one, a pyenv-style shim, and one in a virtual environment each run a verified
+  script driver and keep a remembered approval, across the interpreter's own re-launch
 - A packaged multi-file script driver imports its packaged sibling modules under the flags the descriptor fixes
 - An old build refuses a package with an interpreter entry by name
 - A changed script asks again under "Trust this version"
@@ -426,6 +435,14 @@ None.
   (autonomous)
 - 2026-11-26: Drafted a carve-out C2 to ADR-14 P9 for verified scripts, for the user to approve. It waits on the user.
   (autonomous)
+- 2026-11-26: Re-check of the settled questions, NOT CONVERGED on three design-level defects. Amended the run binding:
+  it said identity ended when the process execs, and now binds to the channel and snapshot until the driver exits.
+  Homebrew's framework Python re-spawns into Python.app before the script runs, so the exec rule broke "Any interpreter
+  the user has may run a driver", and a forked child already inherits the channel. Changed "Where a package
+  declaration can come from": a `host-launch` grant matched packages by identity, and now never covers one. With
+  identity matching, a controller could launch a trusted relay driver at a host it chose and use the driver's
+  remembered powers. Strengthened C2 to require that nothing outside the verified files changes how the interpreter
+  starts. Routed checks to M1, M2, and M3. (autonomous)
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
