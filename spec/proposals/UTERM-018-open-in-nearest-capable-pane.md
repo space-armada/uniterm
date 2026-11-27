@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-08
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -183,8 +183,11 @@ Candidates: a new "open" power; extend UTERM-004's pane control with navigation;
 existing power for program-created browser panes. A script also needs an origin pane, which may be its REPL pane or
 none.
 
-Decision: fold URL opens into UTERM-005's browser navigation as it is specified. A script or controller open walks only
-the panes the requester may address: its source pane and the groups it owns, per UTERM-004. A URL open needs browser
+Decision: fold URL opens into UTERM-005's browser navigation as it is specified. Amended 2026-11-27 for UTERM-064: a
+script or controller open never walks. It names the existing pane it wants, an identity it found with UTERM-064's find
+query, or else opens a new pane by placement, as an external program's first pane does under UTERM-069. The rest of
+this decision describes the walk it replaced, and holds for the panes a named open may land in: its source pane and
+the groups it owns, per UTERM-004. A URL open needs browser
 navigation, and reaches only browser panes the requester created. A file open needs the path-reading power for the
 path, and lands only in a pane the requester may address. The path-reading power governs the read, not the target.
 
@@ -534,6 +537,8 @@ Starts after UTERM-004 M6, UTERM-005 M8, and UTERM-015 M4, which build the permi
 and the path-reading power, and after UTERM-062 M5, so a script's file open adds a tab.
 
 - A script or controller can ask to open a URL under browser navigation, or a file under the path-reading power
+- A program's open names the existing pane it lands in, or opens a new pane by placement, and never walks to an
+  existing pane when it arrives. Two opens naming one pane land in that pane
 - The walk considers only panes the requester may address, and a URL open reaches only browser panes it created
 - An open from a script starts at its source pane, or at the source pane the user granted an unbound caller, never at
   the focused pane
@@ -683,6 +688,9 @@ and the path-reading power, and after UTERM-062 M5, so a script's file open adds
   replacing a document and on fragmenting the window became risks on an unexpected tab and on many tabs.
 - 2026-11-26: Split its queue row. M1-M2 keeps its place, and M3-M5 moved after UTERM-062 M1-M6, since M3 to M5
   route opens that now add a tab.
+- 2026-11-27: Amended for UTERM-064, which removes every target picked when a program's call arrives. A script or
+  controller open no longer walks: it names the existing pane it wants, found with the find query, or opens a new pane
+  by placement. The user's own opens keep the walk. M5 gained the check.
 
 ## References
 
