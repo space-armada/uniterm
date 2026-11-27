@@ -39,7 +39,8 @@
   time, the interpreter's install, and its startup files, such as Python's `.pth` files and `sitecustomize`, per "Trust
   covers what uniterm verified, and says so". The user chose this on 2026-11-26, after
   imports, the interpreter binary, flags, and hook keys were named. The startup files were found after that choice.
-  This proposal asks the user to amend ADR-14 P9 before it is accepted.
+  This proposal asks the user to amend ADR-14 with C2, per "ADR-14 gains a carve-out for verified scripts". Once
+  that is approved, this entry becomes "ADR-14 P9 under C2".
 
 ## Summary
 
@@ -177,64 +178,98 @@ Rationale: the trust boundary is what a program declares, per "Trust covers what
 program whose declaration is wrong, and that asks for something it never declared, is denied rather than asked again.
 UTERM-004 already refuses an undeclared effect "even when the controller's identity is trusted".
 
-## Design Decisions (Open)
-
 ### Where a package declaration can come from
 
-A declaration comes from a layout file, the layout-request API used by scripts, controllers, and drivers, or the UI.
-The layout-request API refuses unknown exec keys, so a new caller on an older app is refused by name. A controller's
-`host-launch` scope names an absolute executable today.
+Decision: a package declaration may come from a layout file, from the UI, or from a program through the layout-request
+API, like any exec declaration. A controller's `host-launch` scope matches a package declaration by the package's
+identity: its ID with its version, or its ID with its signing key. A `host-launch` scope that names an executable path
+never covers a package.
 
-- How a `host-launch` scope matches a package declaration: by the package's identity, or by its entry path
-- Whether a program may declare a package at all, or only the user
+**Decided by:** new-proposal (autonomous), 2026-11-26
 
-### How a layout saves a package declaration
+Rationale: a declaration only places a driver in a pane. Nothing runs until the user presses Run, or a `host-launch`
+grant covers the launch, so a program declaring a package gains nothing by itself. Matching by identity follows the
+trust boundary of "A verified driver declares the access it needs": the grant names the package it covers, not a path
+anything can replace. UTERM-004 meant a host launch to name packaged entries.
 
-UTERM-004 saves argv, directory, and environment key names only. A package declaration needs the package's location.
-An older build reads only those three fields and drops any other on its next save. Either option bumps the layout
-envelope to version 4, and ADR-06 keeps a newer file aside in an older build.
+### A layout saves the package's absolute path
 
-- A. The layout saves the package folder's absolute path. A moved package fails to launch, with a message.
-- B. The layout saves the path and a bookmark, as the viewers do for their sources. A moved package is found through
-  the bookmark, and the pane says where.
+Decision: the layout saves a package declaration as the package folder's absolute path, beside the arguments after the
+script, the directory, and the environment key names. A package that has moved fails to launch, and the pane says
+where it looked. The layout envelope moves to version 4.
 
-### Whether the launch itself can be remembered
+**Decided by:** new-proposal (autonomous), 2026-11-26
 
-UTERM-004's launch approval asks once, or grants a pane's exact executable and directory for one launch of uniterm. A
-verified driver could be launched without asking.
+Rationale: verification and the launch prompt run on every launch, so the path is all a launch needs. A bookmark would
+add a second way to find the package, and the prompt would then have to say where it found it. uniterm is pre-v1, so
+the envelope bump costs nothing, and ADR-06 keeps a newer file aside in an older build.
 
-- A. No. The launch asks as today. Remembered approvals cover only the powers.
-- B. "Trust this version" or "Trust this identity" also covers the launch, so a restored pane's Run starts a trusted
-  driver with no prompt. That removes the only prompt that shows argv. A pane a controller laid out could start a
-  trusted package with argv the user never saw.
-- C. A remembered launch scoped like UTERM-004's reusable launch approval: the package identity, an allowed directory,
-  and environment keys.
+### The launch is never remembered
 
-### The run binding when the app spawns the snapshot
+Decision: a verified driver's launch asks as today, through UTERM-004's launch approval or a `host-launch` grant.
+Remembered approvals cover the driver's powers, never its launch.
 
-A native controller's snapshot entry is started by the hardened `uniterm` command, whose dyld strips every `DYLD_`
-variable. A driver is spawned by the app, with an environment built from the declaration, which may name
-`DYLD_INSERT_LIBRARIES`.
+**Decided by:** new-proposal (autonomous), 2026-11-26
 
-- A. The app spawns the snapshot entry, and binds the run to the PID it spawned and the snapshot it made. A driver that
-  execs another binary keeps its pipe, and would keep the remembered powers.
-- B. A, plus: record the PID's exec generation at spawn and check it wherever a remembered power is used, and treat an
-  exec as ending the identity. M1 refuses `DYLD_` keys under either option.
-- C. The app hands the snapshot to a small launcher that verifies again and execs it. The app already holds the pipe,
-  so no peer needs authenticating, and a second check races a same-user process the same way.
+Rationale: the launch prompt is the only place the user sees the arguments a driver starts with. A pane a program laid
+out could otherwise start a trusted package with arguments the user never saw, and a relay driver such as `ssh host`
+would reach whatever host the arguments name. A remembered launch would also be a new remembered power, beyond the
+per-run powers this proposal covers.
+
+### A run is bound to the process uniterm spawned, until it execs
+
+Decision: the app spawns the snapshot's entry itself, and binds the run to the process it spawned, that process's exec
+generation, and the snapshot it made. Every use of a remembered power checks the binding. When the process execs
+another program, its verified identity ends, and its remembered powers with it. Its channel stays, as for a driver with
+no package. A package declaration that names a `DYLD_` key is refused, so no library is injected at spawn.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: the app already holds the driver's pipe, so there is no peer to authenticate, and a second launcher would
+add nothing. Without the exec check, a verified driver could exec any program and keep the powers trusted for the
+package. UTERM-004 already ends a controller's live binding when its executable is replaced. Watching the process's
+exec generation reads nothing of its code, so it keeps to "Trust covers what uniterm verified, and says so".
 
 ### Version skew
 
-The proposal changes four contracts. Each needs its skew behavior settled.
+Decision: uniterm is pre-v1, so each contract may break, and the behavior is stated rather than made tolerant.
 
-- The policy store, shared across builds and across instances running at once. Today an older build that meets an
-  entry of a kind it does not know keeps no trust at all, and a selector kind it does not know moves the whole file
-  aside. uniterm is pre-v1, so this breakage is accepted for now. Whether the store should tolerate unknown entries
-  before v1 is a question beyond this proposal, raised as an ADR candidate in the Decision Log.
-- The layout file. An older build keeps a version 4 file aside, per "How a layout saves a package declaration".
-- The descriptor, which gains an interpreter entry kind and a fixed command line. A new package on an old build is
-  refused by strict parsing. An old package on a new build reads unchanged.
-- The layout-request exec field. A new caller on an old app is refused by name, which UTERM-063 allows at version 0.
+- The policy store: an older build that meets a driver entry keeps no trust at all, for an unknown kind, or moves the
+  file aside, for an unknown selector. UTERM-067 changes this under ADR-18.
+- The layout file: an older build keeps a version 4 file aside, per ADR-06.
+- The descriptor, which gains driver kinds, an interpreter entry kind, and a fixed command line: an older build refuses
+  a new package by name, through strict parsing. A newer build reads an old package unchanged.
+- The layout-request API's package field: an older app refuses a new caller by name, which UTERM-063 allows at version
+  0.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: the user accepts breaking changes before v1. Each failure is a refusal by name or a kept file, never a
+silent grant, so none fails open.
+
+### ADR-14 gains a carve-out for verified scripts
+
+Decision: this proposal asks the user to amend ADR-14 with a carve-out to P9. The amendment applies once the user
+approves its text. Until then, the script decisions stand as the deviation recorded under ADR Deviations.
+
+> **C2** (relaxes P9): A script run by a shared interpreter may hold a remembered approval when uniterm itself
+> snapshots and verifies the script and every file its package declares, and starts the interpreter with a command line
+> those verified files fix. The proof of identity is uniterm's own verification, not a name, path, or digest the script
+> or its runner claims. The approval covers only the verified files and the access they declare. The interpreter, its
+> install, and whatever the script loads beyond its package are outside it, and the user is told so. Verifying files
+> cannot isolate a program from the system it runs on, so the approval states its boundary rather than claim one it
+> cannot hold.
+
+**Decided by:** new-proposal (autonomous), 2026-11-26
+
+Rationale: P9's concern is a program borrowing trust by claiming to be an approved script. A snapshot uniterm makes
+and verifies is not a claim. A carve-out keeps ADR-14 the full statement of its rule, where a deviation would leave the
+exception only in this proposal. The carve-out names a condition, not this proposal, so a later script runner that
+meets it may apply it too.
+
+## Design Decisions (Open)
+
+None.
 
 ## Risks
 
@@ -252,14 +287,14 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   user accepts breaking changes until then.
 - **A remote party behind a trusted driver** — likelihood: low, impact: medium. "Trust this version" of a packaged
   ssh-like driver remembers powers for whatever host its argv names. The approval binds the local code, not the remote
-  party. Mitigation: "Whether the launch itself can be remembered" keeps argv in front of the user under option A.
+  party. Mitigation: "The launch is never remembered" keeps the arguments in front of the user.
 - **A same-user process edits the snapshot** — likelihood: low, impact: medium. UTERM-004 notes that read-only files
   are not immutable against a malicious process of the same user. Accepted: the same holds for controllers today.
 - **The design depends on proposals still in flight** — likelihood: medium, impact: medium. UTERM-028 and UTERM-055 are
   not started, UTERM-065 is a draft, and UTERM-063 changes permission editions underneath. Mitigation: M2's parts wait
   on each power, per Dependencies.
 - **A layout's package declaration is stored data** — likelihood: medium, impact: medium. Every later build reads it.
-  Mitigation: ADR-06's versioned envelope, and "How a layout saves a package declaration".
+  Mitigation: ADR-06's versioned envelope, and "A layout saves the package's absolute path".
 
 ## Milestones
 
@@ -383,6 +418,14 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   power is denied. It settles the open question on what a driver package declares as option A, and removes it. The
   user turned down option B, where a driver declares nothing and each request is remembered on its own. Routed the
   descriptor's driver kinds, the refusal of controller-only kinds, the start review, and the no-inspection test to M1.
+- 2026-11-26: Settled the four remaining open questions and version skew, on the user's instruction to keep going,
+  using the recommendations already given to the user. A package declaration may come from any source, and a
+  `host-launch` scope matches it by package identity. A layout saves the package's absolute path, at envelope version 4.
+  The launch is never remembered. A run is bound to the spawned process until it execs. Skew is stated, not made
+  tolerant, before v1. Turned down: a bookmark for the package, a remembered launch, and a second launcher.
+  (autonomous)
+- 2026-11-26: Drafted a carve-out C2 to ADR-14 P9 for verified scripts, for the user to approve. It waits on the user.
+  (autonomous)
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
