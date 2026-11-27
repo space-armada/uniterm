@@ -44,8 +44,8 @@ none. The image viewer's `shown` hard-codes the same empty access for drivers. A
 show a folder, and the viewer never tells it which image it shows.
 
 UTERM-006 split the driver's `show` and stepping into M5, and the user declined to build a driver power inside
-UTERM-006. UTERM-015 settles the power once for every applet. This proposal gives that power a driver form. The idea is in
-`spec/ideas.md`, "Exec driver path-read power".
+UTERM-006. UTERM-015 settles the power once for every applet. This proposal gives that power a driver form. The idea is
+in `spec/ideas.md`, "Exec driver path-read power".
 
 ### What the scope guards
 
