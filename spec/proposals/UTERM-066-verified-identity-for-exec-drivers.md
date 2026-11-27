@@ -35,8 +35,8 @@
   UTERM-004 asks for "an equally verifiable loader" before another interpreter's scripts receive persistent trust. The
   descriptor fixes the interpreter, its flags, and the script, and hook keys are refused. Any interpreter the user has
   may run a driver. What a remembered approval still trusts without checking is the code the script imports at run
-  time, the interpreter's install, and its startup files, such as Python's `.pth` files and `sitecustomize`. How far
-  that goes depends on "What remembered trust in a script driver covers". The user chose this on 2026-11-26, after
+  time, the interpreter's install, and its startup files, such as Python's `.pth` files and `sitecustomize`, per "Trust
+  covers what uniterm verified, and says so". The user chose this on 2026-11-26, after
   imports, the interpreter binary, flags, and hook keys were named. The startup files were found after that choice.
   This proposal asks the user to amend ADR-14 P9 before it is accepted.
 
@@ -73,7 +73,8 @@ spawns the snapshot's entry. A declaration with a bare executable keeps working 
 **Decided by:** user, 2026-11-26
 
 Rationale: the snapshot covers the entry and every packaged file it loads, and reuses code that already verifies
-controllers. Hashing only the executable would leave the libraries and data it loads unverified.
+controllers. Hashing only the executable would leave the libraries and data it loads unverified. System libraries stay
+outside the package, as UTERM-004 allows for a native entry.
 
 ### Script files are verified too
 
@@ -87,8 +88,8 @@ declaration that names an environment key the interpreter reads as a hook, such 
 
 Rationale: most drivers are scripts. Leaving them out would keep every script driver asking each run. Fixing the
 command line in the signed descriptor closes interpreter flags and scripts outside the signature. Refusing hook keys
-closes the environment. What trust says about the interpreter is settled in "What remembered trust in a script driver
-covers". Imports stay unverified, which is the deviation from ADR-14 P9 recorded above.
+closes the environment. What trust says about the interpreter is settled in "Trust covers what uniterm verified, and
+says so". Imports stay unverified, which is the deviation from ADR-14 P9 recorded above.
 
 ### Any interpreter the user has may run a driver
 
@@ -100,6 +101,22 @@ user has set it up, and no such limit decides whether a driver can keep a rememb
 
 Rationale: uniterm does not control how a user installs or uses interpreters, and may not add artificial limits on
 them.
+
+### Trust covers what uniterm verified, and says so
+
+Decision: a remembered approval for a verified driver covers the packaged files and the command line the descriptor
+fixes, and nothing else. uniterm never claims more. For a script driver, the interpreter's install, its startup files,
+the modules it imports, and the user's own setup are outside what uniterm verifies. For a native driver, so are the
+system libraries it links. The review text says what is verified and what is not, in plain words. uniterm asks again
+when the verified files change, not when the interpreter or the system changes.
+
+**Decided by:** user, 2026-11-26
+
+Rationale: no driver can be fully isolated by verifying its files. A script runs inside an interpreter the user set up,
+and a binary links system libraries uniterm does not ship. Claiming isolation that does not exist would mislead the
+user about what they trusted. Asking again on every interpreter or package upgrade would only train the user to click
+through prompts, and still not stop a same-user process, which UTERM-004 already accepts can edit a controller's
+snapshot. A user who needs the most isolation uniterm can give packages a native binary with its libraries inside it.
 
 ### Remembered approvals cover every per-run power
 
@@ -144,20 +161,6 @@ One entry with a list of roles was weighed and rejected, for two reasons:
   build otherwise reads, which ADR-18 P4 rules out.
 
 ## Design Decisions (Open)
-
-### What remembered trust in a script driver covers
-
-An interpreter entry names an interpreter outside the package, per "Any interpreter the user has may run a driver". A
-same-user process can change that interpreter's install, such as adding a `.pth` file to its `site-packages`, or
-change the user's site folder. That code runs before the verified script.
-
-- A. Trust covers the packaged code and the fixed command line only. The interpreter's install and the user's own
-  setup are the user's, as their shell setup is. The review text says so. UTERM-004 already accepts that a same-user
-  process can edit a controller's snapshot.
-- B. A, plus uniterm records the interpreter binary's digest when the user approves, and asks again when it changes,
-  such as after an upgrade. It never refuses an interpreter.
-- C. B, plus the interpreter's startup files: `.pth` files, `sitecustomize`, and `usercustomize` in its site folders.
-  A package install or upgrade then asks again too.
 
 ### What a driver package declares in `permissions`
 
@@ -227,11 +230,12 @@ The proposal changes four contracts. Each needs its skew behavior settled.
 
 ## Risks
 
-- **An interpreter, argv, or environment substitution gets remembered powers** — likelihood: high, impact: high. A
-  replaced interpreter, a flag such as `python3 -c`, or a hook such as `PYTHONSTARTUP` runs code no digest covers, under
-  remembered approvals. Mitigation: the descriptor fixes the command line, and hook keys are refused, per "Script
-  files are verified too". The interpreter's install waits on "What remembered trust in a script driver covers". This
-  blocks acceptance until that question is settled.
+- **Code outside the verified files runs under remembered powers** — likelihood: low, impact: high. A flag such as
+  `python3 -c`, or a hook such as `PYTHONSTARTUP`, could run code no digest covers. So could a same-user process that
+  changes the interpreter's install, or a system library a native driver links. Mitigation: the descriptor fixes the
+  command line, and hook keys are refused, per "Script files are verified too". Accepted for the rest: the interpreter,
+  its startup files, and system libraries are outside what uniterm verifies, and the review text says so, per "Trust
+  covers what uniterm verified, and says so".
 - **A verified script driver imports unverified code** — likelihood: high, impact: medium. An interpreter loads modules
   from its own search paths. Mitigation: the review text says imports are not verified, and "Trust this version" binds
   only the packaged files. Accepted pending the ADR-14 amendment above.
@@ -353,6 +357,11 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   folder from loading. Replaced the open question "Which interpreter an entry may name", whose options limited
   interpreters, with "What remembered trust in a script driver covers". Updated the ADR Deviations entry, the
   substitution risk, and M3 to match. Dropped the M3 check on interpreters with no isolating flag.
+- 2026-11-26: Added "Trust covers what uniterm verified, and says so", the user's choice. It settles the open question
+  "What remembered trust in a script driver covers" as option A, and removes it. The user turned down asking again on
+  an interpreter upgrade, and on a change to its startup files. Full isolation cannot be guaranteed from scripts, nor
+  from a binary that links system libraries, and uniterm must not pretend otherwise. The substitution risk is now rated
+  low likelihood and accepted for what lies outside the verified files, which ends its block on acceptance.
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
