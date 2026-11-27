@@ -164,3 +164,46 @@ Committed as "Check every store against ADR-18 and draft fixes for the ones that
   - `pending-requests-replace-older`: the review says "Trust This Version replaces 1 older approval of
     dev.uniterm.uitest.consent", names it with its version and date, and says a live run of a replaced version ends. The
     box "Replace the older versions listed above" is checked, above the four buttons.
+
+Committed as "Keep every approval the trust store cannot read, in one policy file".
+
+## Rebase
+
+At the user's request the branch was rebased onto `upstream/main`, at "Merge pull request #125", once M2 was
+committed. The rebase applied with no conflict, and one redundant snip was dropped. `make fmt-check lint check test-ci`
+passed on the rebased tree, and the full package suite passed 3372 tests.
+
+## Row review
+
+- adr-impact: no conflict. ADR-18 is still proposed. Its notes, all taken up below: M1's table was stale after M2, the
+  five-copy limit M1 assigned to M2 was kept with no record, and bytes that are not UTF-8 inside one entry cost the
+  whole file. It also noted that ADR-18's line "The trust stores do not meet P1 today" is now stale. The run does not
+  edit that ADR. It is left for the user.
+- The reviewer had five findings, all fixed:
+  - CONFIRMED: the scanner set the whole file aside for a control byte, an unknown escape, or a short `\u` escape inside
+    one entry's string. None hides where the string ends. The scanner now judges boundaries only, and each fault costs
+    its entry. The regression test failed first.
+  - M1's table said M2 fixes the aside copies' limit, and M2 kept it. M2's As built now records that the limit of five
+    stays, as an open ADR-18 P2 question shared with the layout file. UTERM-071's open question covers both. M1's table
+    gained an "After M2" note.
+  - The M2 check on a UTERM-032 store was narrowed only in the log. Amended in place, with two other checks.
+  - UTERM-066 still said UTERM-067 was not built. Amended.
+  - PLAUSIBLE: two hand-written tokenizers could drift. A seeded differential test now holds the scanner's ranges to
+    what the strict reader parses. They stay separate, since a tolerant mode would loosen the strict reader.
+
+### Best guesses
+
+- Bytes that are not UTF-8 inside one entry now cost only that entry. Such a byte is 0x80 or above, so it can never be
+  a quote, brace, bracket, or comma. Outside every entry they still set the file aside, as does a byte order mark.
+- The limit of five whole-file aside copies stays. M2's own checks presuppose the copies continue. If wrong, the store
+  needs a retention rule that meets ADR-18 P2, which UTERM-071 will decide for both stores.
+
+### Checks
+
+- `make fmt-check lint check`: pass. `make fuzz`: 25 tests pass, 351 s.
+- The implementer's full run failed `ProcessReaperTests.testTheReaperLogsThePidPathAndFailuresButNotAGoneHelper` again.
+  Filed as `spec/bugs/20261127-reaper-log-test-reads-no-entries-in-some-full-runs.md`, not confirmed.
+- The coordinator's full run at 14:56 passed the reaper test and failed
+  `ScriptLimitsTests.testASecondCtrlCEndsAScriptStuckInACallTheInterruptNeverReaches`, 3374 of 3375 passing. That is the
+  open bug `20261114-second-ctrl-c-test-flaky-under-full-suite`, which now carries this third sighting. The class
+  passed alone right after, with `ControllerTrustTests`. Neither failure touches this row's code.

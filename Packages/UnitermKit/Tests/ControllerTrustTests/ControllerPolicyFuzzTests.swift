@@ -88,6 +88,114 @@ final class ControllerPolicyFuzzTests: XCTestCase {
     }
   }
 
+  /// Catches the scanner and the strict reader drifting apart. The two tokenizers are written by
+  /// hand, and an entry the scanner cuts a byte short or long is read wrong without any trap. Each
+  /// generated file is valid, so every range the scanner reports must be exactly the text that was
+  /// written, must parse whole under the strict reader, and must be separated from the next only
+  /// by a comma and whitespace. It cannot prove anything about an invalid file, which the mutation
+  /// test and the format tests hold.
+  func testScannerRangesAreValuesTheStrictReaderParsesWhole() throws {
+    var random = SplitMix64(seed: seed &+ 1)
+
+    for iteration in 0..<iterations {
+      let entries = (0..<Int(random.next() % 6)).map { _ in
+        Self.value(depth: 0, using: &random, objectOnly: true)
+      }
+      let space = { Self.space(using: &random) }
+      var text = "{" + space() + "\"format\"" + space() + ":" + space() + "3" + space() + ","
+      text += space() + "\"extra\"" + space() + ":" + space()
+      text += Self.value(depth: 0, using: &random, objectOnly: false) + space() + ","
+      text += space() + "\"policies\"" + space() + ":" + space() + "[" + space()
+
+      for (index, entry) in entries.enumerated() {
+        if index > 0 { text += "," + space() }
+
+        text += entry + space()
+      }
+
+      text += "]" + space() + "}" + space()
+
+      let bytes = Array(text.utf8)
+      let at = "seed \(seed), iteration \(iteration)"
+      let members = try PolicyFileScanner.members(of: bytes)
+      let policies = try XCTUnwrap(
+        members.first { Array(bytes[$0.key]) == Array("\"policies\"".utf8) })
+      let ranges = try PolicyFileScanner.elements(of: policies.value, in: bytes)
+
+      XCTAssertEqual(
+        ranges.map { String(decoding: bytes[$0], as: UTF8.self) }, entries, at)
+
+      for range in ranges {
+        XCTAssertNoThrow(
+          try StrictJSONReader.parse(Data(bytes[range]), maxBytes: ControllerPolicyFile.maxBytes),
+          at)
+      }
+
+      var cursor = policies.value.lowerBound + 1
+
+      for range in ranges {
+        let between = bytes[cursor..<range.lowerBound].filter { $0 != UInt8(ascii: ",") }
+
+        XCTAssertTrue(between.allSatisfy { [0x20, 0x09, 0x0A, 0x0D].contains($0) }, at)
+
+        cursor = range.upperBound
+      }
+
+      let rest = bytes[cursor..<(policies.value.upperBound - 1)]
+
+      XCTAssertTrue(rest.allSatisfy { [0x20, 0x09, 0x0A, 0x0D].contains($0) }, at)
+    }
+  }
+
+  private static func space(using random: inout SplitMix64) -> String {
+    String(
+      (0..<Int(random.next() % 3)).map { _ in [" ", "\t", "\n", "\r"][Int(random.next() % 4)] })
+  }
+
+  private static func string(using random: inout SplitMix64) -> String {
+    let pieces = [
+      "a", "z", " ", "{", "}", "[", "]", ",", ":", "\\\"", "\\\\", "\\/", "\\n", "\\u007d",
+      "\\u0022", "\u{E9}", "\u{1F600}", "\u{2028}",
+    ]
+
+    return "\""
+      + (0..<Int(random.next() % 6)).map { _ in
+        pieces[Int(random.next() % UInt64(pieces.count))]
+      }.joined() + "\""
+  }
+
+  private static func value(
+    depth: Int, using random: inout SplitMix64, objectOnly: Bool
+  ) -> String {
+    let choice = objectOnly ? 7 : Int(random.next() % (depth >= 3 ? 6 : 9))
+
+    switch choice {
+    case 0: return string(using: &random)
+    case 1: return ["0", "-0", "7", "-12", "1.5", "0.5e-2", "1E3", "2e+10"][Int(random.next() % 8)]
+    case 2: return "true"
+    case 3: return "false"
+    case 4: return "null"
+    case 5: return "[]"
+    case 6, 7:
+      let count = Int(random.next() % 4)
+      let members = (0..<count).map { index in
+        "\"k\(index)\"" + space(using: &random) + ":" + space(using: &random)
+          + value(depth: depth + 1, using: &random, objectOnly: false) + space(using: &random)
+      }
+
+      return "{" + space(using: &random) + members.joined(separator: "," + space(using: &random))
+        + "}"
+    default:
+      let count = Int(random.next() % 4)
+      let elements = (0..<count).map { _ in
+        value(depth: depth + 1, using: &random, objectOnly: false) + space(using: &random)
+      }
+
+      return "[" + space(using: &random) + elements.joined(separator: "," + space(using: &random))
+        + "]"
+    }
+  }
+
   private func mutate(_ bytes: inout [UInt8], using random: inout SplitMix64) {
     guard !bytes.isEmpty else { return }
 

@@ -390,8 +390,8 @@ None.
   are not immutable against a malicious process of the same user. Accepted: the same holds for controllers today.
 - **The design depends on proposals still in flight** — likelihood: medium, impact: medium. UTERM-028, UTERM-055, and
   UTERM-065 are accepted and not started, and UTERM-063 changes permission editions underneath. ADR-18 is proposed, and
-  UTERM-067 is accepted and not built. The second reason for one policy entry per role rests on ADR-18 P4. Mitigation: M2's parts wait
-  on each power, per Dependencies. The first reason for one entry per role, that the roles carry different powers,
+  UTERM-067's policy file is built. The second reason for one policy entry per role rests on ADR-18 P4. Mitigation:
+  M2's parts wait on each power, per Dependencies. Amended 2026-11-27; see Decision Log. The first reason for one entry per role, that the roles carry different powers,
   holds without ADR-18.
 - **The descriptor's new fields are a signed contract** — likelihood: medium, impact: medium. Authors sign descriptors
   that name a role, an interpreter command, skipped folders, environment keys, and a starting-folder scope, and every
@@ -663,12 +663,15 @@ None.
   policy file holding any entry that is not a controller package entry is written at format 2, with a kind on every
   entry. One holding only controller package entries is written at format 1. A build in use today leaves a format 2
   file untouched, and a run of new, old, and new builds keeps every approval." The older-build risk said a driver
-  approval puts the file at format 2. The format 2 now belongs to UTERM-063, and no entry is written without a kind. The "Version skew" bullet on the
-  policy store said before: "format 1 means every entry is a controller package entry, and no entry carries a kind.
+  approval puts the file at format 2. The format 2 now belongs to UTERM-063, and no entry is written without a kind.
+  The "Version skew" bullet on the policy store said before: "format 1 means every entry is a controller package entry, and no entry carries a kind.
   Format 2 requires a kind on every entry. A newer build writes format 2 whenever any entry is not a controller
   package entry, and format 1 otherwise. A build in use today then leaves a format 2 file untouched and trusts nothing
   from it, so a run of new, old, and new builds loses no approval. A newer build reads today's format 1 file unchanged.
   Once UTERM-067 lands, the store moves to a format above 2." (run best guess)
+- 2026-11-27: Amended the in-flight risk for UTERM-067's built policy file. It said before: "ADR-18 is proposed, and
+  UTERM-067 is accepted and not built." The policy file is now built, so only ADR-18 is still proposed. (run best
+  guess)
 
 ## References
 

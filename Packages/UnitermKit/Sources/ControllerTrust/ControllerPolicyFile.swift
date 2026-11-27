@@ -141,10 +141,6 @@ public enum ControllerPolicyFile {
   ) throws(ControllerPolicyFileError) -> ControllerPolicyDocument {
     guard data.count <= maxBytes else { throw .tooLarge }
 
-    guard String(validating: data, as: UTF8.self) != nil else {
-      throw .unreadable("the file is not UTF-8")
-    }
-
     let bytes = [UInt8](data)
     let members: [PolicyFileScanner.Member]
 
@@ -191,6 +187,20 @@ public enum ControllerPolicyFile {
       throw .unreadable("\(error)")
     }
 
+    var outside = 0
+
+    for range in ranges {
+      guard String(validating: bytes[outside..<range.lowerBound], as: UTF8.self) != nil else {
+        throw .unreadable("the file is not UTF-8")
+      }
+
+      outside = range.upperBound
+    }
+
+    guard String(validating: bytes[outside...], as: UTF8.self) != nil else {
+      throw .unreadable("the file is not UTF-8")
+    }
+
     var document = ControllerPolicyDocument()
     let dates = ApprovalTimes(make: makeFormatter)
 
@@ -229,7 +239,7 @@ public enum ControllerPolicyFile {
   private static func readPolicy(
     _ bytes: [UInt8], editions: ControllerPermissionEditions, dates: ApprovalTimes
   ) throws -> ControllerPolicy {
-    let value = try StrictJSONReader.parse(validatedUTF8: bytes, maxBytes: maxBytes)
+    let value = try StrictJSONReader.parse(Data(bytes), maxBytes: maxBytes)
     let fields = try value.members(
       of: "a policy", required: ["selector", "artifact", "name", "scopes", "approved"],
       optional: ["versionOf"])

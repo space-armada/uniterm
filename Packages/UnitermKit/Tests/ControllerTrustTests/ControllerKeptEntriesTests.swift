@@ -289,7 +289,6 @@ final class ControllerKeptEntriesTests: XCTestCase {
   /// Catches a fault the strict reader finds inside one entry that costs the whole file, where the
   /// reader can still tell the entries apart. Nesting past the depth bound, an escaped NUL, an
   /// unpaired surrogate, and a leading zero each cost only their entry. Each is pinned here.
-  /// Non-UTF-8 bytes anywhere set the whole file aside, since the scanner reads only UTF-8.
   func testDepthNULSurrogateAndLeadingZeroInsideOneEntryCostOnlyThatEntry() throws {
     let deep = String(repeating: "[", count: 40) + String(repeating: "]", count: 40)
     let deeper = String(repeating: "[", count: 20000) + String(repeating: "]", count: 20000)
@@ -318,15 +317,68 @@ final class ControllerKeptEntriesTests: XCTestCase {
     }
 
     XCTAssertEqual(Set(kept), Set(faulty))
+  }
 
-    var broken = Self.file([good])
+  /// Catches a string fault that hides no boundary and still sets the whole file aside. A raw
+  /// control byte, an unknown escape letter, a short `\u` escape, and a byte that is not UTF-8 each
+  /// leave the entry's end plain to see. The entry is kept byte for byte, its neighbours still
+  /// grant, and no file is moved aside.
+  func testAStringFaultThatHidesNoBoundaryCostsOnlyThatEntry() throws {
+    let faulty: [[UInt8]] = [
+      Array(Self.entry(id: "dev.uniterm.fixture.control", name: "a\u{1}b").utf8),
+      Array(Self.entry(id: "dev.uniterm.fixture.escape", name: #"a\xb"#).utf8),
+      Array(Self.entry(id: "dev.uniterm.fixture.short", name: #"a\u12"#).utf8),
+      Array(Self.entry(id: "dev.uniterm.fixture.utf8", name: "a\u{E9}b").utf8)
+        .map { $0 == 0xC3 ? 0xFF : $0 },
+    ]
+    let good = Array(Self.entry(id: "dev.uniterm.fixture.good").utf8)
+    var bytes = Array("{\"format\": 3, \"policies\": [".utf8)
 
-    broken.insert(0xFF, at: 5)
-    try? FileManager.default.removeItem(at: folder)
-    try write(broken)
+    for entry in faulty + [good] {
+      if bytes.last != UInt8(ascii: "[") { bytes += Array(",\n".utf8) }
 
-    XCTAssertEqual(store.read().policies, [])
-    XCTAssertEqual(store.keptAsideFiles.count, 1)
+      bytes += entry
+    }
+
+    bytes += Array("]}\n".utf8)
+
+    try write(Data(bytes))
+
+    let state = store.read()
+
+    XCTAssertEqual(state.policies, [Self.goodPolicy()])
+    XCTAssertEqual(state.unreadable, faulty.count)
+    XCTAssertTrue(store.keptAsideFiles.isEmpty)
+
+    try store.update { $0 }
+
+    XCTAssertEqual(
+      Set(try ControllerPolicyFile.read(Data(contentsOf: store.fileURL)).kept.map(\.bytes)),
+      Set(faulty))
+    XCTAssertTrue(store.keptAsideFiles.isEmpty)
+  }
+
+  /// Catches bytes that are not UTF-8 outside every entry being let through. In a top-level key or
+  /// member, such a byte could be a damaged unknown member the file cannot tell from a good one, so
+  /// the whole file is set aside, byte for byte.
+  func testNonUTF8OutsideEveryEntrySetsTheWholeFileAside() throws {
+    let good = Self.entry(id: "dev.uniterm.fixture.good")
+    let prefix = Array("{\"format\": 3, \"policies\": [\(good)]".utf8)
+
+    for (index, tail) in [
+      Array(", \"ex\u{E9}\": 1}".utf8).map { $0 == 0xC3 ? 0xFF : $0 },
+      Array(", \"extra\": \"a\u{E9}\"}".utf8).map { $0 == 0xC3 ? 0xFF : $0 },
+    ].enumerated() {
+      try? FileManager.default.removeItem(at: folder)
+
+      let bytes = Data(prefix + tail)
+
+      try write(bytes)
+
+      XCTAssertEqual(store.read().policies, [], "\(index)")
+      XCTAssertEqual(store.keptAsideFiles.count, 1, "\(index)")
+      XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(store.keptAsideFiles.first)), bytes)
+    }
   }
 
   /// Catches a scanner that takes text inside a string for structure, or a number form for a fault.

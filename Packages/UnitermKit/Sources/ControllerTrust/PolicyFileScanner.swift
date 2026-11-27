@@ -292,8 +292,11 @@ struct PolicyFileScanner {
     return index > start
   }
 
-  /// A string's grammar. An escaped NUL and a lone surrogate escape pass here, since they cost
-  /// only the entry that holds them.
+  /// Finds where a string ends. Only a quote ends it, and a backslash hides the byte after it, so
+  /// nothing else can move a boundary. A control byte, an unknown escape letter, a short `\u`
+  /// escape, an escaped NUL, a lone surrogate escape, and a byte that is not UTF-8 all pass here.
+  /// Each costs only the entry that holds it, since the strict reader refuses it in the entry's
+  /// own bytes. A byte that is not UTF-8 is at least 0x80, so it is never a quote or a backslash.
   private mutating func skipString() throws {
     index += 1
 
@@ -302,46 +305,15 @@ struct PolicyFileScanner {
 
       let byte = bytes[index]
 
-      if byte == UInt8(ascii: "\"") {
-        index += 1
-
-        return
-      }
-
-      guard byte >= 0x20 else { throw failure("a string holds a control character") }
-
       index += 1
+
+      if byte == UInt8(ascii: "\"") { return }
 
       guard byte == UInt8(ascii: "\\") else { continue }
 
       guard index < bytes.count else { throw failure("an escape does not end") }
 
-      let escape = bytes[index]
-
       index += 1
-
-      if escape == UInt8(ascii: "u") {
-        for _ in 0..<4 {
-          guard index < bytes.count, Self.isHex(bytes[index]) else {
-            throw failure("a \\u escape needs four hex digits")
-          }
-
-          index += 1
-        }
-      } else {
-        switch escape {
-        case UInt8(ascii: "\""), UInt8(ascii: "\\"), UInt8(ascii: "/"), UInt8(ascii: "b"),
-          UInt8(ascii: "f"), UInt8(ascii: "n"), UInt8(ascii: "r"), UInt8(ascii: "t"):
-          break
-        default: throw failure("an escape is not one JSON allows")
-        }
-      }
     }
-  }
-
-  private static func isHex(_ byte: UInt8) -> Bool {
-    (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
-      || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(byte)
-      || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(byte)
   }
 }

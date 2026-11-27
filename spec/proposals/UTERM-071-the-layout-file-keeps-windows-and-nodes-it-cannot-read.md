@@ -113,6 +113,10 @@ Candidates:
 - Keep the limit of five, and say that a sixth move discards the oldest.
 - Delete a copy only when a build that reads it confirms the user's newer layout holds every window in it.
 
+The controller trust store's `policy.json` keeps five aside copies too, for a file this build cannot read as a whole.
+UTERM-067 M2 left that limit as it was, so the question covers both stores and one answer settles both. Nothing is
+decided here.
+
 ## Risks
 
 - **A window kept unread stays for good** — likelihood: medium, impact: low. No build the user runs reads it, so none
@@ -138,6 +142,8 @@ Candidates:
 
 - 2026-11-27: Filed as a draft from UTERM-067 M1. The check of every store found the layout file's envelope, its unknown
   node kinds, and its dropped control parts short of ADR-18. Nothing is decided.
+- 2026-11-27: The question on kept-aside copies now also covers the controller trust store's five copies of
+  `policy.json`, which UTERM-067 M2 left as they were. One answer settles both stores. (run best guess)
 
 ## References
 
