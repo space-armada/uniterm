@@ -70,6 +70,7 @@
 | [UTERM-066](UTERM-066-verified-identity-for-exec-drivers.md) | An exec driver can be a verified package, and keep remembered approvals for its powers | accepted |
 | [UTERM-067](UTERM-067-stores-keep-what-they-cannot-read.md) | Every store keeps entries it cannot read, starting with the controller trust stores | accepted |
 | [UTERM-068](UTERM-068-browser-content-blocking.md) | Native browser ad blocking with custom rules, a starter list, and subscriptions | accepted |
+| [UTERM-069](UTERM-069-external-programs-run-as-controllers.md) | A program uniterm cannot trace to a tab runs as a controller with an external source, replacing Grant Access | draft |
 
 ## Dependency Graph
 
@@ -134,6 +135,7 @@ UTERM-065 ← UTERM-004, UTERM-015, UTERM-063
 UTERM-066 ← UTERM-004, UTERM-063
 UTERM-067 ← UTERM-004
 UTERM-068 ← UTERM-005, UTERM-053
+UTERM-069 ← UTERM-004, UTERM-015, UTERM-021, UTERM-036, UTERM-054, UTERM-063
 ```
 
 ## Not Yet Filed
