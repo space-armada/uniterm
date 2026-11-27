@@ -72,3 +72,4 @@
 | [20261127-chosen-open-check-misses-full-load-failures](20261127-chosen-open-check-misses-full-load-failures.md) | A file that passes the open check but fails its full load still replaces the pane's old file | proposed |
 | [20261127-image-load-messages-say-image-twice](20261127-image-load-messages-say-image-twice.md) | The image viewer's load messages say "image" twice | fixed |
 | [20261127-input-records-lost-to-log-quarantine](20261127-input-records-lost-to-log-quarantine.md) | The unified log can drop every input record of a UI test iteration, and the kept log shows no sign of it | open |
+| [20261127-terminal-test-exits-silently-under-make-select](20261127-terminal-test-exits-silently-under-make-select.md) | A terminal test ends the test process with no result under `make test-package-select` | open |
