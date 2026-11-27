@@ -36,3 +36,4 @@
 | UTERM-044 M2 | UTERM-044 M1 | Needs a pushed CI run of M1's shards |
 | UTERM-060 M4 | UTERM-060 M3 | Needs a pushed CI run of M1's kept-log upload |
 | UTERM-046 M3 | UTERM-046 M2, UTERM-046 M4 | Split from M1-M2 and M4: moves test sites onto M2's fixture handle and M4's guarded call |
+| UTERM-045 M3 | UTERM-045 M1 | Split from M1: the count gates M2. It advances only as pushed CI runs accumulate. A later run recounts |
