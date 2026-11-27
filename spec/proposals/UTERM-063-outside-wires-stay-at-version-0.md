@@ -303,8 +303,8 @@ agree on every message.
 - A protocol-mismatched exec hello is never admitted on its placeholder schema of 0.0
 - `uniterm/api-version` reports 0, and its doc says it stays at 0 until uniterm's maintainers declare it
 - A policy file written before the reset is set aside with a notice, and the next approval is saved. The file is told
-  apart by its format number, which this milestone moves when it lands after UTERM-067, so no pre-reset scope is ever
-  read as an edition
+  apart by its format number. This milestone moves the format from 1 to 2, and UTERM-067 M2 moves it again to 3, so no
+  pre-reset scope is ever read as an edition. Amended 2026-11-27; see Decision Log.
 - The bundled `uniterm` command, the Janet helper, every test fixture, and every example driver and controller in the
   repository speak version 0, `Tests/ExecTestSupport/Fixtures/driver.pl` and the controller package fixtures included.
   Tests that compute an older version as the current one minus 1 still work at 0
@@ -339,7 +339,7 @@ agree on every message.
 **As built:**
 
 - The policy file's format moved from 1 to 2 and a scope stores its edition. A file in an earlier format is set aside
-  with a notice. See the Decision Log entry for 2026-11-27 (run best guess).
+  with a notice. See the Decision Log entry for 2026-11-27 (run best guess) on the policy file format.
 - An approval covers a request only at the edition it was made at. An older edition reads and covers nothing, and an
   edition above the build's reads as newer. UTERM-067 M2 narrows the newer case to one entry. Not built here.
 - A hello at another exec protocol version decodes to its own case that carries no schema. The channel refuses it
@@ -399,9 +399,10 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   relaunch and never compares the numbers.
 - The identity is the command's code directory hash, in one message that follows the hello and comes before any
   declaration. The app tells the bundled command from a native controller by the peer's executable path. See the
-  Decision Log entry for 2026-11-27 (run best guess).
+  Decision Log entry for 2026-11-27 (run best guess) on the executable-path rule.
 - The app's own command is read when its identity is made at launch, in the background. The listener waits for that read
-  before it serves a connection. A command that appears on disk later is never adopted.
+  before it serves a connection. A command that appears on disk later is never adopted. The check fails closed. See the
+  Decision Log entry for 2026-11-27 (run best guess) on the fail-closed identity check.
 - The helper and the REPL print the refusal text they are sent. A REPL reads it as an attach refusal.
 
 ## Decision Log
@@ -483,9 +484,11 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
 - 2026-11-27 (run best guess): The policy file format moves from 1 to 2 in M1, for both `policy.json` and `files.json`,
   and a scope stores its edition in place of a permission version. A file in an earlier format is set aside with a
   notice that each controller or script file is approved again once, and the next approval is saved. A newer format
-  stays untouched. The text said before only that the reset tells a pre-reset file apart by the store's format number,
-  which the later of M1 and UTERM-067 M2 moves. The number 2 follows from M1 landing before UTERM-067 M2, which then
-  moves it to 3. Either order breaks the file twice, as UTERM-067's risk "Every approval is given again once" says.
+  stays untouched. The decision "The controller policy file at the reset" stands as the user wrote it. Its rule that
+  whichever of M1 and UTERM-067 M2 lands second moves the number does not forbid the first one from moving it too. M1
+  landed first and moves it to 2, and UTERM-067 M2 then moves it to 3. M1's check on the policy file said before: "The
+  file is told apart by its format number, which this milestone moves when it lands after UTERM-067, so no pre-reset
+  scope is ever read as an edition". It now says what M1 does. Either order breaks the file twice, as UTERM-067's risk "Every approval is given again once" says.
 - 2026-11-27: M1 built. Each impacted proposal that plans a version change was amended to land in place, and each
   carries its own Decision Log entry. UTERM-019 and UTERM-050 hold a decision the user made, so each keeps its text and
   carries a pending override that cites this proposal's user decisions of 2026-11-26. UTERM-028, UTERM-055, UTERM-062,

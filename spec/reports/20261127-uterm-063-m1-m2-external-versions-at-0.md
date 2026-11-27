@@ -170,3 +170,31 @@ this row's range. They are not this row's work.
   - A doubled doc comment line. Fixed.
   - The decision did not state what a copied command at another path gets. Fixed.
   - Hardening: the listener's command identity was optional on its public start. Now required.
+
+Committed as "Refuse stale programs and swapped commands by name at version 0".
+
+## Row review
+
+- adr-impact: no conflict. ADR-13 is amended by the row as the user approved. Two advisory notes:
+  - A permission kind's meaning may grow in place while a descriptor names only the kind. An older descriptor is then
+    read with the new meaning, against the letter of ADR-13 C1 if C1 reaches descriptor files. ADR-14 P10 still
+    protects the user, since an older edition covers nothing. UTERM-063 records this as "Leaves undone", and the user
+    chose it.
+  - Strict decoders that refuse unknown keys would break ADR-13 P2 once a wire is declared 1. That is a planned gap for
+    the declaration, not a conflict now.
+- adr-impact named two decisions with no ADR: the bundled command's identity by its path, and permission editions. Both
+  sit under ADR-13 P6 and ADR-14 P10, and the milestone checks judged them narrow mechanisms. Not recorded as ADR
+  candidates.
+- The reviewer found no correctness, security, or plan defect across the two milestones. It had four findings, all
+  fixed:
+  - M1's check on the policy file still said the format moves only when M1 lands second. The check now says M1 moves
+    it to 2 and UTERM-067 M2 to 3. The user's decision text stands as written, since its rule does not forbid the first
+    lander moving the number. The Decision Log entry now records the check's prior text.
+  - Both As built blocks pointed to "the 2026-11-27 entry", but three entries share that date. Each pointer now names
+    its entry, and M2's names the fail-closed entry too.
+  - The listener's doc named an internal test entry point. It now names both.
+  - `spec/bugs/20261122-native-controller-refused-after-scriptwire-change.md` still called the relaunch advice open.
+    It now records the advice as fixed by "Refuse stale programs and swapped commands by name at version 0". Open:
+    native controller compatibility, which UTERM-056 covers.
+- Noted, not a finding: a driver that put an `id` on its `error` message would now be refused by name. No doc shows
+  that shape.

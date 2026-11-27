@@ -1,6 +1,6 @@
 # A native controller is refused at hello after any ScriptWire change
 
-**Status:** proposed. [UTERM-063](../proposals/UTERM-063-outside-wires-stay-at-version-0.md) holds ScriptWire at version 0, so a change no longer refuses at hello, and its M2 fixes the refusal advice. [UTERM-056](../proposals/UTERM-056-native-controllers-across-scriptwire-versions.md), deferred, covers compatibility once ScriptWire is declared stable.
+**Status:** proposed. [UTERM-063](../proposals/UTERM-063-outside-wires-stay-at-version-0.md) holds ScriptWire at version 0, so a change no longer refuses at hello. The refusal advice is fixed. Open: native controller compatibility. [UTERM-056](../proposals/UTERM-056-native-controllers-across-scriptwire-versions.md), deferred, covers compatibility once ScriptWire is declared stable.
 **Found:** 2026-11-22, during the UTERM-054 review
 **Estimate:** large; three non-trivial design decisions. Whether native controllers are an outside wire under ADR-13, whether to add a version offer or keep exact match with an amended ADR, and whether to drop `native` entries. Each changes behavior users and controller authors can observe, and the first two change an ADR.
 
@@ -11,8 +11,9 @@ connection to the app. ScriptWire's hello accepts only the app's exact version. 
 ScriptWire's version, every native controller built against the earlier version is refused at hello. The reverse also
 fails: a native controller built against a newer version is refused by an older app.
 
-The user is told "The uniterm command and the app come from different versions. Relaunch uniterm." A relaunch cannot
-fix it, since the controller's executable carries its own copy of the wire.
+The user was told "The uniterm command and the app come from different versions. Relaunch uniterm." A relaunch cannot
+fix it, since the controller's executable carries its own copy of the wire. The commit "Refuse stale programs and swapped
+commands by name at version 0" fixed that advice. The refusal now names both versions and says to rebuild or update.
 
 ## Cause
 
@@ -21,7 +22,9 @@ fix it, since the controller's executable carries its own copy of the wire.
   adopts the native executable's own connection
 - `ScriptProtocol.validateHello` in `Packages/UnitermKit/Sources/ScriptWire/ScriptProtocol.swift:947`, which refuses any
   version but `ScriptProtocol.version`
-- `ScriptProtocol.mismatchText` at line 18 assumes both sides are the app and its bundled command
+- `ScriptProtocol.mismatchText` at line 18 assumed both sides are the app and its bundled command. The same commit
+  replaced it with `ScriptProtocol.versionMismatchText`, and the advice by program now lives in
+  `ScriptRetiredNames.advice`
 
 ADR-13 lets ScriptWire refuse every version but its own because "its two sides always ship together". A native
 controller entry is a ScriptWire side that ships outside the bundle, so the premise does not hold for it.
@@ -34,7 +37,11 @@ the message tells the user to relaunch.
 
 ## Fix
 
-This needs a design call, and a change to ADR-13 is the user's to make:
+Partly fixed. The commit "Refuse stale programs and swapped commands by name at version 0" corrected the refusal advice.
+Version 0 stays put through breaking changes, so a ScriptWire change no longer refuses at hello. Still open is native
+controller compatibility, which UTERM-056 covers once ScriptWire is declared stable.
+
+The remaining part needs a design call, and a change to ADR-13 is the user's to make:
 
 - Give ScriptWire a version offer for native controllers, as UTERM-028 does for the exec wire, and treat native
   controllers as an outside wire under ADR-13.

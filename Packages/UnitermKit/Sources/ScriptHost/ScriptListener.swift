@@ -67,7 +67,8 @@ public final class ScriptListener: @unchecked Sendable {
   ///
   /// `commandIdentity` is the identity of the app's own command. The command's code identity
   /// message is checked against what the app kept at launch. It has no default, so a caller cannot
-  /// leave the check out by accident. A test that wants no check calls `startForTests`.
+  /// leave the check out by accident. A test that wants no check calls
+  /// `startWithoutCommandIdentityForTests`, or `startForTests` from inside this module.
   public static func start(
     directory: URL, commandIdentity: any ControllerHelperIdentity
   ) throws -> ScriptListener {
