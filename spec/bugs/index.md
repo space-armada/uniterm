@@ -71,3 +71,4 @@
 | [20261127-exec-driver-cannot-name-its-pane-for-a-first-layout](20261127-exec-driver-cannot-name-its-pane-for-a-first-layout.md) | An exec driver cannot make its first layout, since nothing tells it its pane's number | proposed |
 | [20261127-chosen-open-check-misses-full-load-failures](20261127-chosen-open-check-misses-full-load-failures.md) | A file that passes the open check but fails its full load still replaces the pane's old file | proposed |
 | [20261127-image-load-messages-say-image-twice](20261127-image-load-messages-say-image-twice.md) | The image viewer's load messages say "image" twice | fixed |
+| [20261127-input-records-lost-to-log-quarantine](20261127-input-records-lost-to-log-quarantine.md) | The unified log can drop every input record of a UI test iteration, and the kept log shows no sign of it | open |
