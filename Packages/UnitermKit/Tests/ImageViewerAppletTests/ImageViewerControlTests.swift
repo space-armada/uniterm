@@ -941,6 +941,9 @@ final class ImageViewerControlTests: XCTestCase {
 
   /// Catches a partial refusal that fails a zoom which worked. The budget takes some tiles and
   /// refuses the rest, so the handle ends `done` and the pane keeps the zoom.
+  ///
+  /// The pane asks for tiles one at a time, and the handle ends once it shows detail. The refusals
+  /// come after that, so the test waits for one before it checks that the zoom held.
   func testAZoomWhoseSomeTilesTheBudgetRefusesStillEndsDone() async throws {
     let (applet, _) = panes.make(bitmapBudget: ImageBitmapBudget(limit: 1, floor: 1200 * 800 * 4))
 
@@ -952,8 +955,12 @@ final class ImageViewerControlTests: XCTestCase {
 
     XCTAssertEqual(reply["state"], .string("done"))
     XCTAssertEqual(reply["fit"], .bool(false))
-    XCTAssertFalse(applet.tiles.entries.isEmpty)
-    XCTAssertFalse(applet.tileDenied.isEmpty, "the budget refused some tiles")
+
+    let refused = await Harness.eventually { !applet.tileDenied.isEmpty }
+
+    XCTAssertTrue(refused, "the budget refused no tile")
+    XCTAssertFalse(applet.tiles.entries.isEmpty, "the refusal dropped the tiles the pane kept")
+    XCTAssertTrue(applet.content.viewport?.isFit == false, "the refusal undid the zoom")
   }
 
   /// Catches a zoom that tells a caller whether a linked image outside its scope decodes. The user
