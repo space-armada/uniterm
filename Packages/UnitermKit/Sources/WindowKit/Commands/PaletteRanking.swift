@@ -36,6 +36,16 @@ struct PaletteEntry: Equatable, Sendable {
       case .filter, .notice: ""
       }
     }
+
+    /// The word VoiceOver reads for the kind. Filter and notice rows show no kind word, but a
+    /// value without one would read as ", enabled".
+    var spokenLabel: String {
+      switch self {
+      case .filter: "Filter"
+      case .notice: "Notice"
+      case .command, .tab, .filterKeyword: label
+      }
+    }
   }
 
   var id: PaletteEntryID
@@ -69,6 +79,9 @@ struct PaletteEntry: Equatable, Sendable {
   /// The word on the row's right: the applet's name for a tab or an applet's command, or the kind
   /// when there is none.
   var label: String { appletName ?? kind.label }
+
+  /// The kind VoiceOver reads in the row's value. It is the label, except where the row shows none.
+  var spokenLabel: String { appletName ?? kind.spokenLabel }
 
   /// Whether the highlight can rest on the row. A keyword hint shows but never takes it, so
   /// Return keeps running the best result while Tab completes the hint.

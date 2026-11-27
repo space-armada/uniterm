@@ -1,6 +1,7 @@
 # VoiceOver reads a palette filter row's kind as empty
 
-**Status:** open. Confirmed by reading the code, not with VoiceOver.
+**Status:** fixed 2026-11-26
+**Fixed:** 2026-11-26
 
 **Estimate:** small; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
 
@@ -35,3 +36,10 @@ enabled state, with no empty kind before the comma.
 
 The fix touches `CommandPaletteView.swift` (`configure`), likely `Commands/PaletteRanking.swift` (`Kind.label`), and a
 new test under `Packages/UnitermKit/Tests/WindowKitTests`.
+
+## Fix note
+
+Filter and notice rows now read "Filter" and "Notice" as their kind in the accessibility value. The words are spoken
+only. The row's visible kind column is unchanged, since its label feeds that column too. Files:
+`Commands/PaletteRanking.swift` and `CommandPaletteView.swift`. Regression test:
+`CommandPaletteTests.testFilterAndNoticeRowsReadTheirKind`.

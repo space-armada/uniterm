@@ -57,6 +57,12 @@ final class CommandPaletteTests: XCTestCase {
     palette.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
   }
 
+  private func rowValues() -> [String?] {
+    palette.entries.indices.map { row in
+      palette.tableView(NSTableView(), viewFor: nil, row: row)?.accessibilityValue() as? String
+    }
+  }
+
   private func entry(_ id: CommandID) -> PaletteEntry? {
     palette.entries.first { $0.id == .command(id) }
   }
@@ -407,6 +413,21 @@ final class CommandPaletteTests: XCTestCase {
     XCTAssertEqual(palette.filter, .commands, "the new chip did not replace the old one")
     XCTAssertTrue(controller.isPaletteVisible)
     XCTAssertTrue(palette.entries.allSatisfy { $0.kind == .command })
+  }
+
+  /// Catches a filter or notice row that VoiceOver reads with an empty kind, as ", enabled". Each
+  /// row's value names its kind, as every other row's does.
+  func testFilterAndNoticeRowsReadTheirKind() {
+    controller.showCommandPalette()
+    type("applet:fa")
+
+    XCTAssertEqual(palette.entries.map(\.kind), [.filter])
+    XCTAssertEqual(rowValues(), ["Filter, enabled"])
+
+    type("applet:zzz")
+
+    XCTAssertEqual(palette.entries.map(\.kind), [.notice])
+    XCTAssertEqual(rowValues(), ["Notice, enabled"])
   }
 
   /// Catches a Backspace that removes the chip while there is text to delete, or one that never

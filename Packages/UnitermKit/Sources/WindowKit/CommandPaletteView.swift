@@ -798,7 +798,7 @@ private final class PaletteRowView: NSView {
     title.attributedStringValue = text
 
     setAccessibilityLabel(entry.title)
-    setAccessibilityValue("\(entry.label), \(entry.isEnabled ? "enabled" : "disabled")")
+    setAccessibilityValue("\(entry.spokenLabel), \(entry.isEnabled ? "enabled" : "disabled")")
     setAccessibilityHelp(entry.detail)
     setAccessibilitySelected(selected)
   }
