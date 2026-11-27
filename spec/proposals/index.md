@@ -56,12 +56,21 @@
 | [UTERM-052](UTERM-052-browser-description-never-encodes-tabs-on-the-main-thread.md) | The browser's description never encodes every tab on the main thread | accepted |
 | [UTERM-053](UTERM-053-browser-tab-work-never-grows-with-the-tab-count-on-the-main-thread.md) | The browser's per-tab work never grows with the tab count on the main thread | accepted |
 | [UTERM-054](UTERM-054-screenshot-a-pane-or-tab.md) | Copy or save a screenshot of the current pane or tab, for the user and for programs | accepted |
-| [UTERM-055](UTERM-055-exec-drivers-capture-panes.md) | External exec drivers capture panes through a new exec protocol version | accepted |
-| [UTERM-056](UTERM-056-native-controllers-across-scriptwire-versions.md) | What happens to a native controller when ScriptWire's version changes | accepted |
+| [UTERM-055](UTERM-055-exec-drivers-capture-panes.md) | External exec drivers capture panes through new exec frames | accepted |
+| [UTERM-056](UTERM-056-native-controllers-across-scriptwire-versions.md) | What happens to a native controller when ScriptWire's version changes | deferred |
 | [UTERM-057](UTERM-057-package-read-by-invoker.md) | Who reads a controller package's files when `uniterm run` starts it | accepted |
 | [UTERM-058](UTERM-058-palette-tab-work-on-the-main-thread.md) | The palette lists and filters tabs without main-thread work that grows with the tab count | accepted |
 | [UTERM-059](UTERM-059-terminal-change-check-never-encodes-every-tab.md) | The terminal's change check never encodes every tab | accepted |
 | [UTERM-060](UTERM-060-keep-the-evidence-of-where-ui-test-input-went.md) | A failed UI run keeps XCTest's per-event confirmations and which app was frontmost, and a debug build records the input it receives | accepted |
+| [UTERM-061](UTERM-061-palette-commands-run-in-the-nearest-pane-of-their-type.md) | A palette command of another applet type runs in the nearest pane of its type | accepted |
+| [UTERM-062](UTERM-062-viewer-tabs.md) | The data, text, image, and map viewers hold several files as tabs | accepted |
+| [UTERM-063](UTERM-063-outside-wires-stay-at-version-0.md) | Every external version stays at 0 until uniterm's maintainers declare it stable | accepted |
+| [UTERM-064](UTERM-064-programs-name-what-they-act-on.md) | Every program command names its target, and opens answer with the identity of what they made | draft |
+| [UTERM-065](UTERM-065-exec-drivers-read-paths-in-a-scope.md) | An exec driver asks for a read scope, approved for its run, and names paths in it | accepted |
+| [UTERM-066](UTERM-066-verified-identity-for-exec-drivers.md) | An exec driver can be a verified package, and keep remembered approvals for its powers | accepted |
+| [UTERM-067](UTERM-067-stores-keep-what-they-cannot-read.md) | Every store keeps entries it cannot read, starting with the controller trust stores | accepted |
+| [UTERM-068](UTERM-068-browser-content-blocking.md) | Native browser ad blocking with custom rules, a starter list, and subscriptions | accepted |
+| [UTERM-069](UTERM-069-external-programs-run-as-controllers.md) | A program uniterm cannot trace to a tab runs as a controller with an external source, replacing Grant Access | accepted |
 
 ## Dependency Graph
 
@@ -71,7 +80,7 @@ UTERM-002 ← UTERM-001
 UTERM-003 ← UTERM-001
 UTERM-004 ← UTERM-001, UTERM-003
 UTERM-005 ← UTERM-001
-UTERM-006 ← UTERM-001
+UTERM-006 ← UTERM-001, UTERM-065
 UTERM-007 ← UTERM-001, UTERM-003, UTERM-004, UTERM-006, UTERM-013
 UTERM-008 ← UTERM-001
 UTERM-009 ← UTERM-001
@@ -119,6 +128,14 @@ UTERM-056 ← UTERM-004, UTERM-021
 UTERM-057 ← UTERM-004, UTERM-015, UTERM-034
 UTERM-058 ← UTERM-002, UTERM-053
 UTERM-059 ← UTERM-052
+UTERM-061
+UTERM-062 ← UTERM-018, UTERM-063, UTERM-064
+UTERM-064 ← UTERM-018, UTERM-063
+UTERM-065 ← UTERM-004, UTERM-015, UTERM-063
+UTERM-066 ← UTERM-004, UTERM-063
+UTERM-067 ← UTERM-004
+UTERM-068 ← UTERM-005, UTERM-053
+UTERM-069 ← UTERM-004, UTERM-015, UTERM-021, UTERM-054, UTERM-063, UTERM-067
 ```
 
 ## Not Yet Filed

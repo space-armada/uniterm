@@ -30,6 +30,16 @@ public struct ReadScope: Hashable, Sendable {
           "a read scope must list 1 to \(Self.maxDirectories) directories")
     }
 
+    try self.init(approved: directories)
+  }
+
+  /// A scope an approval holds, with the same checks except the count. Approvals add up through
+  /// `union`, so a stored one may list more directories than one descriptor may declare.
+  public init(approved directories: [String]) throws(ReadScopeError) {
+    guard !directories.isEmpty else {
+      throw ReadScopeError(description: "a read scope must list at least one directory")
+    }
+
     for directory in directories where PathComparison.plainComponents(of: directory) == nil {
       throw ReadScopeError(
         description:

@@ -9,7 +9,7 @@ import os
 /// budget therefore bounds the app at its limit plus one floor for each pane beyond it.
 ///
 /// A memory-pressure warning ends every load running at that moment. A pane opened afterward
-/// loads normally.
+/// loads normally, and a pane already open can still sort.
 public final class TableBudget: Sendable {
   public enum Reservation: Sendable, Equatable {
     case granted
@@ -77,6 +77,18 @@ public final class TableBudget: Sendable {
     }
   }
 
+  fileprivate func reserveForWork(_ bytes: Int, lease: Int) -> Reservation {
+    state.withLock { state in
+      guard let held = state.leases[lease] else { return .released }
+
+      guard state.used + bytes <= limit || held + bytes <= floor else { return .overBudget }
+
+      state.leases[lease] = held + bytes
+      state.used += bytes
+      return .granted
+    }
+  }
+
   fileprivate func release(lease: Int) {
     state.withLock { state in
       state.used -= state.leases.removeValue(forKey: lease) ?? 0
@@ -111,6 +123,13 @@ public final class TableBudget: Sendable {
 
     public func reserve(_ bytes: Int) -> Reservation {
       budget.reserve(bytes, lease: id, epoch: epoch)
+    }
+
+    /// Reserves bytes for work on rows already loaded, such as a sort's keys. A memory-pressure
+    /// warning ends loads and nothing else, so this ignores it. The limit and floor still apply, and
+    /// a released lease is still refused.
+    public func reserveForWork(_ bytes: Int) -> Reservation {
+      budget.reserveForWork(bytes, lease: id)
     }
 
     /// Gives bytes back that were reserved for work that is done, such as a sort's keys.

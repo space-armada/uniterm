@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-17
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -10,7 +10,8 @@
 - UTERM-002's command registry and UTERM-013: the viewer's zoom and navigation commands are registry entries it
   declares
 - UTERM-003 M2 and UTERM-004 M2 and M3: M4's control, and its exec zoom and events
-- A driver path-read power, which no proposal defines yet: M5's exec `show` and stepping
+- UTERM-065: the driver path-read power M5's exec `show` and stepping use
+- UTERM-062 M4: the image viewer's tabs, which M5's driver commands name
 - UTERM-015: app-level opening, and the path-reading power M4's `show` uses
 
 ## Impacts
@@ -628,10 +629,12 @@ Amended 2026-11-17; see Decision Log.
 
 **Status:** NOT STARTED
 
-Waits on a driver path-read power that no proposal defines yet. It is in `ideas.md`, and it needs a proposal and an ADR
-decision before this milestone can start.
+Waits on UTERM-065, which defines the driver path-read power, and on UTERM-062 M4, which gives the image viewer
+tabs. Amended 2026-11-26; see Decision Log.
 
 - An exec driver can `show` a file or a folder in its scope, and step through it
+- A driver's `show`, stepping, and `zoom` name the tab they act on, per UTERM-062 "What a program addresses in a viewer
+  pane", and a command that names no tab is refused
 - A driver's `show` path outside its scope is refused with one error, whether it is missing, not an image, or denied
 - A driver's `shown` carries the path, index, count, and partial flag when its scope holds the source and the image
 - A pane whose source is outside the driver's scope sends that driver no path, index, or count, and refuses its stepping
@@ -851,6 +854,12 @@ decision before this milestone can start.
   UTERM-006 M4.
 - 2026-11-17: ADR candidate (hard to reverse): a driver never receives an event or an event field newer than the
   schema version it named in its hello. Undecided. Found in UTERM-006 M4.
+- 2026-11-26: Filed UTERM-065, exec drivers read paths in a scope, for the driver path-read power M5 waits on. The
+  Dependencies line and M5's note now name it. They said before that no proposal defines the power yet.
+- 2026-11-26: Amended M5 to name a tab, as UTERM-062's risk on M5 asks before M5 is scheduled. M5's driver `show`,
+  stepping, and `zoom` name their tab, and M5 waits on UTERM-062 M4. The note said before: "UTERM-065 must be accepted,
+  and its M1 and M2 built, before this milestone can start." The user placed M5 after UTERM-062.
+- 2026-11-26: Scheduled as UTERM-006 M5 in queue.md.
 
 ## References
 

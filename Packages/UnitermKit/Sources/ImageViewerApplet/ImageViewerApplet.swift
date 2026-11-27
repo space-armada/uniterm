@@ -949,10 +949,24 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     frames[index].map { $0.zoomLevel == zoomLevel } ?? false
   }
 
+  /// The frames a zoom needs: the window ahead of the frame on screen, or that one frame alone in a
+  /// detached pane, which asks for nothing more.
+  private var framesWanted: [Int] {
+    isDetached ? [currentFrame] : plan.window(from: currentFrame, ahead: Self.framesAhead)
+  }
+
+  /// True when every frame the zoom needs is held at its level.
+  var zoomedFramesHeld: Bool {
+    framesWanted.allSatisfy(holdsCurrentFrame)
+  }
+
   /// Asks for the first frame of the window that is not held at the current size. Frame requests
-  /// yield to a still. A frame already in flight or waiting is not asked for twice.
+  /// yield to a still. A frame already in flight or waiting is not asked for twice. A detached pane
+  /// asks only for the one frame a program's zoom waits on.
   func fillWindow() {
-    guard let info, !isDetached, !framesFrozen else { return }
+    guard let info, !framesFrozen, !isDetached || (zoomLevel != nil && awaitsProgramZoom) else {
+      return
+    }
 
     let side = frameSide(for: info)
 
@@ -962,8 +976,7 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
 
     let outstanding = client.outstandingFrames
 
-    for wanted in plan.window(from: currentFrame, ahead: Self.framesAhead)
-    where !holdsCurrentFrame(wanted) {
+    for wanted in framesWanted where !holdsCurrentFrame(wanted) {
       if outstanding.contains(where: { $0.frame == wanted && $0.maxPixel == side }) { continue }
 
       client.decode(maxPixel: side, frame: wanted, kind: .frame)
@@ -1003,18 +1016,17 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     let frame = Frame(image: image, bytes: bytes, zoomLevel: zoomLevel)
     frames[index] = frame
 
-    if zoomLevel != nil,
-      plan.window(from: currentFrame, ahead: Self.framesAhead).allSatisfy(holdsCurrentFrame)
-    {
-      lastGood = content.viewport
-    }
+    if zoomLevel != nil, zoomedFramesHeld { lastGood = content.viewport }
 
     if waitingFor == index, playing != nil {
       showFrame(index, frame)
       return
     }
 
-    if index == currentFrame { content.swap(image: image, zoomed: frame.zoomLevel != nil) }
+    // A detached pane decodes a zoomed frame only to answer a program's zoom, and never draws it.
+    if index == currentFrame, !isDetached || frame.zoomLevel == nil {
+      content.swap(image: image, zoomed: frame.zoomLevel != nil)
+    }
 
     fillWindow()
   }

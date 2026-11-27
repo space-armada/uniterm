@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-10-31
-**Updated:** 2026-11-23
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -345,6 +345,8 @@ lets untrusted traffic create unsolicited dialogs. Local enablement separates pr
 
 ### Exec launch context
 
+Superseded in part by UTERM-066; see Decision Log.
+
 Original question: how exec argv, working directory, and environment are supplied without hidden inheritance from
 uniterm or a neighbor pane.
 
@@ -384,6 +386,8 @@ Rationale: focus-based selection changes with unrelated user activity. Explicit 
 convenience unavailable. Filtering before ranking prevents proximity from becoming authority.
 
 ### Saved layouts
+
+Superseded in part by UTERM-066; see Decision Log.
 
 Original questions:
 
@@ -458,6 +462,10 @@ trust in every script run by a shared interpreter. Amended 2026-11-02; replaces 
 
 Superseded in part by UTERM-032; see Decision Log.
 
+Superseded in part by UTERM-066; see Decision Log.
+
+Superseded in part by UTERM-067; see Decision Log.
+
 Original question: integrate startup declarations and remembered approvals with clipboard attribution, host-launch
 scopes, control enablement, REPL capabilities, revocation, and inert restore without repeated modal interruptions.
 
@@ -524,6 +532,8 @@ prompts despite unchanged powers. Identity trust alone must never authorize unde
 API adds an attributable path; anonymous escape sequences cannot gain controller-specific persistent trust.
 
 ### Verified artifact and run binding
+
+Superseded in part by UTERM-066; see Decision Log.
 
 Original question: bind approval to verified packaged code and dependencies, without loading different bytes later or
 mistaking an interpreter's identity for its script.
@@ -1646,6 +1656,17 @@ Superseded in part by UTERM-036; see Decision Log.
 - 2026-11-23: Superseded in part by UTERM-056. Once it lands, a ScriptWire hello no longer refuses every version but the
   app's. The app refuses an older command at its begin, with the relaunch text, and a program that is not the command
   keeps running on version 14 or later.
+- 2026-11-26: Superseded in part by UTERM-066. An exec declaration may name a verified driver package, which a layout
+  saves and an envelope at version 4 holds. A controller's `host-launch` grant never covers a package's launch. A
+  driver package names one role, may use a path component that starts with `_`, and may list folders to skip. The
+  policy file gains format 2, with a kind on every entry, written when an entry is not a controller package entry. A
+  verified script run by an interpreter the user chose may keep remembered approvals, under ADR-14 C2, though other
+  interpreters had no equally verifiable loader. For such a script, ambient module paths and startup hooks are
+  outside what uniterm verifies, and the user is told so. A verified driver's run stays bound to its channel and
+  snapshot across exec, where a controller's binding ends at exec.
+- 2026-11-26: Superseded in part by UTERM-067. The policy file keeps every entry it can read when it meets one it
+  cannot, keeps that entry unchanged, and grants nothing from it. A file is no longer moved aside or left untouched
+  whole over one entry. Old-format files are set aside once, and the file has no count limit.
 
 ## References
 

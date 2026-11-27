@@ -314,16 +314,15 @@ Version skew:
   UTERM-056 has landed. The added `:window` field is a new ScriptWire version, per ADR-13 P1, and a connection on an older
   version does not get it. Amended 2026-11-23; see Decision Log.
 - An older build refuses a declared file that names either kind, before any effect.
-- A file store holding an approval of either kind reads as newer on an older build, as UTERM-024 "Stores that older
-  builds read" accepts. `policy.json` holds neither kind, since packages cannot declare them, so package approvals keep
-  working.
+- An approval of either kind is kept unread by a build that does not know it, and every other approval keeps working,
+  as UTERM-024 "Stores that older builds read" states under UTERM-067. Amended 2026-11-26; see Decision Log.
 - The layout envelope does not change. A notes window's group, which has no source pane, round-trips through the
   current envelope and every older one that has groups.
 
 Rationale: the kind names follow `clipboard-read` and `host-launch`, and the calls follow `open-pane` and
 `read-clipboard`. A full-screen option would give a script a knob over a choice the host makes, since a script cannot
-see the Spaces setting or the displays, so the reply carries the outcome instead. Refusing the kinds in packages keeps
-`policy.json` readable on older builds and costs no caller, since the presenter is a declared file. One `present` call
+see the Spaces setting or the displays, so the reply carries the outcome instead. Refusing the kinds in packages costs
+no caller, since the presenter is a declared file. One `present` call
 would merge two powers the settled design keeps apart. Folding placement into `open-window` would leave no way to
 place the source window without opening a window. Converged in 1 pass.
 
@@ -345,10 +344,10 @@ None.
   host that watched and hid the window would leave a group nobody can reach.
 - **Notes text leaks onto a slide** — likelihood: low, impact: medium. A `-->` inside the notes ends the comment, and the
   rest renders on the slide. Mitigation: the presenter refuses such a deck at start and names the line.
-- **An older build stops honoring every file approval** — likelihood: high on a development machine, low elsewhere,
-  impact: medium. After an approval of any of the three new kinds is saved, a build without them reads `files.json` and
-  UTERM-032's input-folder store as newer. Accepted, as UTERM-024 accepts it for its own kind: it fails closed with no
-  data lost, and `policy.json` holds none of them.
+- **An older build stops honoring approvals of the new kinds** — likelihood: high on a development machine, low
+  elsewhere, impact: low. A build with UTERM-067's reader that does not know them keeps those approvals unread, and
+  every other approval keeps working. Accepted, as UTERM-024 accepts it for its own kind: it fails closed. Amended
+  2026-11-26; see Decision Log.
 - **New published contracts** — likelihood: high, impact: medium. The kinds `:window-open`, `:window-placement`, and
   `:pane-zoom`, the calls `open-window`, `place-window`, `zoom-pane`, and `unzoom-pane` and their replies, the zoom
   report in `list-windows`, the opened-window record in `list-windows`, the
@@ -655,6 +654,12 @@ Amended 2026-11-20; see Decision Log.
 - 2026-11-21: Scheduled as UTERM-026 M1-M4 in queue.md.
 - 2026-11-23: From UTERM-056's acceptance. A skew line said "The helper and the app match exactly at ScriptWire's hello,
   so a mismatched pair runs no call", and had no version for the added `:window` field.
+- 2026-11-26: Amended the skew bullet on file stores, the kind decision's rationale, and the older-build risk for
+  UTERM-067, which puts every approval in one store and keeps an entry a build cannot read. The bullet said before: "A
+  file store holding an approval of either kind reads as newer on an older build, as UTERM-024 'Stores that older
+  builds read' accepts. `policy.json` holds neither kind, since packages cannot declare them, so package approvals keep
+  working." The rationale said refusing the kinds in packages "keeps `policy.json` readable on older builds". The risk
+  was "An older build stops honoring every file approval", rated medium impact, and is now rated low.
 
 ## References
 

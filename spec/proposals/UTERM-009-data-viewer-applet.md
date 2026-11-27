@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-10-31
-**Updated:** 2026-11-06
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -43,7 +43,7 @@ Decision: files open from inside the pane now. Pipe and script input is deferred
   the pane. A drop accepts file URLs only.
 - A pane shows one file. Opening another file replaces it: the old load is cancelled, and the new file starts with no
   sort or filter. The open panel selects one file. A drop of several files is refused with a message asking for one
-  file, and the pane keeps what it showed.
+  file, and the pane keeps what it showed. Superseded in part by UTERM-062; see Decision Log.
 - A drawer of open documents beside the table, as Preview has, is an idea for later. This proposal does not commit to
   it. Building it needs its own proposal, since it changes what a pane and its description hold.
 - All loading goes through one internal entry point that takes a source. A source is a file URL, or a nested JSON value
@@ -137,8 +137,9 @@ Decision: rows stream off the main thread into memory, under one memory budget.
   the load.
 - Rows live in a compact in-memory store. The loaded rows are a snapshot, so a later change to the file cannot corrupt
   the view.
-- One memory budget covers every data viewer pane together. Each pane keeps a floor of 32 MiB even when the budget is
-  spent, so the app holds at most the budget plus one floor for each pane beyond it. A memory-pressure warning stops
+- One memory budget covers every data viewer pane together. Superseded in part by UTERM-062; see Decision Log. Each
+  pane keeps a floor of 32 MiB even when the budget is spent, so the app holds at most the budget plus one floor for
+  each pane beyond it. A memory-pressure warning stops
   loading early. When loading stops, the pane says it shows the first N rows of the file, or of the sheet for a
   workbook. Amended 2026-11-05; see Decision Log.
 - Sorting, filtering, and search run off the main thread on an immutable snapshot. A newer request cancels an older
@@ -331,6 +332,12 @@ None.
   The UI suite drives the launcher, the open panel, Cmd-O routing, and restore. Things to look at in the visual check:
   the table's layout, the status segments, and the File menu. The menu shows two items titled "Open..." when a data
   viewer has focus, the window's routed Open and the pane-local one, and the pane-local one sits in its own section.
+- On 2026-11-26 the user ran the visual check in the running app, with synthetic files. The table, the status segments,
+  sorting, and the filter worked. The review asked for these changes, each its own commit: "Keep selected data viewer
+  cells readable on the light palette", "Size data viewer columns to their content", "Measure data viewer columns in
+  tabular digits", "Right-align numeric columns in the data viewer", "Show a long data viewer cell's whole value in a
+  popover", and "Name the open file and offer Open beside the data viewer's filter". The palette's identical "Open..."
+  rows became UTERM-061, and tabs for several files became UTERM-062.
 
 ### M2: JSON
 
@@ -380,6 +387,10 @@ None.
   one. Each open nested popover also takes one more 32 MiB floor beyond the limit, as "Large files" allows.
 - The visual check is left to the user. Things to look at: the nested-cell marker and color, the popover's size and
   position over a cell, `null` in a muted color, and a wide table's `(more keys)` column.
+- On 2026-11-26 the user ran the visual check. The nested cells, the popover, `null`, and missing keys looked right.
+  Opening a 1,100-key file froze the main thread, fixed in "Keep the main thread free while a wide data file opens",
+  which also shows the file opening. Scrolling to the far edge of a wide table was slow, answered by "Add jump-to-edge
+  arrows to long data viewer tables".
 
 ### M3: Search
 
@@ -416,6 +427,9 @@ None.
 - A match is a tinted cell, and the current one is tinted more. The UI tests check the count line, not the colors. The
   visual check is left to the user. Things to look at: the two tints on both palettes, the find bar under the filter,
   and the scroll to the current match in a wide table.
+- On 2026-11-26 the user ran the visual check. Find worked, but the filter field and the find bar looked alike, so the
+  filter read as a find that highlighted nothing. The user picked a mockup that sets them apart, built in "Set the data
+  viewer's filter and find apart".
 - No change to table parsing, so `make fuzz` did not run.
 
 ### M4: Spreadsheets
@@ -507,6 +521,14 @@ None.
 - The visual check is left to the user, and the UI tests have not run. The coordinator's `make test-app` runs them. The UI
   tests open a workbook through Cmd-O, switch sheets through the picker, and restore a stored sheet. Things to look at:
   the picker's place above the filter, "not computed" cells, and a workbook with a date column.
+- On 2026-11-26 the user ran the visual check on a three-sheet workbook and a 1904-date workbook. The sheet picker,
+  "not computed" cells, cached formula results, and every date, serial 60 and the 1904 shift included, looked right.
+- On 2026-11-26, after the review's fixes, `DataViewerUITests` and `CommandPaletteUITests` ran. The first run hung both
+  open-panel tests past their minute and beachballed the app. The filter count was listed under a parent it did not
+  name, and the UI tests' accessibility snapshot looped on it. "Hang the data viewer's filter count from the search
+  field's cell" fixed it. The rerun passed all 27 tests in their original order, with no restarts and no crash reports.
+  One run in between failed the Cmd-Shift-G step of `testCommandFHighlightsMatchesAndCommandGStepsBetweenThem` once. The
+  test passed three times alone and in the full rerun, so the cause stays unknown.
 
 ## Decision Log
 
@@ -699,6 +721,10 @@ None.
   history-only delivery, and presents the bounded rest on reattach. UTERM-017 also records one history entry when a
   load failure or a memory stop leaves the pane empty. M1 of UTERM-017 shipped that entry and the history-only
   delivery, and M3 changes the detached behavior.
+- 2026-11-26: Superseded in part by UTERM-062, which is accepted. A data viewer pane holds several files as tabs.
+  Opening a file adds a tab instead of replacing the pane's file, and a drop of several files adds one tab per file
+  instead of being refused. The memory budget applies to each file, not to every pane together. M1's check that a drop
+  of several files is refused no longer describes the applet once UTERM-062 M2 lands.
 
 ## References
 

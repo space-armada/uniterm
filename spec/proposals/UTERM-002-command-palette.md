@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-10-31
-**Updated:** 2026-11-02
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -621,3 +621,5 @@ Settings switch, a remap, and a status bar click. A split pane under the overlay
 ## References
 
 - Original write-up: `~/projects/private_specs/uniterm/spec/research/original-writeup.md`
+- [UTERM-061](UTERM-061-palette-commands-run-in-the-nearest-pane-of-their-type.md): how this proposal's targeting
+  rules read, including the scope of the gone-pane rule and the origin of dimmed unavailable commands

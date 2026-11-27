@@ -252,7 +252,7 @@ public enum ControllerPolicyFile {
       do {
         permission = .pathRead(
           try ReadScope(
-            directories: try fields["directories"]!.array("a read scope's directories").map {
+            approved: try fields["directories"]!.array("a read scope's directories").map {
               try $0.string("a read scope's directory")
             }))
       } catch let error as ReadScopeError {

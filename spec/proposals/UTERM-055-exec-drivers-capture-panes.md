@@ -2,12 +2,14 @@
 
 **Status:** accepted
 **Created:** 2026-11-22
-**Updated:** 2026-11-23
+**Updated:** 2026-11-26
 
 ## Dependencies
 
 - UTERM-054, for the host capture, its tab scope, its reason kinds, and the pane capture power
-- UTERM-028, for the exec version negotiation that offers the new version
+- UTERM-028, for the per-run grant a driver's powers use, a driver's own applet commands after a revoke, and the drop
+  of queued frames on revocation
+- UTERM-063: the exec wire is at version 0, so the capture frames land in place after UTERM-063 M2
 - UTERM-019, for the base64 field shape its exec byte results use, and M3 for the read hold M1 reuses
 
 ## Impacts
@@ -17,20 +19,19 @@
 - UTERM-019 — "Full-page snapshot", the exec skew statement, and its result chunks reaching drivers as base64. Exec
   drivers' browser snapshot moves here. "The frames' fields" binds the `data` and `offset` keys of UTERM-019's exec
   read-result chunks, and UTERM-019 M3 gains a check for them.
-- UTERM-028 — "Version skew". This proposal adds a version to the hello's offer after UTERM-028's. UTERM-028 M1's
-  version 5 documentation says a driver picks a version it knows from the list and ignores the others, and its M1
-  gains a fixture for an unknown value.
+- UTERM-028 — its command frames and this proposal's capture frames both land in place at exec version 0. Neither
+  adds to the hello.
 
 ## Summary
 
 An external exec driver captures a pane or tab, and the browser's full page, through the host capture UTERM-054 adds
-for the user and for scripts. The capture rides a new exec protocol version that the app offers through UTERM-028's
-version negotiation. The PNG bytes read back in base64 chunks that fit the exec frame cap.
+for the user and for scripts. The capture frames land in place at exec protocol version 0, under
+UTERM-063. The PNG bytes read back in base64 chunks that fit the exec frame cap.
 
 ## Motivation
 
-UTERM-054 gives the user and Janet scripts a pane capture, but external exec drivers cannot reach it. Exec frames have
-one fixed meaning per protocol version, and an unknown frame type ends the driver as malformed. ScriptWire calls do not
+UTERM-054 gives the user and Janet scripts a pane capture, but external exec drivers cannot reach it. An exec frame
+type the app does not know ends the driver as malformed. ScriptWire calls do not
 reach exec drivers.
 
 UTERM-019 planned a browser snapshot for exec drivers that command browser members of groups they own. UTERM-054 moves
@@ -38,8 +39,8 @@ that snapshot into its host capture, so exec drivers would lose it. The user cho
 proposal instead.
 
 The map viewer and the image viewer accept exec drivers today, and UTERM-054 makes both capture-capable. So a driver
-capturing its own pane is a live case, and deployed drivers may exist. The version this proposal adds is a published
-contract once it ships, under ADR-13.
+capturing its own pane is a live case. The frames this proposal adds become a published contract once the exec wire
+is declared stable.
 
 ## Design Decisions (Settled)
 
@@ -48,26 +49,24 @@ contract once it ships, under ADR-13.
 Decision: exec drivers' capture lives here, apart from UTERM-054. It covers every applet that has UTERM-054's capture
 capability, and the browser's full page.
 
-Rationale: the user chose this. Exec capture waits on UTERM-028's version negotiation, and its wire is a published
-contract that deserves its own review. UTERM-054's user and script capture does not wait for it.
+Rationale: the user chose this. Exec capture builds on UTERM-028's driver grant, and its frames are a wire contract
+that deserves its own review. Amended 2026-11-26; see Decision Log. UTERM-054's user and script capture does not wait for it.
 
-### A new exec protocol version carries capture
+### Capture frames land in place at version 0
 
-Decision: the next exec protocol version after the one the exec protocol is at when this lands adds three frames:
-capture, read-result, and discard. The app offers that version in the hello's `versions` list that UTERM-028 adds. A
-driver that answers an earlier version gets none of these frames.
+Decision: the exec wire gains three frames, capture, read-result, and discard, in place at protocol version 0, under
+UTERM-063. Amended 2026-11-26; see Decision Log.
 
 - Each read-result chunk carries bytes in UTERM-019's base64 field shape, so a driver has one byte encoding.
 - A chunk is sized so its base64 form and envelope fit the 1 MiB frame cap.
 - Errors use UTERM-054's append-only reason kinds.
 - There is no image clipboard write. A program never copies a capture to the clipboard, as UTERM-054 settles.
-- The app's hello keeps `protocol: 4`, as UTERM-028 does, and the new version only joins the offered list. No earlier
-  version is dropped.
+- The hello is unchanged, and no frame that exists today changes meaning.
 - A driver discards each handle it no longer needs, under ADR-11. Revocation, run end, and pane close free the rest.
 
-Rationale: a host operation has been a new frame type at a new version before, as `layout` at version 2 and the
-clipboard at version 3. UTERM-019 adds base64 at version 4 on browser commands, so there is no host version to reuse.
-Naming the version relatively keeps it right if another proposal claims a version first.
+Rationale: at version 0 a change lands in place, and there is nothing to negotiate. A host operation has been a new
+frame type before, as `layout` and the clipboard were. New frame types change no existing meaning, so UTERM-063's rule
+that a changed meaning is refused needs no retired name here.
 
 ### Exec capture follows UTERM-054's rules
 
@@ -81,17 +80,13 @@ Rationale: one capture path serves every caller, so behavior cannot drift by tra
 
 Decision: the deploy units are the app and external exec drivers.
 
-- New driver, old app: an older app does not offer the new version, so the driver answers an earlier one and sends no
-  capture frames.
-- Old driver, new app: a driver offered the new version answers with the version it knows. A version 5 driver picks a
-  version it knows from the list and ignores the others. UTERM-028's hello rule covers unknown fields, not unknown
-  values in `versions`, so UTERM-028 M1's version 5 documentation states this rule too, and its fixture checks it. A
-  version 4 driver ignores the unknown `versions` field, as UTERM-028 assumes. Amended 2026-11-22; see Decision Log.
-- A newer app can send a reason kind that a driver's version has never seen, since UTERM-054's reason kinds are
+- New driver, old app: an app built before this proposal refuses a capture frame by name, under UTERM-063 M2's strict
+  decoder, before any effect.
+- Old driver, new app: a driver that sends no capture frame runs as before. The app sends it nothing new.
+- A newer app can send a reason kind that a driver built earlier has never seen, since UTERM-054's reason kinds are
   append-only. A driver that does not know a reason acts on the error's `code`, and every capture error means nothing
-  was captured. The version's documentation states this rule.
-- A capture frame sent at an earlier version ends the driver as malformed. A driver avoids that by sending capture only
-  at the version it negotiated.
+  was captured. The exec wire's documentation states this rule.
+- The frames carry a compatibility promise only once uniterm's maintainers declare the exec wire stable.
 
 ### Which grant and targets an exec driver captures under
 
@@ -162,17 +157,17 @@ do. Candidates:
 - The capture frame replies at once with a handle, and a completion event on the driver's pane event stream names it.
   A capture only reads, so ADR-11 does not require this.
 
-Decision: the capture frame's reply is held and matched by request ID, as layout replies are since version 4. It
+Decision: the capture frame's reply is held and matched by request ID, as layout replies are. It
 carries a result handle once the PNG is ready. The driver reads chunks with read-result and frees the handle with
 discard. Revocation, run end, pane close, the user's cancel, and the time bound fail the held reply with a structured
 error. (autonomous)
 
 - The host holds the reply, not the applet's dispatcher, so the host re-checks authority at completion itself.
 - A driver cannot cancel its own pending capture. The user's cancel and the time bound bound it, as for ScriptWire. The
-  version's documentation says so.
+  exec wire's documentation says so.
 
-Rationale: the held reply needs no new mechanism. Version 4 already matches out-of-order replies by request ID, and
-layout and Pending Requests replies already wait. It keeps the three frames the version settles, and it has the same
+Rationale: the held reply needs no new mechanism. The exec wire already matches out-of-order replies by request ID, and
+layout and Pending Requests replies already wait. It keeps the three frames this proposal settles, and it has the same
 shape as UTERM-054's ScriptWire capture. A pushed completion adds a fourth published frame for no effect ADR-11 needs.
 The driver's event stream cannot carry it for members, since only the anchor's applet feeds that stream. Replying at
 once and then waiting or reading "not ready" also adds a frame or a state, and it is ADR-11's shape for effects, which a
@@ -195,7 +190,7 @@ these fields settled:
 Candidates: mirror the ScriptWire capture calls' fields one for one, so both transports name the same things, or give
 the exec frames their own field set in the version 5 style.
 
-Decision: the exec frames are settled here as concrete JSON, in the style of UTERM-028's version 5 frames. Their chunk
+Decision: the exec frames are settled here as concrete JSON, in the style of UTERM-028's command frames. Their chunk
 keys are the exec spelling of every byte chunk, so UTERM-019's browser read-result uses them on the exec wire too.
 (autonomous, addition)
 
@@ -212,20 +207,20 @@ keys are the exec spelling of every byte chunk, so UTERM-019's browser read-resu
   not an exact size. The app may return fewer bytes before the end, so a driver advances by the decoded length, and a
   read is complete when the offset plus its length reaches `size`.
 - Discard: `{"type":"discard","id":n,"handle":h}`. Its result is an empty object.
-- At this version, the error object gains an optional `reason` key beside `code` and `message`, carrying UTERM-054's
+- The error object gains an optional `reason` key beside `code` and `message`, carrying UTERM-054's
   reason kind. Each reason rides one fixed `code` from the existing set. A driver that does not know a reason still
   acts on its code, so it can tell `busy` from a refusal.
-- UTERM-019's browser read-result reaches a driver as a member command at version 4. Its exec result carries a chunk
+- UTERM-019's browser read-result reaches a driver as a member command. Its exec result carries a chunk
   under the same `data` and `offset` keys. That binds a key UTERM-019 leaves unnamed, before UTERM-019 M3 first ships
   exec base64.
 
-Rationale: an exec version keeps one fixed meaning under ADR-13, so the JSON is settled before M1 builds it, as
-UTERM-028 settled its version 5 frames. The settled base64 decision promises a driver one byte encoding. UTERM-019
+Rationale: the JSON is settled before M1 builds it, so no implementer picks the contract, as UTERM-028 settled its
+command frames. The settled base64 decision promises a driver one byte encoding. UTERM-019
 names no key for its exec chunks, and its M3 ships them before M1 here can start, so binding the keys here is the only
 way that promise holds. Mirroring ScriptWire has little to mirror: ScriptWire is positional binary, with no field names,
-no reason slot, and a numeric tab ID. A ceiling keeps a smaller chunk open to a later app at the same version, where an
+no reason slot, and a numeric tab ID. A ceiling keeps a smaller chunk open to a later app, where an
 exact size would let a driver that reads in parallel join chunks wrongly. A driver-chosen length was left out, since no
-caller needs it and a later version can add it. A reason inside `code` would lose the class an unknown reason rides on.
+caller needs it and a later change can add it under a new key. A reason inside `code` would lose the class an unknown reason rides on.
 Converged in 1 pass.
 
 ### How the app bounds reads in flight
@@ -242,7 +237,7 @@ Candidates:
   undone: events share the queue, so a count alone can still overflow.
 - The chunk size is fixed small enough that a stated count of reads fits beside events. Leaves undone: a burst of
   events can still overflow.
-- The version's documentation says how many reads may be in flight, and nothing in the app enforces it. Leaves undone:
+- The exec wire's documentation says how many reads may be in flight, and nothing in the app enforces it. Leaves undone:
   a driver that misreads it is ended.
 
 Decision: the app holds a read-result's reply until the outbound queue has room for it below a threshold that keeps
@@ -255,7 +250,7 @@ per driver are bounded by a count, and a read past the count is refused with `bu
 - The count is at least the sum of the per-run retained result caps of every pool a driver reads, capture results and
   UTERM-019's browser results, divided by the 512 KiB chunk ceiling, with a margin for repeat reads. A driver that
   sends every read for all its handles at once is never refused.
-- The version's documentation promises a floor on held reads, never an exact count. It says a read past the bound is
+- The exec wire's documentation promises a floor on held reads, never an exact count. It says a read past the bound is
   refused with `busy`, and is safe to send again after the driver reads its replies. The threshold is not published.
 - Revoke, run end, and pane close fail every held read. A read-result reply the app queued and has not yet written is
   dropped at Revoke, and an error reply for its request ID takes its place, in order. That is queued work under ADR-14
@@ -272,8 +267,8 @@ refusal by byte count would make `busy` the normal path for any capture over abo
 driver needs retry logic and a driver that passes its tests can fail in the field. Shrinking chunks to the room left
 still needs `busy`, and splits a capture into many small frames under load. A count of replies alone, or a small fixed
 chunk, can still overflow beside events. Documentation alone ends the obvious driver. Pausing the driver's inbound
-frames moves the overflow to the inbound buffer, or deadlocks a single-threaded driver. Covering UTERM-019's version 4
-reads from here would give version 4 drivers a new `busy` refusal, against ADR-13. It would also bind UTERM-019's chunk
+frames moves the overflow to the inbound buffer, or deadlocks a single-threaded driver. Covering UTERM-019's exec
+reads from here would give its drivers a new `busy` refusal. It would also bind UTERM-019's chunk
 size and size the count across its result pools. UTERM-019 M3 is not started, so it can take the same hold in its own
 design, from its first release. Converged in 1 pass.
 
@@ -283,16 +278,12 @@ None.
 
 ## Risks
 
-- **The exec capture version becomes a published contract** — likelihood: high, impact: medium.
-  Mitigation: it is a new version in UTERM-028's offer, so no earlier meaning changes, under ADR-13. Its frames are
-  settled here before M1 builds them.
-- **A deployed version 4 driver rejects the longer hello** — likelihood: medium, impact: medium.
-  Accepted: this is UTERM-028's own assumption that a version 4 driver ignores an unknown hello field. This proposal
-  adds a value to a list UTERM-028 already adds, and no new field. Rated medium, since map viewer and image viewer
-  drivers may already be deployed.
+- **The capture frames become a published contract when the exec wire is declared stable** — likelihood: high,
+  impact: medium. Mitigation: they land at version 0, where they may change in place under UTERM-063's rules until
+  then. They add frame types and change no existing meaning, and they are settled here before M1 builds them.
 - **Large reads in flight end the driver** — likelihood: medium, impact: medium.
   Mitigation: chunks are sized against the frame cap, and the app holds a read until the outbound queue has room, per
-  "How the app bounds reads in flight". The version's documentation lives with UTERM-028 M1's version 5 documentation.
+  "How the app bounds reads in flight". The exec wire's documentation states the bound.
   UTERM-019 M3 builds the same hold for browser reads.
 - **A driver with no verified identity reads what a pane shows** — likelihood: medium, impact: high.
   Mitigation: capture follows UTERM-054's tab scope, and needs a per-run power for every target, the anchor included,
@@ -300,39 +291,38 @@ None.
   targets.
 - **A driver's capture reads a user-opened file its events withhold** — likelihood: medium, impact: high.
   Mitigation: a capture needs the per-run power, whose panel text says a capture reads whatever the pane shows. A
-  driver's caller holds no read scope, so UTERM-054's resolution of
+  driver's caller holds no read scope, so UTERM-054's rule for
   [20261122-capture-bypasses-image-viewer-read-scope](../bugs/20261122-capture-bypasses-image-viewer-read-scope.md)
-  applies to drivers as written, and M1 waits for that resolution. If it refuses captures outside the read scope, image
-  viewer anchor captures by drivers are refused, and the live case narrows to the driver's own map pins and browser
-  members.
+  applies to drivers as written. A capture leaves out or refuses what the caller may not read, so a driver's capture
+  of a user-opened image in its anchor is refused, and a map capture leaves out the file's pins. The live case narrows
+  to the driver's own map pins and browser members. Amended 2026-11-26; see Decision Log.
 - **The design rests on three unbuilt proposals and a proposed ADR** — likelihood: high, impact: medium.
   Mitigation: M1 waits for UTERM-028 M1 and UTERM-054 M2, M3, and M5. M5 reaches UTERM-019's byte type and exec
   base64. Following UTERM-054's rules also rests on ADR-15, which is proposed. A change to any of their capture or
-  version shapes reopens the matching decision here.
-- **M1 waits on a bug no proposal schedules** — likelihood: medium, impact: medium.
-  Mitigation: the read-scope bug names this gate, so its triage sees that exec capture waits on it. Its fix is a design
-  call in UTERM-054, and UTERM-054 does not reference it yet. Until it is settled, M1 cannot be scheduled. The revoke
+  frame shapes reopens the matching decision here.
+- **M1 rests on UTERM-054 M5's read-scope rule** — likelihood: medium, impact: medium.
+  Mitigation: UTERM-054 settled the rule on 2026-11-26, and its M5 builds it before M1, which waits for M5. The revoke
   drop of queued replies also rests on UTERM-028 M1's queued-frame drop, which M1 already waits for.
 
 ## Milestones
 
-### M1: Exec capture version
+### M1: Exec capture frames
 
 **Status:** NOT STARTED
 
-Waits for UTERM-028 M1, for UTERM-054 M2, M3, and M5, and for UTERM-054's resolution of
+Waits for UTERM-063 M2, for UTERM-028 M1, and for UTERM-054 M2, M3, and M5. M5 builds the read-scope rule for
 [20261122-capture-bypasses-image-viewer-read-scope](../bugs/20261122-capture-bypasses-image-viewer-read-scope.md).
 
-- The app offers the new version in its hello, and a driver that answers it gets capture, read-result, and discard
-- A driver that answers an earlier version gets none of these frames, and an older app's offer leaves the version out
+- A driver sends capture, read-result, and discard at exec protocol version 0, and the hello is unchanged
+- A driver that sends no capture frame runs as before
 - A capture from an exec driver follows UTERM-054's tab scope, target states, notice bound, time bound, and caps
 - A read-result chunk fits the frame cap after base64, under the `data` and `offset` keys "The frames' fields" settles
 - An exec driver's browser full-page capture of a tab its layout opened, in a remote-controlled browser member of a
   group this run owns, returns the image. A capture of a tab the user owns in that member is refused
 - Revocation, run end, and pane close fail a pending capture and free its handle, under ADR-11
-- The version's documentation, beside UTERM-028's version 5 documentation, covers the frames, their errors, the rule
+- The exec wire's documentation, beside UTERM-028's command frames, covers the frames, their errors, the rule
   for unknown reason kinds, and the bound on reads in flight
-- The new version includes every frame of the version it follows
+- No frame that exists before this milestone changes meaning
 - A second capture of a pane with a pending capture is refused, as UTERM-054's one pending capture per pane settles,
   and held captures never count against the Pending Requests panel's rows
 - A driver's failure notice names the driver as pane chrome does, by executable and process ID
@@ -352,15 +342,14 @@ Waits for UTERM-028 M1, for UTERM-054 M2, M3, and M5, and for UTERM-054's resolu
 - Allow Once covers one capture, whose completion re-check passes and whose handle still reads
 - A capture of `"of":"full-page"` on a pane that is not a browser is refused with a named reason, and a `tab` on an
   applet with no tabs is refused the same way
-- The version's documentation says a driver cannot cancel its own pending capture
+- The exec wire's documentation says a driver cannot cancel its own pending capture
 - After a clamp, `scale` equals the density the PNG records
-- A version 5 driver fixture runs against an app whose offer includes the new version
 - A capture that finishes after its run ended frees its slot and sends nothing
 - The frames match "The frames' fields" exactly, and every reply the app writes fits the 1 MiB frame cap
 - `tab` takes the string tab reference the applet's commands answer, and a capture of `"of":"pane"` that names an
   unselected tab is refused, never selected
 - A `pane` set to the anchor's node ID captures the anchor, as leaving it out does
-- The version's documentation lists the fixed `code` each reason rides on, and a test pins the pairs
+- The exec wire's documentation lists the fixed `code` each reason rides on, and a test pins the pairs
 - A handle is scoped to the run's attachment. Reading or discarding another driver's handle, an unknown handle, or one
   already freed is refused alike, and the documentation says a handle freed by pane close answers the same way
 - A test reads a capture whose chunks come back shorter than the ceiling, and joins them by decoded length
@@ -377,7 +366,7 @@ Waits for UTERM-028 M1, for UTERM-054 M2, M3, and M5, and for UTERM-054's resolu
   for each dropped request ID in order. A frame being written when the revoke lands is neither cut short nor sent twice
 - Revoke drops only capture read-result replies. Other queued replies, held capture replies, discard and layout
   replies, and events stay queued in order, and each replacing error carries a fixed `code` and `reason`
-- The version's documentation limits "nothing was captured" to errors on the capture frame. It says a read-result
+- The exec wire's documentation limits "nothing was captured" to errors on the capture frame. It says a read-result
   `busy` leaves the handle readable, and that a read-result error after Revoke means chunks already received are partial
 - UTERM-054's time bound starts when the capture starts, not when the power is asked for, and a denied or withdrawn
   ask fails the held reply with a structured reason
@@ -447,6 +436,14 @@ Waits for UTERM-028 M1, for UTERM-054 M2, M3, and M5, and for UTERM-054's resolu
   pools. (autonomous) M3 building the hold and the summed count are mechanisms under the user's choice. The risk "Large
   reads in flight end the driver" no longer says browser bursts can end a driver. M1 gained a check for the shared
   count, and Dependencies names UTERM-019 M3's hold.
+- 2026-11-26: The capture frames land in place at exec protocol version 0, per UTERM-063, since UTERM-028 no longer
+  offers versions. "A new exec protocol version carries capture" is now "Capture frames land in place at version 0",
+  with the frames unchanged. "Version skew" rests on UTERM-063 M2's refusal by name. Removed the risk that a version 4
+  driver rejects the longer hello. UTERM-028 stays a dependency for its driver grant and its queued-frame drop, and M1
+  now also waits for UTERM-063 M2. M1 lost its version offer checks and its version 5 fixture.
+- 2026-11-26: UTERM-054 settled its read-scope question: a capture leaves out or refuses what the caller may not read.
+  M1 no longer waits on an unsettled bug, only on UTERM-054 M5, which builds the rule. The risk that M1 waits on a bug
+  no proposal schedules became a risk on that rule.
 
 ## References
 

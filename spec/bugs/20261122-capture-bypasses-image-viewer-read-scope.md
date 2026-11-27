@@ -1,7 +1,8 @@
 # A program's pane capture can show an image the program may not read
 
-**Status:** proposed, see UTERM-054's open question
-[What a program's capture shows of a file the program may not read](../proposals/UTERM-054-screenshot-a-pane-or-tab.md)
+**Status:** proposed. UTERM-054 settled the design on 2026-11-26 in
+[What a program's capture shows of a file the program may not read](../proposals/UTERM-054-screenshot-a-pane-or-tab.md),
+and its M5 builds it: a capture leaves out or refuses what the caller may not read
 **Found:** 2026-11-22, during the UTERM-055 critique
 **Estimate:** large; non-trivial design decisions. The fix is a rule in an accepted, unbuilt proposal, not code. Decisions: (1) whether capture refuses for files the caller may not read, or the capture power's review text states that it reads whatever a pane shows and the image viewer's contract narrows to paths and listings; (2) which applets the rule covers (image, text, data, and the map viewer's file layer); (3) for the map viewer, whether a refusal applies or the file layer is left out of the image. Each option is equally correct and changes behavior a program can observe, so none is trivial. No code to touch yet; the change lands in UTERM-054 and UTERM-055 text first.
 

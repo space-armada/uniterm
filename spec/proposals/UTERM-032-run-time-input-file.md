@@ -30,9 +30,9 @@
 - UTERM-034 — "Who reads the script": once it lands, the command reads a declared script's bytes and sends the
   declaration after them, with no snapshot. This proposal's "the snapshot's declaration" then means the declaration in
   those bytes, and its folder rides with that declaration. UTERM-034 M1 amends the text when it builds the change.
-- UTERM-021 — "Trust records for files": supersedes it in part. A file policy that holds a remembered folder lives in a
-  third store, for the same reason files left the controller store. UTERM-021 is implemented, so it gains a "Superseded
-  in part by UTERM-032" marker when this proposal is accepted.
+- UTERM-021 — "Trust records for files": supersedes it in part. UTERM-067 then puts every approval in one store, so a
+  file policy that holds a remembered folder lives there too. UTERM-021 carries a "Superseded in part by UTERM-032"
+  marker. Amended 2026-11-26; see Decision Log.
 - UTERM-015 — M4's protected-location list: this proposal's M2 gives each entry a stable name, pinned to its extent by
   the list's test. An entry whose extent changes takes a new name. Remembered input folders record these names.
 - UTERM-004 — "Permission scopes and approval flow": a controller run's startup denial covers its verified version and, for a
@@ -121,9 +121,9 @@ goes up.
   at the hello, or, for an old command once UTERM-056 has landed, at its begin. The command is the bundle's own, so a
   relaunch heals it. Amended 2026-11-23; see Decision Log.
 - An older build refuses a declared file that declares `input-file`, since it does not know the kind.
-- A remembered approval that holds a folder lives in a store an older build never reads, per "The stored approval". An
-  older build's other remembered approvals keep working beside a newer build, and it never sees a folder. Amended
-  2026-11-16; see Decision Log.
+- A remembered approval that holds a folder lives in the one trust store, per "The stored approval". A build with
+  UTERM-067's reader that cannot read it keeps it unread, and its other approvals keep working. A build from before
+  that reader behaves as UTERM-067 "Version skew" states. Amended 2026-11-26; see Decision Log.
 
 ### Which argument is the input file
 
@@ -200,7 +200,8 @@ since UTERM-015 refused one stored type with two meanings. Also its coverage rul
 subtraction, so a remembered `~` does not cover a deck under `~/Documents`.
 
 Decision: the input folder is a permission kind of its own, held in the run's requested permissions. A remembered
-policy that holds one lives in a third store beside `policy.json` and `files.json`. Older builds never read that store.
+policy that holds one lives in the one trust store, `policy.json`, beside every other approval, as UTERM-067 "One store
+holds every approval" sets. Amended 2026-11-26; see Decision Log.
 
 - The run's request holds the folder like any other permission. So the review key, coverage, merging, and the "new
   since you trusted it" lines work on it as they do on every other power. A run that asks only for a folder still gets
@@ -212,33 +213,27 @@ policy that holds one lives in a third store beside `policy.json` and `files.jso
 - Each stored folder records, by stable name, the protected locations inside it that its sheet excluded. A remembered
   folder covers a request only while every recorded name is still on this build's list. A name the build does not know,
   or one the list dropped, makes that folder ask again. A location added to the list later is excluded at once, since
-  coverage reads the current list. The kind's meaning version never changes with the list. Amended 2026-11-16; see
-  Decision Log.
+  coverage reads the current list. The kind's meaning version never changes with the list.
 - An entry of UTERM-015's list whose extent changes, wider or narrower, takes a new name. A recorded name then never
   covers more than the sheet showed, on a newer build or an older one.
 - A protected location added later that encloses a remembered folder leaves it covering, per UTERM-015's rule for a
   scope that lies in a protected location. The window names that location.
-- A file policy that holds a folder lives whole in the third store, under the same selectors, strict reader, and lock
-  discipline as `files.json`. Each selector lives in one store. A revoke removes the selector from both stores, taking
-  the locks in a fixed order. A move between stores writes the new store first, so a crash leaves a duplicate, never a
-  loss. A selector found in both stores grants the union, since the user approved each.
-- A revoke on an older build reaches only `files.json`. The folder policy stays until it is revoked on a build that
-  reads the third store.
-- Each policy holds at most a fixed number of folders. A remember past the cap, or one whose file would pass the
-  reader's byte limit, is refused with the "revoke some first" message, and the run is offered Allow once and Allow for
-  This Run.
+- A file policy that holds a folder is one entry in the store, naming its artifact kind, under the store's one lock.
+  A build that cannot read it keeps it unread and grants nothing from it, per UTERM-067.
+- Each policy holds at most a fixed number of folders. A remember past the cap is refused with a message that names
+  the policy, and the run is offered Allow once and Allow for This Run. The store's own bound is UTERM-067's, and never
+  asks the user to revoke approvals.
 - The Controllers & Permissions window lists each remembered folder under its policy, with the protected locations it
   lies in or names. Revoking is per policy, as today.
 
 Rationale: a stored kind inside the request keeps every consent path seeing the folder. A field beside the request
 would leave a run that asks only for a folder admitted as asking for nothing, with no sheet. Two runs on different
-folders would also share one review, so one Trust would admit both. A separate store follows UTERM-021 "Trust records
-for files", which split files from controllers so an older build's trust keeps working. Dev and release builds share
-one store folder, so an older build beside a newer one is the common case on a development machine, not a rare
-downgrade. A folder file bound to its policy by timestamp can bring back a folder an older build revoked, since a
-policy record has no room for a stronger binding. A per-folder revoke that ends one live grant would be new mechanism
+folders would also share one review, so one Trust would admit both. A store of its own is not needed: under UTERM-067
+a build that cannot read a folder policy skips that one entry and keeps the rest, and uniterm is pre-v1, so builds
+from before that reader do not constrain the format. A folder file bound to its policy by timestamp can bring back a
+folder an older build revoked, since a policy record has no room for a stronger binding. A per-folder revoke that ends one live grant would be new mechanism
 beside the per-policy revoke. The cap's message names the policy instead. A meaning version raised with the list would
-make a build that lacks the newest version read the whole third store as newer. Every power of every folder policy
+make a build that lacks the newest version keep every folder policy unread. Every power of every folder policy
 would then stop working there. Recording names instead asks again only for the folders a change touched.
 
 ### What a denial covers
@@ -321,18 +316,14 @@ None.
   access, per "How the text reaches the script", so the program gets nothing it could not read itself. The grant shows
   images in panes and returns nothing to the script, and it covers slide images only.
 - **The stored approval changes shape** — likelihood: high, impact: medium. Remembered scopes start holding a value from
-  a run's argument. Mitigation: a stored-only kind that records the protected locations its sheet showed, in a store of
-  its own. See "The stored approval".
-- **An older build cannot see or revoke a remembered folder** — likelihood: high, impact: low. Dev and release builds
-  share one store folder. Mitigation: the folder policy lives in a store the older build never reads, so it fails
-  closed there, and the newer build lists and revokes it.
-- **A revoke on an older build does not reach the third store** — likelihood: low, impact: medium. An older build
-  refuses a file that declares `input-file`, so it can trust the same selector only through a signed sibling file that
-  declares none. A revoke there leaves the newer build's folder policy, and its other powers, in force. Accepted: the
-  user approved that policy and never revoked it where it lives, and the newer build's window lists it.
-- **The third store and the recorded protected-location names are new stored data** — likelihood: high, impact: medium.
-  Every later build must read them. Mitigation: the store has its own strict reader and format, an unknown kind makes
-  only that store read as newer, and a list change never does.
+  a run's argument. Mitigation: a stored-only kind that records the protected locations its sheet showed, kept per
+  entry under UTERM-067. See "The stored approval".
+- **An older build cannot see or revoke a remembered folder** — likelihood: high, impact: low. A build that cannot
+  read a folder policy keeps it unread. Mitigation: it grants nothing there, the window counts it, and a build that
+  reads it lists and revokes it. Amended 2026-11-26; see Decision Log.
+- **The recorded protected-location names are new stored data** — likelihood: high, impact: medium. Every later build
+  must read them. Mitigation: an entry a build cannot read costs only that entry, per UTERM-067, and a list change never
+  makes one unreadable.
 - **The work it builds on is unbuilt or still in design** — likelihood: high, impact: medium. UTERM-015 M4 owns the
   protected-location list and is not started. UTERM-030 is a draft, and owns the image loads. Mitigation: both
   milestones start after UTERM-015 M4, and image checks stay with UTERM-030 M2.
@@ -367,7 +358,7 @@ None.
 - A startup denial covers that version on that exact folder, compared as APFS compares names, and a run on another
   folder gets a sheet. The Ask Again row names the folder, escaped as the sheet line is
 - Until M2, a run with an input folder is offered Allow Once and Allow for This Run only. No folder kind is ever
-  written to `policy.json` or `files.json`
+  written to the trust store
 - The sheet's folder line escapes the program-chosen path
 - The grant covers the deck's own canonical folder and grants no path read under UTERM-015's power. UTERM-030 M2 owns
   the image loads and their checks
@@ -379,8 +370,7 @@ None.
 - Starts after M1
 - Each entry of UTERM-015's protected-location list carries a stable name, and the list's test pins each name to its
   extent, so a change of extent fails the test until the entry is renamed
-- A build that does not know a recorded name keeps that folder, with its names unchanged, when it rewrites the third
-  store
+- A build that does not know a recorded name keeps that folder, with its names unchanged, when it rewrites the store
 - A protected location added later that encloses a remembered folder leaves it covering, and the window names it
 - A remembered approval covers a later run on the same folder, or one inside it, and a different folder asks again
 - A remembered `~` does not cover a deck under `~/Documents`
@@ -389,16 +379,12 @@ None.
   A location added to the list later is excluded from it at once
 - A run a remembered approval covers is admitted even after a denial of a narrower folder
 - A run whose covering policy is removed during admission still meets the denial check before any sheet
-- A file policy that holds a folder lives whole in the third store, and an older build beside a newer one keeps its
-  other file approvals and its Trust choice
-- A revoke removes the selector from both stores under a fixed lock order, and revoking a policy mid-run removes the
-  folder from the live run's grant
-- A crash while a policy moves between stores leaves a duplicate, never a loss, and a selector in both stores grants
-  the union
-- A folder scope found in `policy.json` or `files.json` grants nothing, and the file is not moved aside
-- A remember is offered only when the third store is writable
-- A remember past the folder cap or the byte limit is refused with its message, and the run still offers Allow Once and
-  Allow for This Run
+- A file policy that holds a folder is one entry in the trust store, naming its artifact kind, and a build that cannot
+  read it keeps its other approvals and its Trust choice
+- Revoking a policy mid-run removes the folder from the live run's grant
+- A remember is offered only when the trust store is writable
+- A remember past the folder cap is refused with its message, and the run still offers Allow Once and Allow for This
+  Run
 - Remembering a folder that covers stored folders replaces them
 - The Controllers & Permissions window lists each remembered folder under its policy, with the protected locations it
   lies in or names
@@ -498,6 +484,19 @@ None.
   for its new permission kind.
 - 2026-11-16: Accepted after the review gate. No ADR written. UTERM-004 and UTERM-021 carry "Superseded in part by
   UTERM-032" markers.
+- 2026-11-26: Amended for UTERM-067 "One store holds every approval": a folder policy lives in `policy.json` with every
+  other approval, and the third store is never built. "The stored approval" said before: "A remembered policy that holds
+  one lives in a third store beside `policy.json` and `files.json`. Older builds never read that store." Its bullets
+  said: "A file policy that holds a folder lives whole in the third store, under the same selectors, strict reader, and
+  lock discipline as `files.json`. Each selector lives in one store. A revoke removes the selector from both stores,
+  taking the locks in a fixed order. A move between stores writes the new store first, so a crash leaves a duplicate,
+  never a loss. A selector found in both stores grants the union, since the user approved each." and "A revoke on an
+  older build reaches only `files.json`. The folder policy stays until it is revoked on a build that reads the third
+  store." The cap bullet's byte limit and "revoke some first" message gave way to UTERM-067's bound. Its rationale's
+  reason for a separate store, the matching "Version skew" bullet, the Impacts line on UTERM-021, two risks, the M1
+  check naming both files, and the M2 checks on two stores changed to match. Removed the risk "A revoke on an older
+  build does not reach the third store", which needs a third store. uniterm is pre-v1, and UTERM-067's reader keeps an
+  entry it cannot read, so a store of its own is not needed.
 - 2026-11-17: Amended by UTERM-029, which adds PDF and image-folder decks. "The grant covers slide images only" now
   counts a PDF page as a slide image. "How the text reaches the script" admits a PDF or a folder under `input-file`
   version 2, and its UTF-8 check and size cap apply to text only. "Calls without an input file" said the error "names

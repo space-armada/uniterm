@@ -115,6 +115,31 @@ size limits, and how callers handle history changing or being cleared.
 This also extends UTERM-003's host API. A proposal would settle authorization
 and the distinction between access to the current screen and retained history.
 
+A restored shell tab already shows its saved scrollback as plain text above the
+first prompt. That text is a natural first thing to read, since it is already
+plain text. Still open: whether it reads the same as live scrollback, or as its
+own region the caller can tell apart.
+
+## Scripting: ask a pane or tab what it shows
+
+Let a program ask a pane or tab for its applet's state. Examples are the file a
+map, text, image, or data viewer has open, the data viewer's sheet, and the
+browser's address. Today `list-panes` gives each pane's applet, title, current
+directory, and tabs. A viewer's directory is its file's folder, and its title
+usually names the file, but no call returns the path itself. The browser's
+`read` returns a tab's address for tabs its controller opened. The image
+viewer's `wait` reply and `shown` event carry the image's path. The map, text,
+and data viewers return no path, and the data viewer takes no program commands
+at all. Exec drivers have no query message of any kind.
+
+This would be a general query that each applet answers with its own fields,
+rather than one-off commands. Reading a terminal's screen or scrollback, above,
+could be the terminal's answer. UTERM-064 adds a `find-tabs` query, but it
+returns identities only. UTERM-048 shows full pane state to the user, not to
+programs. Still open: whether one call serves every applet or each applet
+publishes its own, which fields each applet exposes, how the read scope hides
+fields for files outside it, and whether exec drivers get the same query.
+
 ## Scripting: write images and other types to the clipboard
 
 Let a script or controller write more than plain text to the clipboard. The first

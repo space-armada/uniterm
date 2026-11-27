@@ -149,7 +149,8 @@ final class BuiltInCommandsTests: XCTestCase {
     XCTAssertEqual(
       map.commands.map(\.title),
       [
-        "Open\u{2026}", "Save", "Save As\u{2026}", "Clear File Pins", "Clear Program Pins",
+        "Open in This Pane\u{2026}", "Save", "Save As\u{2026}", "Clear File Pins",
+        "Clear Program Pins",
         "Standard Map", "Satellite Map", "Hybrid Map", "Zoom In", "Zoom Out", "Zoom to Fit Pins",
         "Face North",
         "Go to Place\u{2026}", "Edit Pin\u{2026}", "Remove Pin", "Show or Hide Pin List",
@@ -195,7 +196,7 @@ final class BuiltInCommandsTests: XCTestCase {
     XCTAssertEqual(
       viewer.commands.map(\.title),
       [
-        "Open\u{2026}", "Next Image", "Previous Image", "First Image", "Last Image",
+        "Open in This Pane\u{2026}", "Next Image", "Previous Image", "First Image", "Last Image",
         "Play or Pause Slideshow", "Sort by Name", "Sort by Date Modified", "Reload Folder",
         "Zoom In", "Zoom Out", "Actual Size", "Zoom to Fit",
       ])

@@ -54,14 +54,16 @@ final class TableBudgetTests: XCTestCase {
     XCTAssertEqual(late.reserve(1), .overBudget)
   }
 
-  /// Catches a warning that spares the leases that exist, or one that blocks later leases.
-  func testAMemoryWarningEndsExistingLeasesOnly() {
+  /// Catches a warning that spares the loads that exist, or one that blocks later leases. Work on
+  /// loaded rows is not a load, so a warning leaves it alone.
+  func testAMemoryWarningEndsExistingLoadsOnly() {
     let budget = TableBudget(limit: 1_000, floor: 0)
     let before = budget.makeLease()
 
     budget.memoryPressureWarning()
 
     XCTAssertEqual(before.reserve(1), .memoryPressure)
+    XCTAssertEqual(before.reserveForWork(1), .granted)
     XCTAssertEqual(budget.makeLease().reserve(1), .granted)
   }
 }

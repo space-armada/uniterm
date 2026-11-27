@@ -315,7 +315,7 @@ final class TabSearchTests: XCTestCase {
       palette.entries.first { $0.id == .command(.splitRight) }?.label, "Command")
   }
 
-  /// Catches several applet types' commands that read alike, such as each viewer's "Open…". A
+  /// Catches several applet types' commands that read alike, such as each viewer's "Open in This Pane…". A
   /// command an applet type declares names that type on its row, from the type's declaration.
   /// uniterm's own commands still read "Command".
   func testACommandRowNamesTheAppletTypeThatDeclaresIt() throws {

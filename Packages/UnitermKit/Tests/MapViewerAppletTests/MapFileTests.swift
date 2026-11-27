@@ -497,7 +497,7 @@ final class MapFileTests: XCTestCase {
     let clear = try XCTUnwrap(commands["clear-file"])
 
     XCTAssertNil(open.key)
-    XCTAssertEqual(open.title, "Open\u{2026}")
+    XCTAssertEqual(open.title, "Open in This Pane\u{2026}")
     XCTAssertNil(clear.key)
 
     let applet = MapViewerApplet(startDirectory: nil)

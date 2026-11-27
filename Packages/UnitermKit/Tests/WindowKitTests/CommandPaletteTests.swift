@@ -57,6 +57,12 @@ final class CommandPaletteTests: XCTestCase {
     palette.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
   }
 
+  private func rowValues() -> [String?] {
+    palette.entries.indices.map { row in
+      palette.tableView(NSTableView(), viewFor: nil, row: row)?.accessibilityValue() as? String
+    }
+  }
+
   private func entry(_ id: CommandID) -> PaletteEntry? {
     palette.entries.first { $0.id == .command(id) }
   }
@@ -244,6 +250,106 @@ final class CommandPaletteTests: XCTestCase {
     XCTAssertTrue(palette.isHidden)
   }
 
+  /// Catches a command row that hides the palette and does nothing, silently, when its own check
+  /// fails after the list was built. The palette stays up, the row dims where it stands with no
+  /// row selected, and the status bar names the command.
+  func testChoosingACommandThatBecameUnavailableKeepsThePaletteUpAndSaysWhy() throws {
+    controller.showCommandPalette()
+    type("clear screen")
+
+    let chosen = try XCTUnwrap(entry(.fakeClear))
+    XCTAssertTrue(chosen.isEnabled)
+    XCTAssertEqual(palette.selection, chosen.id)
+
+    let before = palette.entries.map(\.id)
+    let posted = fixture.center.history.count
+    try applet(controller.focusedPane).canPerformText = false
+
+    palette.onChoose?(chosen)
+
+    XCTAssertFalse(palette.isHidden)
+    XCTAssertEqual(palette.entries.map(\.id), before)
+    XCTAssertEqual(entry(.fakeClear)?.isEnabled, false)
+    XCTAssertNil(palette.selection)
+    XCTAssertEqual(try applet(controller.focusedPane).textActions, [])
+
+    XCTAssertEqual(fixture.center.history.count, posted + 1)
+    XCTAssertEqual(fixture.center.history.last?.level, .warning)
+    XCTAssertEqual(
+      fixture.center.history.last?.text,
+      "\u{201C}Clear Screen\u{201D} did not run, because it is not available now.")
+  }
+
+  /// Catches a pane-gone row chosen in the palette that says so twice, or that stays up. The
+  /// palette hides and the gone-pane message is the only one posted.
+  func testChoosingACommandWhosePaneClosedHidesAndPostsOneMessage() throws {
+    controller.openPane(.terminalShell, axis: .row)
+    let prior = controller.focusedPane
+
+    controller.showCommandPalette()
+    let chosen = try XCTUnwrap(entry(.splitRight))
+    let posted = fixture.center.history.count
+    controller.closePane(prior, appletEnded: true)
+
+    palette.onChoose?(chosen)
+
+    XCTAssertTrue(palette.isHidden)
+    XCTAssertEqual(controller.paneIDs.count, 1)
+    XCTAssertEqual(fixture.center.history.count, posted + 1)
+    XCTAssertTrue(fixture.center.history.last?.text.contains("has closed") == true)
+  }
+
+  /// Shows the palette with New Tab enabled and moves the selection onto its row, then makes New Tab
+  /// unavailable and updates the rows in place, as a change the user did not cause does.
+  private func dimSelectedNewTabInPlace() throws -> Int {
+    try applet(controller.focusedPane).canOpenTab = true
+    controller.showCommandPalette()
+
+    for _ in palette.entries where palette.selection != .command(.fakeNewTab) {
+      press(#selector(NSResponder.moveDown(_:)))
+    }
+
+    XCTAssertEqual(palette.selection, .command(.fakeNewTab))
+
+    try applet(controller.focusedPane).canOpenTab = false
+    controller.updateCommandPaletteInPlace()
+
+    return try XCTUnwrap(palette.entries.firstIndex { $0.id == .command(.fakeNewTab) })
+  }
+
+  /// Catches a selection that jumps to another row when the selected row dims in place, so a
+  /// second Return runs a command the user never looked at. No row is selected, and that holds
+  /// through later updates. Down and Up then move from where the dimmed row stands.
+  func testASelectedRowThatDimsInPlaceLeavesNoSelectionAndArrowsMoveFromIt() throws {
+    let dimmed = try dimSelectedNewTabInPlace()
+
+    XCTAssertEqual(entry(.fakeNewTab)?.isEnabled, false)
+    XCTAssertNil(palette.selection)
+
+    controller.updateCommandPaletteInPlace()
+    XCTAssertNil(palette.selection)
+
+    press(#selector(NSResponder.insertNewline(_:)))
+
+    XCTAssertFalse(palette.isHidden)
+    XCTAssertEqual(try applet(controller.focusedPane).openedTabs, 0)
+
+    let below = try XCTUnwrap(palette.entries.dropFirst(dimmed + 1).first(where: \.isSelectable))
+    XCTAssertNotEqual(below.id, palette.entries.first(where: \.isSelectable)?.id)
+
+    press(#selector(NSResponder.moveDown(_:)))
+    XCTAssertEqual(palette.selection, below.id)
+
+    controller.hideCommandPalette(restoringFocus: true)
+    XCTAssertEqual(try dimSelectedNewTabInPlace(), dimmed)
+
+    let above = try XCTUnwrap(palette.entries.prefix(dimmed).last(where: \.isSelectable))
+    XCTAssertNotEqual(above.id, palette.entries.last(where: \.isSelectable)?.id)
+
+    press(#selector(NSResponder.moveUp(_:)))
+    XCTAssertEqual(palette.selection, above.id)
+  }
+
   /// Catches an Escape that has nowhere defined to go once the prior pane closed.
   func testEscapeAfterThePriorPaneClosedFocusesTheRemainingPane() throws {
     controller.openPane(.terminalShell, axis: .row)
@@ -407,6 +513,21 @@ final class CommandPaletteTests: XCTestCase {
     XCTAssertEqual(palette.filter, .commands, "the new chip did not replace the old one")
     XCTAssertTrue(controller.isPaletteVisible)
     XCTAssertTrue(palette.entries.allSatisfy { $0.kind == .command })
+  }
+
+  /// Catches a filter or notice row that VoiceOver reads with an empty kind, as ", enabled". Each
+  /// row's value names its kind, as every other row's does.
+  func testFilterAndNoticeRowsReadTheirKind() {
+    controller.showCommandPalette()
+    type("applet:fa")
+
+    XCTAssertEqual(palette.entries.map(\.kind), [.filter])
+    XCTAssertEqual(rowValues(), ["Filter, enabled"])
+
+    type("applet:zzz")
+
+    XCTAssertEqual(palette.entries.map(\.kind), [.notice])
+    XCTAssertEqual(rowValues(), ["Notice, enabled"])
   }
 
   /// Catches a Backspace that removes the chip while there is text to delete, or one that never

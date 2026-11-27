@@ -4,7 +4,8 @@ uniterm is a unified terminal emulator for macOS. It goes beyond a plain termina
 
 A window holds a tree of resizable split panes. Each pane runs one applet. Planned applets include a terminal, a
 browser, a data viewer, an image viewer, a text viewer, a map viewer, and a REPL. The REPL scripts uniterm itself in
-Janet, a Lisp. See [docs/repl.md](docs/repl.md) for using it.
+Janet, a Lisp. See [docs/repl.md](docs/repl.md) for using it. [docs/glossary.md](docs/glossary.md) defines the terms
+the docs and specs use.
 
 Each window also has a status bar and a command palette. Both can be docked in different places.
 
@@ -91,6 +92,15 @@ stands in for a full one.
 
 Pick the classes from what the diff touches, plus any new test. Run the full `make test-app` and `make test-package`
 before calling the work done. Run them earlier when a change touches shared UI test helpers or app-wide code.
+
+### Hand checks
+
+Some checks need a person at the Mac. Examples are how a view looks, a trackpad or mouse gesture, a real sign-in, or
+VoiceOver. Reports and proposals leave these to the user. The `hand-checks` Claude Code skill in
+`.claude/skills/hand-checks/` finds the ones with no record of being done. It writes a guide for each, and builds a
+bundle outside the repo that testers can zip and share. The bundle holds an offline page for recording verdicts, and a
+`launch.sh` that builds the app and starts it with throwaway state. Testers need only a clone that `make build` works
+in. The generated checks are never committed. Each round regenerates them from the current proposals and reports.
 
 ## License
 

@@ -285,10 +285,15 @@ extension ImageViewerApplet: AppletCommandHandling {
       let done = ZoomReport(
         isFit: viewport.isFit, scale: viewport.scale / viewport.actualScale, source: report.source,
         path: report.path)
+      let waiting = remote.running.filter { $0.kind == .zoom }
 
-      for entry in remote.running where entry.kind == .zoom {
+      for entry in waiting {
         remote.settle(entry.id, .zoomed(done))
       }
+
+      // A detached pane decoded that detail only to answer the zoom, so it goes back to the
+      // backdrop.
+      if isDetached, !waiting.isEmpty { releaseZoomForDetach() }
     }
 
     guard events.isConnected else { return }
@@ -307,17 +312,22 @@ extension ImageViewerApplet: AppletCommandHandling {
     events.emit("shown", payload)
   }
 
-  /// A zoom is done when the pane shows what it asked for: fit, or a zoomed image with at least
-  /// one tile, or a zoomed animation holding its whole window of frames.
+  /// A zoom is done when the pane holds what it asked for: fit, or a zoomed image with at least
+  /// one tile, or a zoomed animation holding its frames at the zoom's level.
+  ///
+  /// A detached pane draws none of it. It still asks the helper for one tile, or one frame, so
+  /// that a zoom the helper or a budget refuses fails with the zoom limit rather than reading done.
   private var zoomIsSettled: Bool {
     guard let viewport = content.viewport, !viewport.isFit else { return true }
 
-    if plan.isAnimated {
-      return zoomLevel == nil
-        || plan.window(from: currentFrame, ahead: Self.framesAhead).allSatisfy(holdsCurrentFrame)
-    }
+    if plan.isAnimated { return zoomLevel == nil || zoomedFramesHeld }
 
     return !tiles.entries.isEmpty
+  }
+
+  /// True while a program waits on a zoom. Only then does a detached pane ask for detail.
+  var awaitsProgramZoom: Bool {
+    remote.running.contains { $0.kind == .zoom }
   }
 
   /// The source or the image could not be shown. Every command waiting on it ends as failed.

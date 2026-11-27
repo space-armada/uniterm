@@ -1,13 +1,18 @@
 # UTERM-056: Native Controllers Across ScriptWire Versions
 
-**Status:** accepted
+**Status:** deferred
 **Created:** 2026-11-23
-**Updated:** 2026-11-24
+**Updated:** 2026-11-26
+**Revisit:** when uniterm's maintainers declare ScriptWire stable, redesign the version agreement, the per-version
+replies, and the floor for version 1, and decide whether a refused native controller is named
 
 ## Dependencies
 
 - UTERM-004, for controller packages and their `native` entry kind
 - UTERM-021, for the adoption of every connection a native entry opens after `uniterm controller run` execs it
+- UTERM-063: ScriptWire stays at version 0 until uniterm's maintainers declare it version 1. At 0 there is nothing
+  to negotiate, and a stale native controller is refused by name. This proposal is deferred until that declaration.
+  Its version 14 floor and fixtures are redesigned then. UTERM-063 M2 carries the refusal advice from M3
 
 ## Impacts
 
@@ -241,6 +246,9 @@ None.
 
 **Status:** NOT STARTED
 
+The advice for a hello at another version moved to UTERM-063 M2 on 2026-11-26. Naming the refused controller
+waits on ScriptWire's declaration with the rest of this proposal.
+
 - A native controller below the floor is named, and the text tells the user to update it
 - A native controller above the app's version that cannot speak it is named, and the text tells the user to update
   uniterm, with one report per connection
@@ -307,6 +315,13 @@ None.
   own, since each applies ADR-13.
 - 2026-11-23: (autonomous) Corrected the ADR citation for remembered approvals from ADR-09 to ADR-14, which supersedes it.
 - 2026-11-24: Scheduled as M1-M4 in queue.md.
+- 2026-11-26: Waits on ScriptWire's declaration, per UTERM-063. Added UTERM-063 to Dependencies. The version 14
+  floor and fixtures are redesigned at the declaration.
+- 2026-11-26: Deferred until ScriptWire is declared stable, per UTERM-063. At version 0 there is no version to agree
+  on, and every milestone names version 14, which the reset retires. The one piece needed at 0, refusal advice that can
+  work, moved to UTERM-063 M2. The user chose this. Removed queue row: `UTERM-056 M1-M4`, depends on None, note "Placed
+  before every row that changes ScriptWire, so none of them refuses a native controller built at version 14. M1 and M2
+  ship together". Milestones stay NOT STARTED.
 
 ## References
 

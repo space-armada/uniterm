@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-21
-**Updated:** 2026-11-21
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -263,7 +263,8 @@ Decision: the menu holds Close Tab, Close Other Tabs, and Close Tabs to the Righ
 One new `Applet` call closes a set of tabs by ID. It asks one question for the whole set when any of them would ask
 on its own close, such as a running command, edited input, or a download. The question lists each such tab's reason,
 as a pane close lists `runningLabels`. A declined question closes
-none of them. Applets add no items of their own. (autonomous)
+none of them. When the set holds a map tab with unsaved edits, the question offers Save, Don't Save, and Cancel, and
+lists every such tab, per UTERM-062 "The map's unsaved edits across tabs". Amended 2026-11-26; see Decision Log. Applets add no items of their own. (autonomous)
 
 - Each tab's close button already closes its own tab and asks first, inside the applet. The new call exposes that to
   the host by ID.
@@ -311,8 +312,9 @@ marker. (autonomous)
   actions a button, so it is amended with "Interactive markers". A pane-level marker also answers show-menu.
 
 Rationale: the pane-level markers stand in for the tab, so the same gesture opens the same menu. Drivers attach only
-to the image and map viewers, which have one tab each. So a driver's chip always shows at the pane level, and without
-this entry its go-to items would have no mouse path where the chip shows. Folding the tab's items into the badge's menu
+to the image and map viewers. A driver's chip always shows at the pane level, beside the badge, as UTERM-041 settles,
+also once UTERM-062 gives those panes a tab bar. Without this entry its go-to items would have no mouse path where the
+chip shows. Amended 2026-11-26; see Decision Log. Folding the tab's items into the badge's menu
 would repeat each revoke item in one menu, and the items would move when a second tab opens. A badge that opened two
 menus by mouse button would give one control two meanings. A one-tab pane with no marker loses only Close Tab, which
 Cmd-W already does. Converged in 1 pass.
@@ -530,6 +532,12 @@ Builds on M2 and on UTERM-041 M2, for the chip.
   now names which UTERM-041 milestone each of M2 and M3 needs. M2 is now "The tab menu, marker actions, and closing
   tabs", and M3 is "Controllers in the menu".
 - 2026-11-21: Scheduled as M1-M3 in queue.md.
+- 2026-11-26: From UTERM-062, which gives the map viewer tabs. A set close that includes a map tab with unsaved edits
+  asks Save, Don't Save, or Cancel for every such tab in one question, instead of Close or Cancel. The rationale in
+  "Panes with no tab bar" that drivers attach only to one-tab viewers no longer holds once UTERM-062 lands. Where a
+  driver's chip shows then is not settled here.
+- 2026-11-26: "Panes with no tab bar" no longer rests on driven viewers having one tab. A driver's chip stays at the
+  pane level beside the badge in a pane with a tab bar, as UTERM-041 now settles, so this entry remains its mouse path.
 
 ## References
 
