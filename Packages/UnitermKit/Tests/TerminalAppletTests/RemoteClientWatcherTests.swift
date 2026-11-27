@@ -193,7 +193,9 @@ final class RemoteClientWatcherTests: XCTestCase {
 
   override func tearDown() {
     for pid in children {
-      kill(pid, SIGKILL)
+      // Each child leads its own process group, and the unreaped leader holds the group id. So the
+      // group signal reaches the client `sh` forked, and no other process can take the id.
+      killpg(pid, SIGKILL)
 
       var status: Int32 = 0
       waitpid(pid, &status, 0)
@@ -236,7 +238,15 @@ final class RemoteClientWatcherTests: XCTestCase {
       for word in argv { free(word) }
     }
 
-    let status = posix_spawn(&pid, path, nil, nil, &argv, environ)
+    var attributes: posix_spawnattr_t?
+
+    posix_spawnattr_init(&attributes)
+    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
+    posix_spawnattr_setpgroup(&attributes, 0)
+
+    defer { posix_spawnattr_destroy(&attributes) }
+
+    let status = posix_spawn(&pid, path, nil, &attributes, &argv, environ)
     XCTAssertEqual(status, 0, "posix_spawn \(path) failed with \(status)")
     children.append(pid)
     return pid

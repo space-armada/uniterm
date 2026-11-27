@@ -66,7 +66,8 @@ let package = Package(
     // Process info helpers with no dependencies. It reads process identity and ancestry through
     // sysctl, which works on setuid root processes, and signals a process only while it is the one
     // a caller recorded. TerminalSurface, TerminalApplet, ScriptHost, and BrowserApplet use it, and
-    // so do the ScriptTestSupport, ScriptHostTests, and BrowserAppletTests test targets.
+    // so do the ProcessTestSupport, ScriptTestSupport, ScriptHostTests, BrowserAppletTests,
+    // ExecDriverTests, and TerminalSurfaceTests test targets.
     .target(name: "ProcessInspection"),
     // Writes a private file so a crash leaves the old one or the new one. The layout store and the
     // controller policy store both use it. It has no dependencies.
@@ -289,6 +290,11 @@ let package = Package(
     .target(
       name: "ScriptTestSupport", dependencies: ["PaneModel", "ProcessInspection", "ScriptHost"],
       path: "Tests/ScriptTestSupport"),
+    // The one way a package test signals a process that something other than the test reaps. It
+    // signals only the process whose pid and start time the test recorded.
+    .target(
+      name: "ProcessTestSupport", dependencies: ["ProcessInspection"],
+      path: "Tests/ProcessTestSupport"),
     // A local HTTP server for the browser's tests, so a web view loads real pages from a real
     // socket and no test reaches the network.
     .target(name: "BrowserTestSupport", path: "Tests/BrowserTestSupport"),
@@ -367,7 +373,7 @@ let package = Package(
       name: "BrowserAppletTests",
       dependencies: [
         "BrowserApplet", "BrowserModel", "AppletKit", "Preferences", "ProcessInspection",
-        "StatusKit", "Theme", "BrowserTestSupport", "AppletTestSupport",
+        "ProcessTestSupport", "StatusKit", "Theme", "BrowserTestSupport", "AppletTestSupport",
       ]),
     // Generates document files in code for the text viewer's tests, and finds the unsandboxed
     // helper that SwiftPM builds beside the test bundle.
@@ -386,7 +392,7 @@ let package = Package(
         "TextViewerApplet", "TextViewerModel", "DocumentWire", "DocumentDecoderHelper",
         "HelperHost", "SourceAccess", "FileWatching",
         "BrowserApplet", "AppletKit", "StatusKit", "Theme", "AppletTestSupport",
-        "DocumentTestSupport", "TableTestSupport", "BrowserTestSupport",
+        "DocumentTestSupport", "TableTestSupport", "BrowserTestSupport", "ProcessTestSupport",
       ]),
     .testTarget(name: "ScriptWireTests", dependencies: ["ScriptWire", "TableTestSupport"]),
     // Holds the shim's reply reader against crafted bytes, so it reaches the Janet C target.
@@ -400,8 +406,8 @@ let package = Package(
       name: "ScriptHostTests",
       dependencies: [
         "ControllerNativeFixture", "ControllerPackage", "ControllerTestSupport", "FileRouting",
-        "Preferences", "ProcessInspection", "ScriptHost", "ScriptWire", "ScriptHelper",
-        "ScriptTestSupport", "SourceAccess", "StatusKit", "DefaultsTestSupport",
+        "Preferences", "ProcessInspection", "ProcessTestSupport", "ScriptHost", "ScriptWire",
+        "ScriptHelper", "ScriptTestSupport", "SourceAccess", "StatusKit", "DefaultsTestSupport",
       ],
       resources: [.copy("Fixtures")]),
     .testTarget(
@@ -419,7 +425,7 @@ let package = Package(
       name: "ExecDriverTests",
       dependencies: [
         "ExecDriver", "AppletKit", "AppletFixtures", "StatusKit", "TableTestSupport",
-        "ExecTestSupport",
+        "ExecTestSupport", "ProcessInspection", "ProcessTestSupport",
       ]),
     .testTarget(name: "LayoutKitTests", dependencies: ["LayoutKit", "AppletKit", "PaneModel"]),
     .testTarget(
@@ -432,7 +438,9 @@ let package = Package(
       name: "SettingsKitTests", dependencies: ["SettingsKit", "Preferences", "DefaultsTestSupport"]),
     .testTarget(name: "ThemeTests", dependencies: ["Theme"]),
     .testTarget(name: "PreferencesTests", dependencies: ["Preferences", "DefaultsTestSupport"]),
-    .testTarget(name: "TerminalSurfaceTests", dependencies: ["TerminalSurface", "Theme"]),
+    .testTarget(
+      name: "TerminalSurfaceTests",
+      dependencies: ["TerminalSurface", "Theme", "ProcessInspection", "ProcessTestSupport"]),
     .testTarget(
       name: "WindowKitTests",
       dependencies: [
@@ -441,7 +449,7 @@ let package = Package(
         "AppletFixtures", "ExecDriver", "ExecTestSupport", "ScriptHelper", "ControllerPackage",
         "ControllerTrust", "TestProcessGuard", "TextViewerApplet", "SourceAccess",
         "MapViewerApplet", "BrowserApplet", "BrowserModel", "BrowserTestSupport", "QuestionForm",
-        "QuestionsApplet", "DefaultsTestSupport",
+        "QuestionsApplet", "DefaultsTestSupport", "ProcessTestSupport",
       ]),
   ],
   swiftLanguageModes: [.v6],

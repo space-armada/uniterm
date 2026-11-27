@@ -11,7 +11,8 @@ import XCTest
 ///
 /// Every wait is bounded, and a helper that outlives its test is killed.
 final class ReplProcess: @unchecked Sendable {
-  let process = Process()
+  /// The fixture's handle for the helper, and the only way this class signals it.
+  let process: HelperHandle
 
   private let input = Pipe()
   private let output = Pipe()
@@ -35,9 +36,11 @@ final class ReplProcess: @unchecked Sendable {
   ) throws {
     let words = ["repl", "--socket", address] + arguments
     let helper = ScriptFixtures.helper().path
+    let executable: URL
+    let launchArguments: [String]
 
     if login {
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
+      executable = URL(fileURLWithPath: "/usr/bin/script")
 
       let inner = ([helper] + words).map { Self.quote($0) }.joined(separator: " ")
       // libghostty hands bash `exec -l` and the quoted words, with no `/bin/sh -c` between them. The
@@ -47,33 +50,40 @@ final class ReplProcess: @unchecked Sendable {
         ? "stty cols 80 rows 24; \(prelude) exec -l " + inner
         : "stty cols 80 rows 24; \(prelude) exec -l /bin/sh -c " + Self.quote(inner)
 
-      process.arguments = [
+      launchArguments = [
         "-q", "/dev/null", "/usr/bin/login", "-flp", NSUserName(), "/bin/bash", "--noprofile",
         "--norc", "-c", outer,
       ]
     } else if session {
-      process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
+      executable = URL(fileURLWithPath: "/usr/bin/script")
       // The pty script makes has no size, and the line editor would wait for the terminal to say
       // where its cursor is. The shell gives it a size and then becomes the helper.
       let command =
         "stty cols 80 rows 24; exec " + ([helper] + words).map { "'\($0)'" }.joined(separator: " ")
 
-      process.arguments = ["-q", "/dev/null", "/bin/sh", "-c", command]
+      launchArguments = ["-q", "/dev/null", "/bin/sh", "-c", command]
     } else if shell {
-      process.executableURL = URL(fileURLWithPath: "/bin/sh")
-      process.arguments = ["-c", ([helper] + words).map { "'\($0)'" }.joined(separator: " ")]
+      executable = URL(fileURLWithPath: "/bin/sh")
+      launchArguments = ["-c", ([helper] + words).map { "'\($0)'" }.joined(separator: " ")]
     } else {
-      process.executableURL = URL(fileURLWithPath: helper)
-      process.arguments = words
+      executable = URL(fileURLWithPath: helper)
+      launchArguments = words
     }
-
-    process.environment = environment
-    process.standardInput = input
-    process.standardOutput = output
-    process.standardError = error
 
     // A write to a helper that has gone must fail, and never end the test run.
     signal(SIGPIPE, SIG_IGN)
+
+    process = try HelperHandle.spawn(
+      executable: executable, arguments: launchArguments, environment: environment,
+      standardInput: .file(input.fileHandleForReading),
+      standardOutput: .file(output.fileHandleForWriting),
+      standardError: .file(error.fileHandleForWriting),
+      deadlines: [HelperDeadline(after: .seconds(90), signal: SIGKILL)])
+
+    // The helper holds its own copies. Without these closes the readers never see the pipes end.
+    try? input.fileHandleForReading.close()
+    try? output.fileHandleForWriting.close()
+    try? error.fileHandleForWriting.close()
 
     // A handler must clear itself at the end of its pipe even after this object is gone. A pipe
     // at its end stays readable, so a handler left in place runs in a tight loop for the rest of
@@ -89,14 +99,6 @@ final class ReplProcess: @unchecked Sendable {
 
       self?.append(data, into: \.errorText)
     }
-
-    try process.run()
-
-    let watchdog = process
-
-    DispatchQueue.global().asyncAfter(deadline: .now() + 90) {
-      if watchdog.isRunning { kill(watchdog.processIdentifier, SIGKILL) }
-    }
   }
 
   private static func quote(_ word: String) -> String {
@@ -106,27 +108,18 @@ final class ReplProcess: @unchecked Sendable {
   /// Starts the helper with `terminal` as its standard streams, so Janet's line editor runs in its
   /// full mode.
   init(address: String, environment: [String: String], terminal: PseudoTerminal) throws {
-    process.executableURL = ScriptFixtures.helper()
-    process.arguments = ["repl", "--socket", address]
-    process.environment = environment
-    process.standardInput = terminal.child
-    process.standardOutput = terminal.child
-    process.standardError = terminal.child
-
-    try process.run()
-
-    let watchdog = process
-
-    DispatchQueue.global().asyncAfter(deadline: .now() + 90) {
-      if watchdog.isRunning { kill(watchdog.processIdentifier, SIGKILL) }
-    }
+    process = try HelperHandle.spawn(
+      executable: ScriptFixtures.helper(), arguments: ["repl", "--socket", address],
+      environment: environment, standardInput: .file(terminal.child),
+      standardOutput: .file(terminal.child), standardError: .file(terminal.child),
+      deadlines: [HelperDeadline(after: .seconds(90), signal: SIGKILL)])
   }
 
   deinit {
     output.fileHandleForReading.readabilityHandler = nil
     error.fileHandleForReading.readabilityHandler = nil
 
-    if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+    process.signal(SIGKILL)
   }
 
   /// Reads what the pipe holds, or clears the handler and returns nil at the pipe's end.
@@ -162,7 +155,7 @@ final class ReplProcess: @unchecked Sendable {
     return errorText
   }
 
-  var pid: pid_t { process.processIdentifier }
+  var pid: pid_t { process.pid }
 
   func write(_ line: String) {
     try? input.fileHandleForWriting.write(contentsOf: Data(line.utf8))
@@ -172,8 +165,9 @@ final class ReplProcess: @unchecked Sendable {
     try? input.fileHandleForWriting.close()
   }
 
-  func interrupt() {
-    kill(process.processIdentifier, SIGINT)
+  /// Sends SIGINT to the helper, as a Ctrl-C that does not go through a pty.
+  func sendInterrupt() {
+    process.signal(SIGINT)
   }
 
   /// Waits until standard output holds `fragment`.
@@ -189,7 +183,7 @@ final class ReplProcess: @unchecked Sendable {
   func exitStatus(timeout: Duration = .seconds(30)) async -> Int32? {
     let ended = await pollUntil(timeout: timeout) { !self.process.isRunning }
 
-    return ended ? process.terminationStatus : nil
+    return ended ? (try? process.exitStatus())?.status : nil
   }
 }
 

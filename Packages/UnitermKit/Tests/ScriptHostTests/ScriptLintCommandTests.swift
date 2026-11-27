@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ScriptTestSupport
 import ScriptWire
 import XCTest
 

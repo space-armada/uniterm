@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// How a helper ended.
-enum HelperExit: Equatable, Sendable, CustomStringConvertible {
+public enum HelperExit: Equatable, Sendable, CustomStringConvertible {
   /// The helper exited with this status.
   case exited(Int32)
 
@@ -10,7 +10,7 @@ enum HelperExit: Equatable, Sendable, CustomStringConvertible {
   case signalled(Int32)
 
   /// Reads a raw `waitpid` status. The reaper waits only for exits, so a stop never reaches here.
-  init(waitStatus status: Int32) {
+  public init(waitStatus status: Int32) {
     let signal = status & 0x7F
 
     self = signal == 0 ? .exited((status >> 8) & 0xFF) : .signalled(signal)
@@ -18,13 +18,13 @@ enum HelperExit: Equatable, Sendable, CustomStringConvertible {
 
   /// The exit status, or the number of the signal that ended the helper, the way Foundation's
   /// `terminationStatus` reads. Only the case itself tells the two apart.
-  var status: Int32 {
+  public var status: Int32 {
     switch self {
     case .exited(let code), .signalled(let code): code
     }
   }
 
-  var description: String {
+  public var description: String {
     switch self {
     case .exited(let code): "exited with status \(code)"
     case .signalled(let signal): "ended by signal \(signal)"
@@ -33,17 +33,17 @@ enum HelperExit: Equatable, Sendable, CustomStringConvertible {
 }
 
 /// What a helper left behind.
-struct HelperRun {
-  let exit: HelperExit
-  let standardOutput: String
-  let standardError: String
+public struct HelperRun: Sendable {
+  public let exit: HelperExit
+  public let standardOutput: String
+  public let standardError: String
 
   /// The exit status, or the number of the signal that ended the helper.
-  var status: Int32 { exit.status }
+  public var status: Int32 { exit.status }
 }
 
 /// What a spawned helper reads as its standard input.
-enum HelperInput {
+public enum HelperInput {
   /// The null device, so a read ends at once.
   case null
 
@@ -53,7 +53,7 @@ enum HelperInput {
 }
 
 /// Where a spawned helper's standard output or standard error goes.
-enum HelperOutput {
+public enum HelperOutput {
   case null
 
   /// A descriptor the caller owns, such as a pipe's write end or a pty end. The helper gets a copy,
@@ -66,13 +66,18 @@ enum HelperOutput {
 
 /// A signal the handle sends if the helper still runs `after` its spawn. It is how a test that
 /// hangs fails alone instead of holding up the whole run.
-struct HelperDeadline: Sendable {
-  let after: Duration
-  let signal: Int32
+public struct HelperDeadline: Sendable {
+  public let after: Duration
+  public let signal: Int32
+
+  public init(after: Duration, signal: Int32) {
+    self.after = after
+    self.signal = signal
+  }
 }
 
 /// What `HelperHandle.signal(_:)` did.
-enum HelperSignalResult: Equatable, Sendable {
+public enum HelperSignalResult: Equatable, Sendable {
   case sent
 
   /// Nothing was sent. The helper has been reaped, so its id may already name another process.
@@ -83,23 +88,23 @@ enum HelperSignalResult: Equatable, Sendable {
 }
 
 /// Why the fixture could not spawn a helper.
-struct HelperSpawnError: Error, CustomStringConvertible {
-  let executable: String
-  let call: String
-  let code: Int32
+public struct HelperSpawnError: Error, CustomStringConvertible {
+  public let executable: String
+  public let call: String
+  public let code: Int32
 
-  var description: String {
+  public var description: String {
     "\(call) for \(executable) failed: \(String(cString: strerror(code)))"
   }
 }
 
 /// A wait on a helper failed, so its status is unknown.
-struct HelperWaitError: Error, CustomStringConvertible {
-  let pid: pid_t
-  let call: String
-  let code: Int32
+public struct HelperWaitError: Error, CustomStringConvertible {
+  public let pid: pid_t
+  public let call: String
+  public let code: Int32
 
-  var description: String {
+  public var description: String {
     guard code == ECHILD else {
       return "\(call) for helper \(pid) failed: \(String(cString: strerror(code))). Its status "
         + "is unknown"
@@ -122,11 +127,11 @@ struct HelperWaitError: Error, CustomStringConvertible {
 /// signal starts at its default with an empty mask, whatever the test process has set, so a test
 /// that ignores SIGPIPE cannot change how a later helper behaves. The helper stays in the test
 /// process's group, and the handle signals only the helper's own process.
-final class HelperHandle: @unchecked Sendable {
+public final class HelperHandle: @unchecked Sendable {
   /// The name of the thread that reaps each helper. `onExit` runs on it.
-  static let reaperThreadName = "uniterm.tests.helper-reaper"
+  public static let reaperThreadName = "uniterm.tests.helper-reaper"
 
-  let pid: pid_t
+  public let pid: pid_t
 
   private let onExit: (@Sendable () -> Void)?
   private let lock = NSLock()
@@ -160,7 +165,7 @@ final class HelperHandle: @unchecked Sendable {
   ///
   /// Each deadline sends its signal if the helper still runs by then. `onExit` runs once, on the
   /// reaper thread, after the status is known.
-  static func spawn(
+  public static func spawn(
     executable: URL, arguments: [String], environment: [String: String],
     directory: URL? = nil, standardInput: HelperInput = .null,
     standardOutput: HelperOutput = .captured, standardError: HelperOutput = .captured,
@@ -327,19 +332,19 @@ final class HelperHandle: @unchecked Sendable {
 
   /// Whether the helper still runs. A stopped helper still runs. A helper stops running once the
   /// reaper has its status, or once a wait on it has failed.
-  var isRunning: Bool {
+  public var isRunning: Bool {
     lock.withLock { ending == nil }
   }
 
   /// How the helper ended, or nil while it runs. It never waits. It throws when a wait on the
   /// helper failed, as it does when another reaper took the helper.
-  func exitStatus() throws -> HelperExit? {
+  public func exitStatus() throws -> HelperExit? {
     try lock.withLock { ending }?.get()
   }
 
   /// Waits for the helper to end, and returns how it ended. It throws when a wait on the helper
   /// failed, as it does when another reaper took the helper.
-  func waitForExit() async throws -> HelperExit {
+  public func waitForExit() async throws -> HelperExit {
     try await reported(needsOutput: false).get()
   }
 
@@ -353,7 +358,7 @@ final class HelperHandle: @unchecked Sendable {
   ///
   /// It throws when a wait on the helper failed, as it does when another reaper took the helper,
   /// so a test never reads a made-up status.
-  func finish() async throws -> HelperRun {
+  public func finish() async throws -> HelperRun {
     let exit = try await reported(needsOutput: true).get()
     let (output, errors) = lock.withLock { (self.output, self.errors) }
 
@@ -365,7 +370,7 @@ final class HelperHandle: @unchecked Sendable {
   /// Sends signal `number` to the helper's own process, never to its group. It sends nothing once
   /// the helper is reaped, since its id may then name another process. Signal 0 only probes.
   @discardableResult
-  func signal(_ number: Int32) -> HelperSignalResult {
+  public func signal(_ number: Int32) -> HelperSignalResult {
     lock.lock()
     defer { lock.unlock() }
 

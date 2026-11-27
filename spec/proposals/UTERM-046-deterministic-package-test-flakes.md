@@ -465,9 +465,9 @@ Amended 2026-11-25; see Decision Log.
 
 ### M3: Every test signal goes through a guarded sender
 
-**Status:** NOT STARTED
+**Status:** DONE
 
-Amended 2026-11-25; see Decision Log.
+Amended 2026-11-25 and 2026-11-27; see Decision Log.
 
 Starts after M2 and M4. It moves sites onto M2's handle, and onto M4's guarded call.
 
@@ -480,7 +480,8 @@ No package test signals a process by an id that the process may no longer hold.
   - `ControllerRunTests`' own `start`, its two inline runs, and the stand-in instance in its launch-cleanup test
   - `ScriptReplGrantTests`' `/bin/sleep` stand-ins for a second session
   - `ScriptGrantTests`' source session, and `SocketRelay.stop`
-  - `ScriptReplLimitsTests`' teardown, its stop of a session, and its reaper's kill closure
+  - `ScriptReplLimitsTests`' teardown, its stop of a session, its SIGSTOP of a hung helper, and its reaper's kill
+    closure
   - `ControllerConsentTests`' kills of an admitted run
   - `PresentationTests`' helper run and its watchdog
   - `SenderWatcherTests`' `/bin/sleep`
@@ -488,11 +489,14 @@ No package test signals a process by an id that the process may no longer hold.
   that handle's pid, and fails the test otherwise
 - The reaper's kill closure in `ScriptReplLimitsTests` finds the test's handle for the pid under a lock, and signals
   through it. A pid with no handle is recorded and not signalled
-- `ReplProcess`'s interrupt is renamed, so the search below finds no `.interrupt()`
-- The fixture lives in `ScriptTestSupport`. The `start` wrapper stays in `ScriptHostTests`, since its scripts come from
-  that target's bundle
+- `ReplProcess`'s interrupt is renamed to `sendInterrupt`, so the search below finds no `.interrupt()`. The test
+  helper's `WebContent.kill` is renamed to `crash`, so the search finds no `kill(` on a content process
+- The fixture lives in `ScriptTestSupport`, with a public API. The `start` wrapper stays in `ScriptHostTests`, since its
+  scripts come from that target's bundle
 - The sites in "How a test signals a process it does not reap" signal only through the sender in
-  `ProcessTestSupport`, which depends only on `ProcessInspection`
+  `ProcessTestSupport`, which depends only on `ProcessInspection`. That covers `BrowserRecoveryTests`' `WebContent`
+  helper and its defers, the defers in `BrowserHungProcessTests`, `MarkdownRig`'s content-process kill, `ExecPaneTests`'
+  driver kill, and `ExecDriverChannelTests`' grandchild kill and pause test
 - The sender signals through `ProcessInspection`'s guarded signal call. Each site states whether it expects the token
   path or the pid path. A site fails the test when it gets the other
 - The sender accepts gone. It fails the test on unreached or refused
@@ -525,6 +529,44 @@ No package test signals a process by an id that the process may no longer hold.
 - The REPL session still gets its input pipe, and still reads its output as it arrives
 - The As built block says that M3 pins the fix and not the bug, since no test can force a process id's reuse
 - `spec/bugs/20261122-declared-file-watchdog-may-signal-reused-pid.md` is closed as fixed
+
+**As built:**
+
+- `HelperHandle` and its stream, result, and error types moved to `ScriptTestSupport` with a public API.
+  `HelperHandleTests` stayed in `ScriptHostTests`. `ProcessTestSupport` is new and depends only on `ProcessInspection`.
+  It holds `ProcessRecord`, a pid with its microsecond start time, `ProcessSender.signal` and `ProcessSender.send`, and
+  `ProcessSender.isStopped`. `signal` reports whether a signal went out. `send` returns what the guarded call reported,
+  for a test that stands in for a product's signal seam. Both fail the test on unreached, refused, or the other path,
+  and accept gone. The names are run best guesses. See the Decision Log for 2026-11-27.
+- Every `ScriptHostTests` site that spawned a helper now spawns it through the handle. `ReplProcess`, the source session
+  in `ScriptGrantTests`, `SocketRelay`, the `/bin/sleep` stand-ins, and `ControllerRunTests`' `start` and two inline
+  runs hold or expose a `HelperHandle`, and none exposes a `Process`. `DeclaredFileRunTests.start`, `ScriptReplTests`'
+  probe run, and `PresentationTests.run` use the handle's own deadlines in place of their watchdogs.
+  `ControllerConsentTests` keeps each handle `run` spawned, and `endRun` ends an admitted run only when its pid is one
+  of them. `ScriptReplLimitsTests`' reaper closure finds the handle by pid under a lock and records, without signalling,
+  a pid it has no handle for. `ReplProcess.interrupt` is now `sendInterrupt`.
+- A handle given a pipe the caller reads keeps no hold on that pipe. A `LineCollector` whose `Pipe` was released at the
+  end of `start` let the read end close, and the helper died of SIGPIPE. `LineCollector` now takes the owner to retain.
+- Sites that signal a process something else reaps went through the sender. They took these paths:
+  - `login`: the pid path. A test sends SIGCONT to each live member of a session's tree through the path its teardown
+    expects, and `login` gave no token. Every other member of the tree took the token path.
+  - A WebContent process: the token path, in the tests that end a real one. `BrowserHungProcessTests`' injected signal
+    closure forwards the identity the product read to `ProcessSender.send`, and refuses a pid no test recorded.
+  - The exec driver: the token path, in the pause test, which signals a live driver. `ExecPaneTests` and the grandchild
+    test expect the token path too, and a process already gone is accepted.
+- The terminal teardowns record each tree member's start time in one pass before `close()`. A child counts only while
+  its parent is the member that listed it. `login` has been reaped by the time the teardown signals, so its record reads
+  gone and gets no signal.
+- `RemoteClientWatcherTests` spawns each child in its own process group and ends it with `killpg` before its own
+  `waitpid`, which also ends the client `sh` forks.
+- The search of `Tests/` for `kill(`, `.terminate()`, and `.interrupt()` finds the handle's own signal, the group
+  signal, the product kills under test, the signal 0 probes, `pthread_kill`, `HelperProcess.kill`, the signals to a
+  child before its own `waitpid` in `ProcessInspectionTests`, `ProcessSignalTests`, and `BrowserHungProcessTests`, and
+  one raw SIGKILL in `ScriptBindingTests`, to the relay's forked child. Its parent never reaps it, so no handle holds
+  it.
+- The package suite passed: 3296 tests, 10 skipped, 0 failures, in 281 s. M3 pins the fix and not the bug, since no test
+  can force a process id's reuse. No mutation of the sender was run, so a wrong-path result is shown only by the passing
+  path checks above.
 
 ### M4: The product's kills signal by audit token
 
@@ -805,3 +847,12 @@ Needs nothing from M1 to M3. It lands before M3, since M3's sender wraps its gua
 - `spec/flaky-tests.md`
 - UTERM-045, whose closing rule in the `spec/flaky-tests.md` Rule section decides when this proposal's entries move to
   Fixed
+- 2026-11-27: M3's mechanisms were chosen in the work-queue run. The fixture moved to `ScriptTestSupport` with a public
+  API, and `ProcessTestSupport` holds `ProcessRecord`, `ProcessSender.signal`, `ProcessSender.send`, and the stopped-state
+  reader. `ProcessSender.send` exists because `BrowserHungProcessTests`' injected signal closure must return what the
+  guarded call reported. Correction of fact: M3's list left out sites that its search would find. They are
+  `BrowserRecoveryTests`' `WebContent.kill` and its defers, the defers in `BrowserHungProcessTests`, `MarkdownRig`,
+  `ExecPaneTests`' driver kill, `ExecDriverChannelTests`' grandchild kill, and `ScriptReplLimitsTests`' SIGSTOP. M3 now
+  names them. `WebContent.kill` is renamed `crash`, so the search finds no `kill(` on a content process. `login` takes the
+  pid path and every other tree member the token path, so the terminal tests pick the expected path from the
+  executable's name. A new terminal test sends SIGCONT to each live member through that path. (run best guess)

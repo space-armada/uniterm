@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ScriptTestSupport
 import ScriptWire
 import StatusKit
 import XCTest
@@ -21,6 +22,7 @@ final class ScriptReplLimitsTests: XCTestCase {
   private var directories: [URL] = []
   private var hosts: [ScriptHost] = []
   private var processes: [ReplProcess] = []
+  private let handles = ReplHandles()
   private var center: StatusCenter!
 
   override func setUp() async throws {
@@ -28,9 +30,9 @@ final class ScriptReplLimitsTests: XCTestCase {
   }
 
   override func tearDown() async throws {
-    for process in processes where process.process.isRunning {
-      kill(process.pid, SIGCONT)
-      kill(process.pid, SIGKILL)
+    for process in processes {
+      process.process.signal(SIGCONT)
+      process.process.signal(SIGKILL)
     }
 
     for host in hosts {
@@ -50,6 +52,7 @@ final class ScriptReplLimitsTests: XCTestCase {
   ) throws -> ScriptHost {
     let directory = try ScriptFixtures.makeSocketDirectory()
     let center = center!
+    let handles = handles
 
     directories.append(directory)
 
@@ -57,7 +60,7 @@ final class ScriptReplLimitsTests: XCTestCase {
       delay: .milliseconds(20), isRunning: { $0.isRunning },
       kill: {
         killed.add($0.pid)
-        _ = Darwin.kill($0.pid, SIGKILL)
+        handles.signal($0.pid, SIGKILL)
       })
 
     let host = ScriptHost(
@@ -84,6 +87,7 @@ final class ScriptReplLimitsTests: XCTestCase {
       environment: [ScriptProtocol.replTokenVariable: channel.launch.token], arguments: arguments)
 
     processes.append(process)
+    handles.add(process.process)
 
     return process
   }
@@ -221,7 +225,7 @@ final class ScriptReplLimitsTests: XCTestCase {
 
     expect(await attached(events))
 
-    kill(repl.pid, SIGSTOP)
+    XCTAssertEqual(repl.process.signal(SIGSTOP), .sent)
 
     clock.advance(by: .seconds(1))
     await host.sampleRepls()
@@ -614,5 +618,21 @@ final class ScriptReplLimitsTests: XCTestCase {
     XCTAssertLessThan(footprint, ScriptProtocol.helperMemoryCap)
 
     channel.end()
+  }
+}
+
+/// The helpers a test started, found by process ID. The reaper's kill closure runs off the main
+/// actor, so it looks a helper up here and signals it through its handle, which never signals a
+/// helper that has been reaped. A process ID with no handle is not signalled.
+private final class ReplHandles: @unchecked Sendable {
+  private let lock = NSLock()
+  private var handles: [pid_t: HelperHandle] = [:]
+
+  func add(_ handle: HelperHandle) {
+    lock.withLock { handles[handle.pid] = handle }
+  }
+
+  func signal(_ pid: pid_t, _ number: Int32) {
+    lock.withLock { handles[pid] }?.signal(number)
   }
 }

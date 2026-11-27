@@ -289,6 +289,7 @@ final class ScriptBindingTests: XCTestCase {
     let child = try await relay.forkSend(
       ScriptHelperMessage.request(id: 1, call: .listWindows).frame())
 
+    // The relay's forked child. Its parent exited and nothing reaps it, so no handle holds its pid.
     defer { kill(child, SIGKILL) }
 
     XCTAssertNotEqual(child, parent)

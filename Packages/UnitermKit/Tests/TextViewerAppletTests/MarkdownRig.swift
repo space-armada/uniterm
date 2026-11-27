@@ -1,6 +1,7 @@
 import AppKit
 import BrowserTestSupport
 import Darwin
+import ProcessTestSupport
 import SourceAccess
 import Theme
 import WebKit
@@ -169,7 +170,9 @@ final class MarkdownRig {
         .contains("com.apple.WebKit.WebContent")
     else { return false }
 
-    return Darwin.kill(pid, SIGKILL) == 0
+    guard let record = ProcessRecord(pid: pid) else { return false }
+
+    return ProcessSender.signal(SIGKILL, record, expecting: .token)
   }
 }
 

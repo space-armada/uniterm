@@ -1,4 +1,5 @@
 import Foundation
+import ScriptTestSupport
 import XCTest
 
 @testable import WindowKit
@@ -26,15 +27,15 @@ final class SenderWatcherTests: XCTestCase {
   /// Catches a watcher that reports a process that still runs, or one that misses its exit. The
   /// process sleeps until the test ends it.
   func testALiveProcessIsReportedOnlyWhenItExits() async throws {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/sleep")
-    process.arguments = ["30"]
-    try process.run()
+    let process = try HelperHandle.spawn(
+      executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["30"], environment: [:],
+      standardOutput: .null, standardError: .null,
+      deadlines: [HelperDeadline(after: .seconds(60), signal: SIGKILL)])
 
     var reported = false
     let ended = expectation(description: "the watcher reported the exit")
 
-    let stop = watchProcessEnd(pid: process.processIdentifier) {
+    let stop = watchProcessEnd(pid: process.pid) {
       reported = true
       ended.fulfill()
     }
@@ -42,7 +43,7 @@ final class SenderWatcherTests: XCTestCase {
     try await Task.sleep(for: .milliseconds(100))
     XCTAssertFalse(reported, "a live process was reported as ended")
 
-    process.terminate()
+    process.signal(SIGTERM)
     await fulfillment(of: [ended], timeout: 5)
     stop()
   }

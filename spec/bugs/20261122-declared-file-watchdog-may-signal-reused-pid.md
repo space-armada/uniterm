@@ -1,6 +1,7 @@
 # The declared-file test watchdog may signal a process id that was already reused
 
-**Status:** proposed
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27
 **Found:** 2026-11-22, during the UTERM-046 review
 **Estimate:** large; two non-trivial decisions (see Estimate notes). Both settled 2026-11-23 (see Resolution)
 
@@ -58,3 +59,13 @@ its id. `DeclaredFileRunTests.start` is one of them. Design-critic passes on 202
 `ScriptHostTests` beyond the four first named, and more in five other test targets. M3 lists them all. This settles
 both decisions above. `start` leaves M2's scope as written, and the other signalling sites are fixed by M3, not by this
 bug alone. The exit waits that never signal stay undone, as UTERM-046 already says.
+
+## Fix note
+
+Fixed by UTERM-046 M3. `DeclaredFileRunTests.start` and every other test that signalled a helper it spawned now
+spawn it through the fixture's handle. The handle reaps its own helper and signals only before that reap, so the id
+cannot be reused. The `login`, driver, and WebKit content processes that something else reaps are signalled through
+`ProcessInspection`'s guarded call. A search of `Tests/` finds no raw signal to a process id outside the exemptions
+M3 lists.
+
+No test can force a process id's reuse. The change pins the fix, not the bug.

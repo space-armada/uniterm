@@ -12,14 +12,16 @@ already holds `upstream/main` through #118, so no rebase ran.
 |-----|-----------|------------|------|
 | UTERM-044 M3 | A failed shard reruns alone on CI | HELD | No failed CI shard since run 45762275495 |
 | UTERM-060 M5 | The recorder sees a Cmd-T stall | HELD | 40 local runs saw no stall. Stays NOT STARTED |
-| UTERM-060 M6 | A failed CI shard keeps its evidence | QUEUED | |
-| UTERM-046 M3 | Every test signal goes through a guarded sender | QUEUED | |
+| UTERM-060 M6 | A failed CI shard keeps its evidence | HELD | No failed CI shard since run 45762275495 |
+| UTERM-046 M3 | Every test signal goes through a guarded sender | DONE | |
 | UTERM-045 M3 | The launcher count is met | QUEUED | |
 | UTERM-045 M2 | One way to send a wheel | QUEUED | Waits on UTERM-045 M3 in this run |
 
 Row reports:
 
 - [UTERM-060 M5](20261127-uterm-060-m5-recorder-sees-a-cmd-t-stall.md)
+- [UTERM-060 M6](20261127-uterm-060-m6-failed-ci-shard-keeps-its-evidence.md)
+- [UTERM-046 M3](20261127-uterm-046-m3-guarded-test-signals.md)
 
 ## UTERM-044 M3
 

@@ -2,6 +2,9 @@ import AppKit
 import AppletKit
 import BrowserModel
 import BrowserTestSupport
+import Darwin
+import ProcessInspection
+import ProcessTestSupport
 import StatusKit
 import Synchronization
 import WebKit
@@ -58,17 +61,21 @@ final class SleepingAfterGate {
   }
 }
 
+/// The content processes the tests recorded, so a stand-in for the product's signal seam signals
+/// only a process a test learned.
+let learnedContent = Mutex<[ProcessRecord]>([])
+
 /// How the tests end a content process and name it. WebKit's `_killWebContentProcess` exists on
 /// this macOS and does nothing the navigation delegate hears about, so the tests send SIGKILL to
 /// the process that `_webProcessIdentifier` names. That is a real crash from WebKit's side. The
-/// product reads the same property in `WebContentProcess`. This helper has its own read and its
-/// own signal, so a test that crashes a process does not depend on the product's guards.
+/// product reads the same property in `WebContentProcess`. This helper has its own read, and it
+/// signals through `ProcessSender`, so a test that crashes a process does not depend on the
+/// product's guards.
 @MainActor
 enum WebContent {
-  /// Sends SIGKILL to the view's content process once it has one. A process id of 0 means none was
-  /// launched yet, and `kill(0, ...)` would end the test run's own process group, so the call waits
-  /// for a real id and never signals anything else.
-  static func kill(
+  /// Ends the view's content process once it has one. A process id of 0 means none was launched
+  /// yet, so the call waits for a real id and never signals anything else.
+  static func crash(
     _ view: WKWebView, in harness: BrowserHarness, file: StaticString = #filePath,
     line: UInt = #line
   ) async {
@@ -76,9 +83,35 @@ enum WebContent {
       processID(of: view) != nil
     }
 
-    guard let pid = processID(of: view) else { return }
+    guard let content = record(of: view) else {
+      return XCTFail(
+        "the web view's content process is not a recorded WebContent process", file: file,
+        line: line)
+    }
 
-    Darwin.kill(pid, SIGKILL)
+    XCTAssertTrue(
+      ProcessSender.signal(SIGKILL, content, expecting: .token, file: file, line: line),
+      "the content process was gone before the crash", file: file, line: line)
+  }
+
+  /// The view's content process, recorded with its start time. The tests learn a process only
+  /// through here, and the path must be WebKit's content process.
+  static func record(of view: WKWebView) -> ProcessRecord? {
+    guard let pid = processID(of: view),
+      ProcessInspection.executablePath(of: pid)?.contains("com.apple.WebKit.WebContent") == true,
+      let record = ProcessRecord(pid: pid)
+    else { return nil }
+
+    learnedContent.withLock { $0.append(record) }
+
+    return record
+  }
+
+  /// Ends a content process the test recorded, through the guarded call. WebContent gives a token,
+  /// so the signal goes down the token path. A process that already ended is fine, which suits a cleanup defer. A test that means to crash
+  /// a live process uses `crash`.
+  static func end(_ record: ProcessRecord) {
+    ProcessSender.signal(SIGKILL, record, expecting: .token)
   }
 
   static func processID(of view: WKWebView) -> pid_t? {
@@ -182,7 +215,7 @@ final class BrowserRecoveryTests: XCTestCase {
     let before = harness.server.requests.count
     let record = try XCTUnwrap(harness.tab.interactionData)
 
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the stopped message shows") { harness.tab.isStopped }
 
     XCTAssertEqual(harness.tab.interactionData, record, "the stop replaced the history record")
@@ -230,7 +263,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     await harness.load("/a", expecting: "A")
     await harness.load("/b", expecting: "B")
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the stopped message shows") { harness.tab.isStopped }
 
     harness.applet.submit(address: harness.server.url("/c").absoluteString)
@@ -264,7 +297,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     XCTAssertNil(popup.record.url, "the preview stored an address")
 
-    await WebContent.kill(popup.webView, in: harness)
+    await WebContent.crash(popup.webView, in: harness)
     await harness.eventually("the stopped message shows") { popup.isStopped }
 
     harness.applet.content.errorPage.reloadButton.performClick(nil)
@@ -293,7 +326,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     let selected = harness.applet.tabs[1]
 
-    await WebContent.kill(selected.webView, in: harness)
+    await WebContent.crash(selected.webView, in: harness)
     await harness.eventually("the background tab lost its content") { selected.generation == 1 }
 
     XCTAssertFalse(selected.isStopped)
@@ -325,7 +358,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     await harness.load("/a", expecting: "A")
     await harness.load("/b", expecting: "B")
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the first stop shows") { harness.tab.isStopped }
 
     let tab = harness.tab
@@ -334,7 +367,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     XCTAssertFalse(tab.isStopped)
 
-    await WebContent.kill(tab.webView, in: harness)
+    await WebContent.crash(tab.webView, in: harness)
     await harness.eventually("the second stop shows") {
       tab.isStopped && tab.generation == 2
     }
@@ -394,7 +427,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     weak let old: WKWebView? = harness.tab.webView
 
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     XCTAssertFalse(harness.tab.hasUnsentInput)
@@ -445,7 +478,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     harness.applet.tab(harness.tab, present: spy)
 
-    await WebContent.kill(view, in: harness)
+    await WebContent.crash(view, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     XCTAssertEqual(answers, 1)
@@ -477,7 +510,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     XCTAssertTrue(harness.tab.isAskingToResend)
 
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     XCTAssertFalse(harness.tab.isAskingToResend, "the stop left the question waiting")
@@ -509,7 +542,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     XCTAssertTrue(harness.tab.isAskingToOpenApp)
 
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     XCTAssertFalse(harness.tab.isAskingToOpenApp)
@@ -548,7 +581,7 @@ final class BrowserRecoveryTests: XCTestCase {
       harness.host.recording.confirmations.count == 1
     }
 
-    await WebContent.kill(target.webView, in: harness)
+    await WebContent.crash(target.webView, in: harness)
     await harness.eventually("the tab lost its content") { target.generation == 1 }
 
     harness.host.recording.pendingAnswer?.resume(returning: true)
@@ -596,7 +629,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     XCTAssertTrue(popup.isPopup)
 
-    await WebContent.kill(popup.webView, in: harness)
+    await WebContent.crash(popup.webView, in: harness)
     await harness.eventually("the pop-up stopped") { popup.isStopped }
 
     XCTAssertEqual(popup.generation, 1)
@@ -643,9 +676,9 @@ final class BrowserRecoveryTests: XCTestCase {
 
     weak let weakOld: WKWebView? = old
 
-    let pid = try XCTUnwrap(WebContent.processID(of: try XCTUnwrap(old)))
+    let content = try XCTUnwrap(WebContent.record(of: try XCTUnwrap(old)))
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     hang(try XCTUnwrap(old))
 
@@ -686,9 +719,9 @@ final class BrowserRecoveryTests: XCTestCase {
 
     await harness.load("/a", expecting: "A")
 
-    let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     gate.isOpen = true
     hang(harness.tab.webView)
@@ -749,9 +782,9 @@ final class BrowserRecoveryTests: XCTestCase {
 
     await harness.load("/a", expecting: "A")
 
-    let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     hang(harness.tab.webView)
     harness.applet.submit(address: harness.server.url("/c").absoluteString)
@@ -781,9 +814,9 @@ final class BrowserRecoveryTests: XCTestCase {
 
     await harness.load("/a", expecting: "A")
 
-    let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     hang(harness.tab.webView)
     harness.applet.submit(address: harness.server.url("/untitled").absoluteString)
@@ -862,9 +895,9 @@ final class BrowserRecoveryTests: XCTestCase {
         "typed", replacementRange: NSRange(location: NSNotFound, length: 0))
       await harness.host.until("the tab holds unsent input") { harness.tab.hasUnsentInput }
 
-      let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+      let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
 
-      defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+      defer { WebContent.end(content) }
 
       harness.host.recording.holdsQuestions = true
       hang(harness.tab.webView)
@@ -912,9 +945,9 @@ final class BrowserRecoveryTests: XCTestCase {
       "typed", replacementRange: NSRange(location: NSNotFound, length: 0))
     await harness.host.until("the tab holds unsent input") { harness.tab.hasUnsentInput }
 
-    let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     harness.applet.openTab()
     harness.applet.selectTab(at: 0)
@@ -959,9 +992,9 @@ final class BrowserRecoveryTests: XCTestCase {
     await harness.load("/a", expecting: "A")
 
     let tab = harness.tab
-    let pid = try XCTUnwrap(WebContent.processID(of: tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: tab.webView))
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     hang(tab.webView)
     harness.applet.reload()
@@ -990,7 +1023,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     let old = harness.tab.webView
 
-    await WebContent.kill(old, in: harness)
+    await WebContent.crash(old, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     XCTAssertNil(old.navigationDelegate)
@@ -1018,7 +1051,7 @@ final class BrowserRecoveryTests: XCTestCase {
 
     let record = try XCTUnwrap(harness.tab.interactionData)
 
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     harness.applet.submit(address: harness.server.url("/slow").absoluteString)
@@ -1035,7 +1068,7 @@ final class BrowserRecoveryTests: XCTestCase {
     defer { harness.stop() }
 
     await harness.postResult()
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     let page = harness.applet.content.errorPage
@@ -1065,7 +1098,7 @@ final class BrowserRecoveryTests: XCTestCase {
     harness.host.recording.answer = true
 
     await harness.postResult()
-    await WebContent.kill(harness.tab.webView, in: harness)
+    await WebContent.crash(harness.tab.webView, in: harness)
     await harness.eventually("the tab stopped") { harness.tab.isStopped }
 
     harness.applet.reload()
@@ -1087,9 +1120,9 @@ final class BrowserRecoveryTests: XCTestCase {
 
     await harness.postResult()
 
-    let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     hang(harness.tab.webView)
     harness.applet.reload()

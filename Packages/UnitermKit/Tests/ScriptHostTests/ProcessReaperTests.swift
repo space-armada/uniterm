@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import OSLog
 import ProcessInspection
+import ScriptTestSupport
 import XCTest
 
 @testable import ScriptHost
