@@ -27,6 +27,7 @@
 | UTERM-025 M1 | UTERM-024, UTERM-030, UTERM-032 | The presenter needs UTERM-024's commands and keys, UTERM-030's slides, and UTERM-032's deck argument |
 | UTERM-026 M1-M4 | UTERM-024, UTERM-025, UTERM-032 | The presenter view extends UTERM-025's controller across two windows |
 | UTERM-028 M1 | UTERM-024, UTERM-063 M2 | Exec drivers gain UTERM-024's commands, keys, and events. Its frames land in place at version 0, after UTERM-063 M2's strict decoders |
+| UTERM-065 M1-M2 | UTERM-063 M2 | Its read frames land in place at version 0, after UTERM-063 M2's strict decoders. Placed beside UTERM-028 M1, the other driver frame work |
 | UTERM-055 M1 | UTERM-028 M1, UTERM-054 M5, UTERM-019 M3 | Needs UTERM-028 M1's driver grant and queued-frame drop, and UTERM-054's capture. Its frames land in place at version 0, after UTERM-063 M2, which UTERM-028 M1 already waits for. UTERM-019 M3 gains the check for the `data` and `offset` keys, and builds the read hold M1 reuses. UTERM-054 M5 builds the read-scope rule for `20261122-capture-bypasses-image-viewer-read-scope` |
 | UTERM-029 M1-M3 | UTERM-024 M2, UTERM-025, UTERM-026, UTERM-030 M2, UTERM-032 M1 | Extends the presenter with UTERM-026's notes window, UTERM-030 M2's slide images, and UTERM-032 M1's input file |
 | UTERM-043 M2 | UTERM-019 M6, UTERM-024, UTERM-028, UTERM-041, UTERM-042 | Split from M1: each check runs when the feature it names has landed. UTERM-019 M3 precedes M6 in its rows |
@@ -44,5 +45,6 @@
 | UTERM-059 M1 | UTERM-052 M2 | Needs UTERM-052 M2's saved-state revision. Placed after UTERM-053 M1, so every write to the terminal's tabs reaches the one place the revision observers watch |
 | UTERM-058 M1-M3 | UTERM-053 M1 | M1 measures after UTERM-053 M1's read-through view. Placed after UTERM-059 M1, so M2's terminal ID map joins a terminal whose writes already move the revision |
 | UTERM-062 M1-M6 | UTERM-063, UTERM-064 | Blocked until UTERM-064 is accepted and queued. UTERM-006 M5 must name a tab before it is built, which UTERM-065 carries |
+| UTERM-006 M5 | UTERM-065 M2, UTERM-062 M4 | Split from M1-M4: a driver's `show` and stepping need UTERM-065's read grant, and name a tab, so M5 follows UTERM-062 M4's image viewer tabs |
 | UTERM-018 M3-M5 | UTERM-062 M5 | Split from M1-M2: a routed open adds a tab under UTERM-062, so these start once every viewer takes an open as a tab |
 | UTERM-049 M1-M3 | UTERM-018 M5 | M2 routes through UTERM-018's walk when no pane takes a tab file in place. M3's program open uses UTERM-018 M5's script file open |

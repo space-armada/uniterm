@@ -307,6 +307,7 @@ None.
   the driver was started in. The user turned down refusing relative paths. Routed an M1 check.
 
 - 2026-11-26: Accepted by the user.
+- 2026-11-26: Scheduled as UTERM-065 M1-M2 in queue.md.
 
 ## References
 
