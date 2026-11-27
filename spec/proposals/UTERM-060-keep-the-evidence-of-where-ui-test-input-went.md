@@ -747,6 +747,16 @@ Split from M4 on 2026-11-25; see Decision Log.
   quarantine. The kept log's predicate leaves the quarantine line out. The bug file is
   `20261127-input-records-lost-to-log-quarantine`. M5 stays NOT STARTED and keeps waiting for a stall with recording on.
   (run best guess)
+- 2026-11-27: 40 more local runs of the shortcut test alone, in a second batch, reproduced no Cmd-T stall. The batch
+  ran `make test-app-select` on `ShortcutOwnershipUITests/testARemapOntoAnAppletKeyWinsAndWarnsOnce`, under
+  `caffeinate -dimsu`. It added `-test-iterations 40` to `UI_TEST_FLAGS`. It ran from 11:04:59 to about 11:08:15
+  Pacific. Recording was on, as on every launch. No peer UI run was going. All 40 passed, each in 4.3 s to 5.3 s. The
+  kept log's predicate was saved for 11:05:00 to 11:09:00. It holds 40 "Recording input" lines from 40 app processes.
+  Each process has one Cmd-T key down record, with key code 17 and flags 0x100000. The log holds no "confirmation
+  delay timeout" line, so no Cmd-T was even confirmed late. `log show --info --debug` for the window holds no
+  QUARANTINED line. So no iteration lost its records to the quarantine that
+  `20261127-input-records-lost-to-log-quarantine` describes. The total with no stall is now 125 runs since the 3-in-9
+  sighting. These runs still cannot show whether recording changes the rate. M5 stays NOT STARTED and keeps waiting for a stall with recording on. (run best guess)
 
 ## References
 
