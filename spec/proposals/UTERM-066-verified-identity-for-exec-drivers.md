@@ -33,13 +33,12 @@
   proof of script identity." "Script files are verified too" verifies a script an interpreter driver names in its argv
   by its digest, through a snapshot uniterm makes. The interpreter does not load it through a verifying loader.
   UTERM-004 asks for "an equally verifiable loader" before another interpreter's scripts receive persistent trust. The
-  descriptor fixes the interpreter, its flags, and the script, and hook keys are refused. What a remembered approval
-  still trusts without checking is the code the script imports at run time, and the interpreter binary as far as
-  "Which interpreter an entry may name" leaves it open. It also trusts the interpreter's own startup files, unless an
-  isolating flag turns them off. Python runs `.pth` files and `sitecustomize` from the user's site folder, which any
-  same-user process can write, and which a declared `HOME` can move. The user chose this on 2026-11-26, after imports,
-  the interpreter binary, flags, and hook keys were named. The startup files were found after that choice. This
-  proposal asks the user to amend ADR-14 P9 before it is accepted.
+  descriptor fixes the interpreter, its flags, and the script, and hook keys are refused. Any interpreter the user has
+  may run a driver. What a remembered approval still trusts without checking is the code the script imports at run
+  time, the interpreter's install, and its startup files, such as Python's `.pth` files and `sitecustomize`. How far
+  that goes depends on "What remembered trust in a script driver covers". The user chose this on 2026-11-26, after
+  imports, the interpreter binary, flags, and hook keys were named. The startup files were found after that choice.
+  This proposal asks the user to amend ADR-14 P9 before it is accepted.
 
 ## Summary
 
@@ -85,15 +84,22 @@ declaration that names an environment key the interpreter reads as a hook, such 
 `NODE_OPTIONS`, is refused. Amended 2026-11-26; see Decision Log.
 
 **Decided by:** user, 2026-11-26
-**Pending override:** also require, for each interpreter kind, the flag that isolates it from user startup files, such
-as Python's `-I`, and refuse a declared `HOME`. Without them, Python's `.pth` files and `sitecustomize` in the user's
-site folder run before the script under remembered approvals, and a declared `HOME` can point that folder anywhere.
-Recommended by new-proposal (critique).
 
 Rationale: most drivers are scripts. Leaving them out would keep every script driver asking each run. Fixing the
 command line in the signed descriptor closes interpreter flags and scripts outside the signature. Refusing hook keys
-closes the environment. The interpreter binary is constrained by "Which interpreter an entry may name". Imports stay
-unverified, which is the deviation from ADR-14 P9 recorded above.
+closes the environment. What trust says about the interpreter is settled in "What remembered trust in a script driver
+covers". Imports stay unverified, which is the deviation from ADR-14 P9 recorded above.
+
+### Any interpreter the user has may run a driver
+
+Decision: a script driver may name any interpreter the user has, including a Homebrew install, a local build, or a
+virtual environment. uniterm adds no limit on which interpreter a driver uses, on how it is installed, or on how the
+user has set it up, and no such limit decides whether a driver can keep a remembered approval.
+
+**Decided by:** user, 2026-11-26
+
+Rationale: uniterm does not control how a user installs or uses interpreters, and may not add artificial limits on
+them.
 
 ### Remembered approvals cover every per-run power
 
@@ -139,15 +145,19 @@ One entry with a list of roles was weighed and rejected, for two reasons:
 
 ## Design Decisions (Open)
 
-### Which interpreter an entry may name
+### What remembered trust in a script driver covers
 
-A packaged entry must be a file inside the package, and its load commands must name only packaged files or system
-paths. A Homebrew `python3` links `/opt/homebrew/...`, so it cannot be packaged. An interpreter entry needs a new entry
-kind that names an outside path. A same-user process can replace a file the user owns.
+An interpreter entry names an interpreter outside the package, per "Any interpreter the user has may run a driver". A
+same-user process can change that interpreter's install, such as adding a `.pth` file to its `site-packages`, or
+change the user's site folder. That code runs before the verified script.
 
-- A. Only an interpreter on the sealed system volume, or on a path root-owned all the way up.
-- B. The descriptor pins the interpreter's digest. Every interpreter upgrade asks again.
-- C. The interpreter is packaged. This fails the load check for most interpreters in practice.
+- A. Trust covers the packaged code and the fixed command line only. The interpreter's install and the user's own
+  setup are the user's, as their shell setup is. The review text says so. UTERM-004 already accepts that a same-user
+  process can edit a controller's snapshot.
+- B. A, plus uniterm records the interpreter binary's digest when the user approves, and asks again when it changes,
+  such as after an upgrade. It never refuses an interpreter.
+- C. B, plus the interpreter's startup files: `.pth` files, `sitecustomize`, and `usercustomize` in its site folders.
+  A package install or upgrade then asks again too.
 
 ### What a driver package declares in `permissions`
 
@@ -220,8 +230,8 @@ The proposal changes four contracts. Each needs its skew behavior settled.
 - **An interpreter, argv, or environment substitution gets remembered powers** — likelihood: high, impact: high. A
   replaced interpreter, a flag such as `python3 -c`, or a hook such as `PYTHONSTARTUP` runs code no digest covers, under
   remembered approvals. Mitigation: the descriptor fixes the command line, and hook keys are refused, per "Script
-  files are verified too". The interpreter binary waits on "Which interpreter an entry may name". This blocks
-  acceptance until that question is settled.
+  files are verified too". The interpreter's install waits on "What remembered trust in a script driver covers". This
+  blocks acceptance until that question is settled.
 - **A verified script driver imports unverified code** — likelihood: high, impact: medium. An interpreter loads modules
   from its own search paths. Mitigation: the review text says imports are not verified, and "Trust this version" binds
   only the packaged files. Accepted pending the ADR-14 amendment above.
@@ -282,13 +292,12 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   includes at least `PYTHONSTARTUP`, `PYTHONPATH`, `PYTHONHOME`, `PYTHONUSERBASE`, `PYTHONINSPECT`, `NODE_OPTIONS`,
   `NODE_PATH`, `RUBYOPT`, `RUBYLIB`, `PERL5OPT`, `PERL5LIB`, `PERLLIB`, `BASH_ENV`, `ENV`, and keys starting with
   `BASH_FUNC_`. A package declaration that names one is refused before anything runs
-- An interpreter kind with no isolating flag is either allowed with its refused keys alone or not allowed, and the
-  check says which for each kind
+- A Homebrew interpreter, a locally built one, and one in a virtual environment each run a verified script driver and
+  can keep a remembered approval
 - A packaged multi-file script driver imports its packaged sibling modules under the flags the descriptor fixes
 - An old build refuses a package with an interpreter entry by name
 - A changed script asks again under "Trust this version"
-- The review text names what stays unverified: imports, and the interpreter's startup files where no isolating flag
-  turns them off
+- The review text names what stays unverified: imports, the interpreter's install, and its startup files
 
 ## Decision Log
 
@@ -338,6 +347,12 @@ The proposal changes four contracts. Each needs its skew behavior settled.
   stored data it cannot read. What it cannot read, it keeps unchanged and acts on nothing from. Raised by the user, who
   asked whether to adopt it before v1. Written as ADR-18, proposed, on 2026-11-26. It stays proposed until the user
   reviews it.
+- 2026-11-26: Added "Any interpreter the user has may run a driver", the user's rule: Homebrew, local, and virtual
+  environment interpreters must be allowed, and uniterm may add no artificial limits on interpreters. Withdrew the
+  pending override for `-I` and a refused `HOME`, since `-I` stops `pip install --user` packages and the script's
+  folder from loading. Replaced the open question "Which interpreter an entry may name", whose options limited
+  interpreters, with "What remembered trust in a script driver covers". Updated the ADR Deviations entry, the
+  substitution risk, and M3 to match. Dropped the M3 check on interpreters with no isolating flag.
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
