@@ -23,6 +23,7 @@ public final class ControllersWindowController: NSWindowController {
   private let tableView = NSTableView()
   private let detail = NSTextField(wrappingLabelWithString: "")
   private let notice = NSTextField(wrappingLabelWithString: "")
+  private let unreadable = NSTextField(wrappingLabelWithString: "")
   private let revokeButton = NSButton(title: "Revoke", target: nil, action: nil)
   private var observer: ChangeObservers.Token?
   private var reading: Task<Void, Never>?
@@ -101,12 +102,15 @@ public final class ControllersWindowController: NSWindowController {
     detail.setAccessibilityIdentifier("controllers-detail")
     notice.textColor = .secondaryLabelColor
     notice.setAccessibilityIdentifier("controllers-notice")
+    unreadable.textColor = .secondaryLabelColor
+    unreadable.isHidden = true
+    unreadable.setAccessibilityIdentifier("controllers-unreadable")
 
     revokeButton.target = self
     revokeButton.action = #selector(revokePressed)
     revokeButton.setAccessibilityIdentifier("controllers-revoke")
 
-    for view in [heading, scrollView, detail, notice, revokeButton] {
+    for view in [heading, scrollView, unreadable, detail, notice, revokeButton] {
       view.translatesAutoresizingMaskIntoConstraints = false
       contentView.addSubview(view)
     }
@@ -120,7 +124,11 @@ public final class ControllersWindowController: NSWindowController {
       scrollView.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 12),
       scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
       scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-      scrollView.bottomAnchor.constraint(equalTo: detail.topAnchor, constant: -12),
+      scrollView.bottomAnchor.constraint(equalTo: unreadable.topAnchor, constant: -8),
+
+      unreadable.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+      unreadable.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+      unreadable.bottomAnchor.constraint(equalTo: detail.topAnchor, constant: -12),
 
       detail.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
       detail.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
@@ -147,7 +155,7 @@ public final class ControllersWindowController: NSWindowController {
 
       guard !Task.isCancelled else { return }
 
-      show(policies: state.policies, notice: state.notice)
+      show(policies: state.policies, notice: state.notice, unreadable: state.unreadable)
     }
   }
 
@@ -159,18 +167,21 @@ public final class ControllersWindowController: NSWindowController {
   /// The selection follows the row the user chose, a policy by its selector and a run by its
   /// connection, since rows come and go and a run's row changes as its powers do. When that row
   /// is gone, nothing is selected, so Revoke never acts on a row the user did not choose.
-  private func show(policies: [ControllerPolicy], notice text: String?) {
-    let selected = selectedRow.map(Self.identity)
+  private func show(policies: [ControllerPolicy], notice text: String?, unreadable count: Int) {
+    let selected =
+      rows.indices.contains(tableView.selectedRow) ? identity(at: tableView.selectedRow) : nil
 
     rows =
       policies.sorted {
-        ($0.selector.controllerID, $0.approved) < ($1.selector.controllerID, $1.approved)
+        Self.order($0).lexicographicallyPrecedes(Self.order($1))
       }
       .map(Row.policy) + scriptHost.allControllerRuns().map(Row.run)
     notice.stringValue = text ?? ""
+    unreadable.stringValue = Self.unreadableText(count)
+    unreadable.isHidden = count == 0
     tableView.reloadData()
 
-    if let selected, let index = rows.firstIndex(where: { Self.identity($0) == selected }) {
+    if let selected, let index = index(of: selected) {
       tableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
     } else {
       tableView.deselectAll(nil)
@@ -214,16 +225,56 @@ public final class ControllersWindowController: NSWindowController {
     }
   }
 
+  /// A policy is chosen by what it holds, with its place among identical ones, so two approvals
+  /// for one selector are two rows and the selection never moves from one to the other.
   private enum RowIdentity: Equatable {
-    case policy(ControllerSelector)
+    case policy(ControllerPolicy, occurrence: Int)
     case run(UInt64)
   }
 
-  private static func identity(_ row: Row) -> RowIdentity {
-    switch row {
-    case .policy(let policy): return .policy(policy.selector)
+  private func identity(at index: Int) -> RowIdentity {
+    switch rows[index] {
+    case .policy(let policy):
+      return .policy(policy, occurrence: rows[..<index].filter { $0 == rows[index] }.count)
+
     case .run(let run): return .run(run.connection)
     }
+  }
+
+  private func index(of identity: RowIdentity) -> Int? {
+    switch identity {
+    case .run(let connection):
+      return rows.firstIndex {
+        if case .run(let run) = $0 { return run.connection == connection }
+        return false
+      }
+
+    case .policy(let policy, let occurrence):
+      return rows.indices.filter { rows[$0] == .policy(policy) }.dropFirst(occurrence).first
+    }
+  }
+
+  /// The order of the policy rows. Every field takes part, so two approvals for one selector keep
+  /// their places from one refresh to the next.
+  private static func order(_ policy: ControllerPolicy) -> [String] {
+    [
+      policy.selector.controllerID, policy.approved, policy.selector.kindName,
+      policy.selector.value, policy.selector.artifact.rawValue, policy.name,
+      policy.versionOf ?? "", policy.scopes.sorted().map(\.kindName).joined(separator: ","),
+    ]
+  }
+
+  /// The line under the approvals when this build cannot read some. It says what the count means
+  /// for this build and never says who wrote them, since a damaged entry reads the same.
+  static func unreadableText(_ count: Int) -> String {
+    guard count > 0 else { return "" }
+
+    let subject = count == 1 ? "1 approval" : "\(count) approvals"
+    let those = count == 1 ? "it does" : "they do"
+
+    return "This uniterm cannot read \(subject) in its policy file, so \(those) not apply here. "
+      + "A newer uniterm may read \(count == 1 ? "it" : "them"). The file keeps "
+      + "\(count == 1 ? "it" : "them") as written."
   }
 
   private var selectedRow: Row? {
@@ -234,7 +285,21 @@ public final class ControllersWindowController: NSWindowController {
 
   private func updateDetail() {
     revokeButton.isEnabled = selectedRow != nil
-    detail.stringValue = selectedRow.map { Self.describe($0, resolved: resolvedReads) } ?? ""
+    detail.stringValue =
+      selectedRow.map { row in
+        var sharing = 1
+
+        if case .policy(let policy) = row {
+          sharing =
+            rows.filter {
+              if case .policy(let other) = $0 { return other.selector == policy.selector }
+
+              return false
+            }.count
+        }
+
+        return Self.describe(row, resolved: resolvedReads, sharing: sharing)
+      } ?? ""
   }
 
   static func selectorText(_ selector: ControllerSelector) -> String {
@@ -255,7 +320,11 @@ public final class ControllersWindowController: NSWindowController {
     return "\(LaunchApprovalText.escaped(policy.name)) (\(id))"
   }
 
-  static func describe(_ row: Row, resolved: [String: String] = [:]) -> String {
+  /// `sharing` is how many approvals the window lists for the row's selector. Revoke removes them
+  /// all, and the detail says so.
+  static func describe(
+    _ row: Row, resolved: [String: String] = [:], sharing: Int = 1
+  ) -> String {
     switch row {
     case .policy(let policy):
       let selector: String
@@ -277,8 +346,21 @@ public final class ControllersWindowController: NSWindowController {
           + "Key fingerprint: \(fingerprint)"
       }
 
+      var lines = [selector, "Approved: \(policy.approved)"]
+
+      if let versionOf = policy.versionOf {
+        lines.append("A version of: \(LaunchApprovalText.escaped(versionOf))")
+      }
+
+      if sharing > 1 {
+        lines.append(
+          "\(sharing) approvals in the list name this selector. Revoke removes all \(sharing).")
+      }
+
+      lines.append("Powers:")
+
       return
-        ([selector, "Approved: \(policy.approved)", "Powers:"]
+        (lines
         + policy.scopes.sorted().flatMap {
           ControllerReviewText.permissionLines(for: $0, prefix: "  ", resolved: resolved)
         })

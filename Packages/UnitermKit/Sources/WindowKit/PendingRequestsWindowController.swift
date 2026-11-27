@@ -75,6 +75,12 @@ public final class PendingRequestsWindowController: NSWindowController {
   private let trustIdentityButton = NSButton(
     title: "Trust This Identity", target: nil, action: nil)
   private let helpButton = NSButton(title: "", target: nil, action: nil)
+
+  /// Whether Trust This Version replaces the older version approvals the review names. It is on
+  /// for each review the user selects.
+  private let replaceOlderCheckbox = NSButton(
+    checkboxWithTitle: "Replace the older versions listed above", target: nil, action: nil)
+  private var replaceOlderReview: UInt64?
   private let sessionButton = NSButton(title: "Allow for This Run", target: nil, action: nil)
   private let askAgainButton = NSButton(title: "Ask Again", target: nil, action: nil)
   private var rows: [Row] = []
@@ -181,6 +187,8 @@ public final class PendingRequestsWindowController: NSWindowController {
     askAgainButton.target = self
     askAgainButton.action = #selector(askAgainPressed)
     askAgainButton.setAccessibilityIdentifier("pending-requests-ask-again")
+    replaceOlderCheckbox.setAccessibilityIdentifier("pending-requests-replace-older")
+    replaceOlderCheckbox.isHidden = true
 
     let buttons = NSStackView(views: [
       helpButton, grantButton, allowOnceButton, allowInPaneButton, sessionButton,
@@ -194,7 +202,14 @@ public final class PendingRequestsWindowController: NSWindowController {
     buttons.heightAnchor.constraint(greaterThanOrEqualToConstant: denyButton.fittingSize.height)
       .isActive = true
 
-    for view in [heading, scrollView, detail, buttons] {
+    let footer = NSStackView(views: [replaceOlderCheckbox, buttons])
+
+    footer.orientation = .vertical
+    footer.alignment = .leading
+    footer.detachesHiddenViews = true
+    buttons.trailingAnchor.constraint(equalTo: footer.trailingAnchor).isActive = true
+
+    for view in [heading, scrollView, detail, footer] {
       view.translatesAutoresizingMaskIntoConstraints = false
       contentView.addSubview(view)
     }
@@ -212,12 +227,12 @@ public final class PendingRequestsWindowController: NSWindowController {
 
       detail.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
       detail.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-      detail.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -12),
+      detail.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -12),
       detail.heightAnchor.constraint(greaterThanOrEqualToConstant: 64),
 
-      buttons.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-      buttons.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-      buttons.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
+      footer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+      footer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+      footer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20),
     ])
   }
 
@@ -267,6 +282,8 @@ public final class PendingRequestsWindowController: NSWindowController {
       button.isEnabled = true
     }
 
+    replaceOlderCheckbox.isHidden = true
+
     allowOnceButton.title = "Allow Once"
     sessionButton.title = "Allow for This Run"
     denyButton.title = "Deny"
@@ -295,6 +312,15 @@ public final class PendingRequestsWindowController: NSWindowController {
         [helpButton, allowOnceButton, sessionButton]
         + (offered.contains(.trustVersion) ? [trustVersionButton] : [])
         + (offered.contains(.trustIdentity) ? [trustIdentityButton] : []) + [denyButton]
+
+      if offered.contains(.trustVersionKeepingOlder) {
+        if replaceOlderReview != review.id {
+          replaceOlderReview = review.id
+          replaceOlderCheckbox.state = .on
+        }
+
+        replaceOlderCheckbox.isHidden = false
+      }
 
     case .undeclaredReview:
       allowOnceButton.title = "Allow and Ask Each Use"
@@ -410,7 +436,9 @@ public final class PendingRequestsWindowController: NSWindowController {
       ControllerReviewText.offered(for: review).contains(.trustVersion)
     else { return }
 
-    answer(review, .trustVersion)
+    let replacing =
+      replaceOlderCheckbox.isHidden || replaceOlderCheckbox.state == .on
+    answer(review, replacing ? .trustVersion : .trustVersionKeepingOlder)
   }
 
   @objc private func trustIdentityPressed() {

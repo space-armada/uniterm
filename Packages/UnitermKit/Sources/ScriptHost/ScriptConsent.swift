@@ -36,6 +36,14 @@ public struct ControllerReview: Identifiable, Equatable, Sendable {
   /// The policy the request goes beyond, when one exists.
   public let revises: ControllerSelector?
 
+  /// What the artifact is a version of: a package's ID, or a file's declared ID or absolute path.
+  /// A version approval stores it, so a later version finds this one to offer to replace.
+  public let versionOf: String
+
+  /// The version approvals of the same thing at other versions. Trust This Version offers to
+  /// replace them, which ends a live run of each.
+  public let older: [ControllerPolicy]
+
   /// False when the policy file cannot take a new policy, so only Allow once and Allow for this
   /// session are offered.
   public let canRemember: Bool
@@ -56,7 +64,8 @@ public struct ControllerReview: Identifiable, Equatable, Sendable {
   public init(
     id: UInt64, name: String, identity: ControllerIdentity, requested: [ControllerPermission],
     added: [ControllerPermission], revises: ControllerSelector?, canRemember: Bool,
-    notice: String?, waiting: [(connection: UInt64, pid: pid_t)]
+    notice: String?, waiting: [(connection: UInt64, pid: pid_t)], versionOf: String? = nil,
+    older: [ControllerPolicy] = []
   ) {
     self.id = id
     self.name = name
@@ -64,6 +73,8 @@ public struct ControllerReview: Identifiable, Equatable, Sendable {
     self.requested = requested
     self.added = added
     self.revises = revises
+    self.versionOf = versionOf ?? identity.controllerID
+    self.older = older
     self.canRemember = canRemember
     self.notice = notice
     self.waiting = waiting
@@ -84,8 +95,12 @@ public enum ControllerReviewChoice: Sendable, Equatable {
   /// The oldest waiting run gets every requested power for its session.
   case allowForSession
 
-  /// Every run of this exact verified version gets the requested powers, now and later.
+  /// Every run of this exact verified version gets the requested powers, now and later. The older
+  /// version approvals of the same thing are replaced, which ends a live run of each.
   case trustVersion
+
+  /// The same, and every older version approval of the same thing stays.
+  case trustVersionKeepingOlder
 
   /// Every correctly signed version of this controller ID, under this key, gets them.
   case trustIdentity
@@ -135,7 +150,8 @@ extension ScriptHost {
           added: trust.nearest.map { $0.uncovered(waiting.requested) } ?? requested,
           revises: trust.nearest?.selector,
           canRemember: trust.writable && controllerSettings?.trust != nil,
-          notice: trust.notice, waiting: [peer]))
+          notice: trust.notice, waiting: [peer], versionOf: waiting.artifact.versionOf,
+          older: trust.older))
       resolveReads(ofReview: lastReviewID, requested: requested)
     }
 
@@ -193,7 +209,7 @@ extension ScriptHost {
 
       admitRun(waiting, approval: choice == .allowOnce ? .once : .session, standing: standing)
 
-    case .trustVersion, .trustIdentity:
+    case .trustVersion, .trustVersionKeepingOlder, .trustIdentity:
       let selector: ControllerSelector
 
       let isFile = review.identity.artifact == .file
@@ -215,38 +231,50 @@ extension ScriptHost {
           : .version(controllerID: review.identity.controllerID, version: review.identity.version)
       }
 
-      guard review.canRemember, let store = controllerSettings?.trust(for: selector.artifact)
-      else {
-        return review.notice ?? "uniterm cannot save trust now."
+      guard review.canRemember, let store = controllerSettings?.trust else {
+        return review.notice ?? "uniterm cannot save the trust now."
       }
 
       let policy = ControllerPolicy(
         selector: selector, name: review.name, scopes: Set(review.requested),
-        approved: ISO8601DateFormatter().string(from: Date()))
+        approved: ISO8601DateFormatter().string(from: Date()),
+        versionOf: choice == .trustIdentity ? nil : review.versionOf)
+      // Only the approvals the review named go. A review that named none replaces nothing, so a
+      // version trusted after another one asked cannot remove what its own prompt never showed.
+      let named =
+        choice == .trustVersion && selector.kindName == "version"
+        ? Set(review.older.map(\.selector)) : []
+      let replacing = !named.isEmpty
 
       let revision = trustRemovals
-      let saved = await Task.detached { () -> String? in
+
+      // A replacement is a revoke of each older version, so its removal counts as one while it is
+      // saved, and a run that a replaced approval admitted ends.
+      if replacing {
+        trustRemovals += 1
+        trustRemovalsUnderWay += 1
+      }
+
+      let outcome = await Task.detached { () -> (String?, [ControllerSelector]) in
         do {
-          try store.update { policies in
-            var result = policies.filter { $0.selector != selector }
-            let earlier = policies.first { $0.selector == selector }
-
-            result.append(
-              ControllerPolicy(
-                selector: selector, name: policy.name,
-                scopes: PermissionContainment.merged(earlier?.scopes ?? [], with: policy.scopes),
-                approved: policy.approved))
-
-            return result
+          let change = try store.update { policies in
+            Self.trusting(policy, replacing: named, in: policies)
           }
 
-          return nil
+          return (nil, change.removedSelectors)
         } catch {
-          return "uniterm could not save the trust: \(error)"
+          return ("uniterm could not save the trust: \(error)", [])
         }
       }.value
 
-      if let saved { return saved }
+      if replacing {
+        trustRemovalsUnderWay -= 1
+        trustRemovals += 1
+      }
+
+      if let saved = outcome.0 { return saved }
+
+      for replaced in outcome.1 { endRuns(admittedBy: replaced) }
 
       // The review may have changed while the policy was saved. Only runs still in it start.
       guard let current = controllerReviews.first(where: { $0.id == id }) else { return nil }
@@ -258,8 +286,10 @@ extension ScriptHost {
 
       // A removal that overlapped the save may have taken the policy away again. The user still
       // approved these runs here, so they start for this run, under no policy.
-      let approval: ControllerApproval =
-        trustRemoved(since: revision) ? .session : .remembered(selector)
+      // The replacement's own two counts are not such a removal.
+      let overlapped =
+        trustRemovalsUnderWay > 0 || trustRemovals != revision + (replacing ? 2 : 0)
+      let approval: ControllerApproval = overlapped ? .session : .remembered(selector)
 
       for connection in connections {
         guard let waiting = waitingAdmissions.removeValue(forKey: connection) else { continue }
@@ -319,27 +349,45 @@ extension ScriptHost {
 extension ScriptHost {
   /// The policy file as it is now. It is read off the main actor.
   public func rememberedTrust() async -> ControllerTrustState {
-    guard let settings = controllerSettings, let packages = settings.trust,
-      let files = settings.fileTrust
-    else {
+    guard let store = controllerSettings?.trust else {
       return ControllerTrustState(
         policies: [], writable: false, notice: "This uniterm remembers no controller trust.")
     }
 
-    let (first, second) = await Task.detached { (packages.read(), files.read()) }.value
-    let notices = [first.notice, second.notice].compactMap { $0 }
+    return await Task.detached { store.read() }.value
+  }
 
-    return ControllerTrustState(
-      policies: first.policies + second.policies, writable: first.writable && second.writable,
-      notice: notices.isEmpty ? nil : notices.joined(separator: "\n"))
+  /// The approvals after the user trusts `policy`. Every readable entry for its selector folds into
+  /// one, so no readable scope is dropped, and the new approval names the thing it is a version of.
+  /// The entries for `replacing`, the selectors the prompt named, go too. An entry added after the
+  /// prompt was built, or one the prompt never named, stays. A named entry that is already gone is
+  /// simply absent.
+  nonisolated static func trusting(
+    _ policy: ControllerPolicy, replacing: Set<ControllerSelector>, in policies: [ControllerPolicy]
+  ) -> [ControllerPolicy] {
+    let same = policies.filter { $0.selector == policy.selector }
+    let scopes = same.reduce(into: Set<ControllerPermission>()) {
+      $0 = PermissionContainment.merged($0, with: $1.scopes)
+    }
+    let kept = policies.filter { entry in
+      entry.selector != policy.selector && !replacing.contains(entry.selector)
+    }
+
+    return kept + [
+      ControllerPolicy(
+        selector: policy.selector, name: policy.name,
+        scopes: PermissionContainment.merged(scopes, with: policy.scopes),
+        approved: policy.approved, versionOf: policy.versionOf)
+    ]
   }
 
   /// Removes a remembered policy, then ends the authority of every live run it admitted, with the
   /// work those runs have waiting. Returns why it failed, for the user. A policy that cannot be
   /// removed leaves the runs as they were, so the window never shows a revoke that did not happen.
+  /// Every entry for the selector that this build reads goes. An entry it cannot read stays.
   @discardableResult
   public func forgetPolicy(_ selector: ControllerSelector) async -> String? {
-    guard let store = controllerSettings?.trust(for: selector.artifact) else {
+    guard let store = controllerSettings?.trust else {
       return "No trust is remembered."
     }
 
@@ -363,6 +411,14 @@ extension ScriptHost {
 
     if let failure { return failure }
 
+    endRuns(admittedBy: selector)
+    trustChanged()
+
+    return nil
+  }
+
+  /// Ends every live run a remembered approval admitted, with the work it has waiting.
+  func endRuns(admittedBy selector: ControllerSelector) {
     let admitted = controllerRuns.values.filter { $0.approval == .remembered(selector) }
 
     revokeControllers(Set(admitted.map(\.connection)))
@@ -371,10 +427,6 @@ extension ScriptHost {
       nativeLaunches[pid] = nil
       endNativeLaunch(launch, pid: pid)
     }
-
-    trustChanged()
-
-    return nil
   }
 
   /// True when a live controller run may have uniterm start this program in a pane of a group it

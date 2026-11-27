@@ -86,14 +86,31 @@ public struct ControllerPolicy: Hashable, Sendable {
   /// When the user approved it, as ISO 8601 text.
   public let approved: String
 
+  /// What a version approval is a version of: a package's ID, a script's declared ID, or else the
+  /// script's absolute path. It finds the older versions to offer to replace when the user trusts
+  /// a new one. It takes no part in whether the approval covers a run. An identity approval has
+  /// none.
+  public let versionOf: String?
+
   public init(
     selector: ControllerSelector, name: String, scopes: Set<ControllerPermission>,
-    approved: String
+    approved: String, versionOf: String? = nil
   ) {
     self.selector = selector
     self.name = name
     self.scopes = scopes
     self.approved = approved
+    self.versionOf = versionOf.flatMap {
+      selector.kindName == "version" && Self.isPlainVersionOf($0) ? $0 : nil
+    }
+  }
+
+  /// Whether text can be stored as what an approval is a version of. The reader refuses any other,
+  /// so the constructor drops it, and what is written is always what the reader reads. A path can
+  /// hold a control character, and a version entry with no `versionOf` still reads and covers.
+  public static func isPlainVersionOf(_ text: String) -> Bool {
+    !text.isEmpty && text.utf8.count <= ControllerPolicyFile.maxVersionOfBytes
+      && !text.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F }
   }
 
   /// The permissions of `requested` this policy does not cover. Empty means covered.

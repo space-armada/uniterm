@@ -99,10 +99,17 @@ extension ScriptHost {
     /// The policy for this controller that leaves the least uncovered, to show what is new.
     var nearest: ControllerPolicy?
 
+    /// The version approvals of the same thing at other versions, which trusting this version
+    /// offers to replace.
+    var older: [ControllerPolicy] = []
+
     /// False when the user cannot be offered a remembered choice.
     var writable: Bool
 
     var notice: String?
+
+    /// How many entries the policy file holds that this build cannot read.
+    var unreadable = 0
 
     static let none = TrustLookup(covering: nil, nearest: nil, writable: false, notice: nil)
   }
@@ -132,10 +139,12 @@ extension ScriptHost {
     return scopes
   }
 
-  /// Reads the policy file, and finds the policy that covers the request.
+  /// Reads the policy file, and finds the policy that covers the request. Only an approval this
+  /// build reads in full is ever covering, or the nearest to what a run asks for. `versionOf` is
+  /// what the run is a version of, and only finds the older versions to offer to replace.
   nonisolated static func lookUp(
     _ requested: Set<ControllerPermission>, for identity: ControllerIdentity,
-    in store: ControllerTrustStore?
+    versionOf: String? = nil, in store: ControllerTrustStore?
   ) -> TrustLookup {
     guard let store, !requested.isEmpty else { return .none }
 
@@ -146,9 +155,17 @@ extension ScriptHost {
     }
     let nearest = matching.min { $0.uncovered(requested).count < $1.uncovered(requested).count }
 
+    let older =
+      versionOf.map { thing in
+        state.policies.filter {
+          $0.versionOf == thing && $0.selector.kindName == "version"
+            && $0.selector.artifact == identity.artifact && $0.selector.value != identity.version
+        }
+      } ?? []
+
     return TrustLookup(
-      covering: covering?.selector, nearest: nearest, writable: state.writable,
-      notice: state.notice)
+      covering: covering?.selector, nearest: nearest, older: older, writable: state.writable,
+      notice: state.notice, unreadable: state.unreadable)
   }
 
   nonisolated static func admit(
@@ -187,7 +204,8 @@ extension ScriptHost {
 
     let trust = lookUp(
       requested(descriptor, capabilities: request.capabilities),
-      for: snapshot.controller.identity, in: settings.trust)
+      for: snapshot.controller.identity, versionOf: snapshot.controller.identity.controllerID,
+      in: settings.trust)
 
     guard wanted == .native else {
       return .admitted(snapshot, entryHash: nil, entryPath: nil, trust: trust)
@@ -266,6 +284,7 @@ extension ScriptHost {
         // The policy that covered the run may be gone, so the user reviews the run instead.
         trust.covering = nil
         trust.nearest = nil
+        trust.older = []
 
         return queueReview(waiting, trust: trust)
       }

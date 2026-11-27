@@ -686,6 +686,120 @@ final class ControllerConsentUITests: UnitermUITestCase {
 
     XCTAssertTrue(indicator.appears(timeout: 30), "a revoked approval still covered a run")
   }
+
+  /// Writes a policy file in the current format before launch. `entries` are the entries' own
+  /// text, so a test can plant one this build cannot read.
+  private func seedPolicy(_ entries: [String]) throws {
+    let folder = scratch + "-controller-policy"
+
+    try FileManager.default.createDirectory(
+      atPath: folder, withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700])
+    try write(
+      "{\"format\": 3, \"policies\": [\n\(entries.joined(separator: ",\n"))\n]}\n",
+      to: folder + "/policy.json")
+  }
+
+  private static func approvalText(
+    id: String, digest: String, name: String, edition: Int = 0, artifact: String = "package"
+  ) -> String {
+    """
+    {"approved": "2026-11-01T10:00:00Z", "artifact": "\(artifact)", "name": "\(name)", \
+    "scopes": [{"edition": \(edition), "kind": "pane-control"}], \
+    "selector": {"controller": "\(id)", "kind": "version", "version": "\(digest)"}, \
+    "versionOf": "\(id)"}
+    """
+  }
+
+  /// Catches a window that hides the approvals this build cannot read. The policy file holds one
+  /// readable approval and one at an edition no build here knows. The window lists the readable one
+  /// and shows one line with the count, saying the other does not apply here and a newer uniterm
+  /// may read it.
+  func testControllersAndPermissionsCountsTheApprovalsItCannotRead() throws {
+    try seedPolicy([
+      Self.approvalText(
+        id: "dev.uniterm.uitest.readable", digest: String(repeating: "a", count: 64),
+        name: "Readable Fixture"),
+      Self.approvalText(
+        id: "dev.uniterm.uitest.later", digest: String(repeating: "b", count: 64),
+        name: "Later Fixture", edition: 9),
+    ])
+
+    let app = launchApp()
+
+    _ = waitForTerminal(in: app)
+
+    let controllers = openControllers(in: app)
+
+    XCTAssertTrue(
+      controllers.tables["controllers-table"].tableRows.firstMatch.appears(timeout: 10),
+      "the readable approval is not listed")
+
+    let line = controllers.staticTexts["controllers-unreadable"]
+
+    XCTAssertTrue(
+      waitFor(line, timeout: 10) {
+        $0.contains("1 approval") && $0.contains("does not apply here")
+          && $0.contains("A newer uniterm may read it")
+      }, "the window does not count the approval it cannot read")
+    XCTAssertFalse((line.value as? String ?? "").lowercased().contains("wrote"))
+
+    attach(controllers, named: "controllers-and-permissions-unreadable")
+  }
+
+  /// Catches a prompt that gives no choice about the older approvals of the thing being trusted.
+  /// The policy file holds a version approval of the package at an older version. A run of a new
+  /// version asks. The prompt names the older approval, says a live run of it ends, and offers to
+  /// keep both with the replace choice on. Trusting replaces it, so one approval remains.
+  func testTrustingANewVersionOffersToReplaceTheOlderApproval() throws {
+    let package = try writePackage()
+
+    defer { try? FileManager.default.removeItem(atPath: package) }
+
+    try seedPolicy([
+      Self.approvalText(
+        id: "dev.uniterm.uitest.consent", digest: String(repeating: "a", count: 64),
+        name: "Older Consent Fixture")
+    ])
+
+    let app = launchApp()
+
+    _ = waitForTerminal(in: app)
+
+    let first = try startRun(package, named: "consent-replace", in: app)
+    let panel = openPendingRequests(in: app)
+    let row = panel.tables["pending-requests-table"].tableRows.firstMatch
+
+    XCTAssertTrue(row.appears(timeout: 30), "the review never reached the panel")
+    row.click()
+
+    let detail = panel.staticTexts["pending-requests-detail"]
+
+    XCTAssertTrue(
+      waitFor(detail, timeout: 5) {
+        $0.contains("replaces 1 older approval of dev.uniterm.uitest.consent")
+          && $0.contains("Older Consent Fixture")
+          && $0.contains("A live run of a replaced version ends")
+      }, "the prompt does not name what it replaces. \(panelReport(panel))")
+
+    let replace = panel.checkBoxes["pending-requests-replace-older"]
+
+    XCTAssertTrue(replace.appears(timeout: 5), "the prompt offers no keep-both choice")
+    XCTAssertEqual(replace.value as? Int, 1, "replacing is not the default")
+
+    attach(panel, named: "pending-requests-replace-older")
+    panel.buttons["pending-requests-trust-version"].click()
+    XCTAssertEqual(waitForFile(first), "exit=0\n")
+
+    let controllers = openControllers(in: app)
+
+    XCTAssertTrue(
+      controllers.tables["controllers-table"].tableRows.firstMatch.appears(timeout: 10),
+      "the new approval is not listed")
+    XCTAssertEqual(
+      controllers.tables["controllers-table"].tableRows.count, 1,
+      "the older approval stayed after the user chose to replace it")
+  }
 }
 
 /// The terminal could not be given the keys, so the test stops before it types.

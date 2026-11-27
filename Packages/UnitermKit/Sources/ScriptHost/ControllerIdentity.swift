@@ -14,27 +14,15 @@ public struct ControllerSettings: Sendable {
 
   public let helper: any ControllerHelperIdentity
 
-  /// The remembered approvals. Without it, nothing is remembered and only Allow once and Allow
-  /// for this run are offered.
+  /// The remembered approvals of every artifact kind, in one policy file. Without it, nothing is
+  /// remembered and only Allow once and Allow for this run are offered.
   let trust: ControllerTrustStore?
 
-  /// The remembered approvals of declared script files, in a policy file of their own.
-  let fileTrust: ControllerTrustStore?
-
-  /// `trustDirectory` is the folder of the private policy files, or nil to remember nothing.
+  /// `trustDirectory` is the folder of the private policy file, or nil to remember nothing.
   public init(runsRoot: URL, helper: any ControllerHelperIdentity, trustDirectory: URL? = nil) {
     self.runsRoot = runsRoot
     self.helper = helper
-    trust = trustDirectory.map { ControllerTrustStore(directory: $0, artifact: .package) }
-    fileTrust = trustDirectory.map { ControllerTrustStore(directory: $0, artifact: .file) }
-  }
-
-  /// The store that holds the approvals of `artifact`.
-  func trust(for artifact: ControllerArtifact) -> ControllerTrustStore? {
-    switch artifact {
-    case .package: return trust
-    case .file: return fileTrust
-    }
+    trust = trustDirectory.map { ControllerTrustStore(directory: $0) }
   }
 
   /// The policy folder under the user's Application Support, which layout files never share.

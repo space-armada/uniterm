@@ -25,68 +25,66 @@ final class ControllerPolicyFuzzTests: XCTestCase {
   }
 
   /// Catches a mutated policy file that traps the reader, or one whose rewrite reads differently.
+  /// A file that reads, whatever mutated, writes back to bytes that read the same: the same
+  /// approvals, and every entry it kept, byte for byte. The seed holds package, script file, and
+  /// kept entries, so a mutation lands in each shape.
   func testMutatedPolicyFilesReadWithoutTrapping() throws {
     var random = SplitMix64(seed: seed)
-    let seedFile = ControllerPolicyFile.encode([
-      ControllerPolicy(
-        selector: .version(
-          controllerID: "dev.uniterm.fixture.fuzz", version: String(repeating: "0f", count: 32)),
-        name: "Fuzz",
-        scopes: [
-          .paneControl, .clipboardRead, .clipboardWrite, .capability("fs-read"),
-          .hostLaunch(
-            try HostLaunchScope(executable: "/bin/echo", directory: "/tmp", environmentKeys: ["K"])),
-          .pathRead(try ReadScope(directories: ["/tmp/a", "/tmp/b"])),
-        ], approved: "2026-11-11T10:00:00Z"),
-      ControllerPolicy(
-        selector: .identity(
-          controllerID: "dev.uniterm.fixture.fuzz",
-          keyFingerprint: String(repeating: "e", count: 64)),
-        name: "Fuzz", scopes: [.paneControl], approved: "2026-11-11T10:00:00Z"),
-    ])
+    let keptEntry = ControllerKeptEntry(
+      bytes: Array(
+        """
+        {"approved": "2026-11-11T10:00:00Z", "artifact": "driver", "name": "Kept", \
+        "scopes": [{"edition": 7, "kind": "future"}], \
+        "selector": {"kind": "version", "version": "\(String(repeating: "1a", count: 32))"}}
+        """.utf8))
+    let seedFile = ControllerPolicyFile.encode(
+      [
+        ControllerPolicy(
+          selector: .version(
+            controllerID: "dev.uniterm.fixture.fuzz", version: String(repeating: "0f", count: 32)),
+          name: "Fuzz",
+          scopes: [
+            .paneControl, .clipboardRead, .clipboardWrite, .capability("fs-read"),
+            .hostLaunch(
+              try HostLaunchScope(
+                executable: "/bin/echo", directory: "/tmp", environmentKeys: ["K"])),
+            .pathRead(try ReadScope(directories: ["/tmp/a", "/tmp/b"])),
+          ], approved: "2026-11-11T10:00:00Z", versionOf: "dev.uniterm.fixture.fuzz"),
+        ControllerPolicy(
+          selector: .identity(
+            controllerID: "dev.uniterm.fixture.fuzz",
+            keyFingerprint: String(repeating: "e", count: 64)),
+          name: "Fuzz", scopes: [.paneControl], approved: "2026-11-11T10:00:00Z"),
+        ControllerPolicy(
+          selector: .fileVersion(version: String(repeating: "0f", count: 32)), name: "Fuzz",
+          scopes: [.paneControl, .clipboardRead, .capability("fs-read")],
+          approved: "2026-11-11T10:00:00Z", versionOf: "/tmp/fuzz.janet"),
+        ControllerPolicy(
+          selector: .fileIdentity(
+            fileID: "dev.uniterm.fixture.fuzz", keyFingerprint: String(repeating: "e", count: 64)),
+          name: "Fuzz", scopes: [.paneControl], approved: "2026-11-11T10:00:00Z"),
+      ], kept: [keptEntry],
+      members: [
+        ControllerKeptMember(key: Array("\"extra\"".utf8), value: Array("{\"a\": [1]}".utf8))
+      ])
 
     for iteration in 0..<iterations {
       var bytes = [UInt8](seedFile)
 
       for _ in 0..<Int(random.next() % 4) { mutate(&bytes, using: &random) }
 
-      guard let policies = try? ControllerPolicyFile.decode(Data(bytes)) else { continue }
+      guard let document = try? ControllerPolicyFile.read(Data(bytes)) else { continue }
+
+      let again = try ControllerPolicyFile.read(
+        ControllerPolicyFile.encode(
+          document.policies, kept: document.kept, members: document.members))
 
       XCTAssertEqual(
-        Set(try ControllerPolicyFile.decode(ControllerPolicyFile.encode(policies))), Set(policies),
-        "seed \(seed), iteration \(iteration)")
-    }
-  }
-
-  /// Catches a mutated file policy file that traps the reader, or one whose rewrite reads
-  /// differently.
-  func testMutatedFilePolicyFilesReadWithoutTrapping() throws {
-    var random = SplitMix64(seed: seed &+ 1)
-    let seedFile = ControllerPolicyFile.encode([
-      ControllerPolicy(
-        selector: .fileVersion(version: String(repeating: "0f", count: 32)), name: "Fuzz",
-        scopes: [.paneControl, .clipboardRead, .capability("fs-read")],
-        approved: "2026-11-11T10:00:00Z"),
-      ControllerPolicy(
-        selector: .fileIdentity(
-          fileID: "dev.uniterm.fixture.fuzz", keyFingerprint: String(repeating: "e", count: 64)),
-        name: "Fuzz", scopes: [.paneControl], approved: "2026-11-11T10:00:00Z"),
-    ])
-
-    for iteration in 0..<iterations {
-      var bytes = [UInt8](seedFile)
-
-      for _ in 0..<Int(random.next() % 4) { mutate(&bytes, using: &random) }
-
-      guard let policies = try? ControllerPolicyFile.decode(Data(bytes), artifact: .file) else {
-        continue
-      }
-
+        Set(again.policies), Set(document.policies), "seed \(seed), iteration \(iteration)")
       XCTAssertEqual(
-        Set(
-          try ControllerPolicyFile.decode(
-            ControllerPolicyFile.encode(policies), artifact: .file)), Set(policies),
-        "seed \(seed), iteration \(iteration)")
+        Set(again.kept), Set(document.kept), "seed \(seed), iteration \(iteration)")
+      XCTAssertEqual(
+        Set(again.members), Set(document.members), "seed \(seed), iteration \(iteration)")
     }
   }
 

@@ -8,17 +8,24 @@ public struct ControllerTrustState: Sendable, Equatable {
   /// The policies that may cover a run. Empty when the file is missing, unusable, or newer.
   public let policies: [ControllerPolicy]
 
-  /// False when this version must not write the file: it is newer, or cannot be reached. Trust
-  /// this version and Trust this identity are then not offered.
+  /// False when this version must not write the file: it is newer or over the bound, or cannot be
+  /// reached. Trust this version and Trust this identity are then not offered.
   public let writable: Bool
 
   /// Why the file grants nothing, for the user. Nil when it was read.
   public let notice: String?
 
-  public init(policies: [ControllerPolicy], writable: Bool, notice: String?) {
+  /// How many entries the file holds that this build cannot read. They grant nothing here, and a
+  /// save writes each one back as it was.
+  public let unreadable: Int
+
+  public init(
+    policies: [ControllerPolicy], writable: Bool, notice: String?, unreadable: Int = 0
+  ) {
     self.policies = policies
     self.writable = writable
     self.notice = notice
+    self.unreadable = unreadable
   }
 }
 
@@ -33,52 +40,68 @@ public enum ControllerTrustStoreError: Error, Equatable, Sendable, CustomStringC
   }
 }
 
-/// The controller policy file, `policy.json`, in a folder only the user can read. A script file's
-/// approvals live in a policy file of their own, `files.json`, in the same folder. It has its own
-/// lock, its own kept-aside copies, its own temporary files, and its own record limit, and neither
-/// store reads, counts, or sweeps the other's names. An older build never reads `files.json`, so
-/// its controller approvals keep working.
+/// What a change did to the store: the readable policies before it and after it.
+public struct ControllerTrustChange: Sendable, Equatable {
+  public let before: [ControllerPolicy]
+  public let after: [ControllerPolicy]
+
+  /// The selectors the change took out, in the order they were listed.
+  public var removedSelectors: [ControllerSelector] {
+    let kept = Set(after.map(\.selector))
+    var seen = Set<ControllerSelector>()
+
+    return before.map(\.selector).filter { !kept.contains($0) && seen.insert($0).inserted }
+  }
+}
+
+/// The controller policy file, `policy.json`, in a folder only the user can read. It holds every
+/// remembered approval, whatever it is an approval of: a package, a script file, and the kinds
+/// later builds add. Each entry names its artifact kind.
 ///
 /// It holds remembered approvals and nothing else: no key, no connection, no pane. Layout files
 /// hold none of it. Every read and every change takes an exclusive lock on the folder's lock file,
 /// so two running instances never lose each other's change, and each change rereads the file
 /// first. Writes go through the shared atomic writer.
 ///
-/// A file this version cannot read grants nothing. It is moved aside, numbered, before anything is
-/// written, so a later write never replaces it and it stays for recovery. A file written in an
-/// earlier format is moved aside the same way, with a notice that each approval is given again. A
-/// file from a newer version, by its format or by a permission this build does not know, is left
-/// where it is, untouched, and this version neither trusts nor writes it.
+/// An entry this build cannot read is kept. It grants nothing, and every save writes it back byte
+/// for byte, so a newer build finds it again and a build that does read it sees what the other
+/// wrote. A file this version cannot tell entries in, such as one that is not JSON, grants nothing
+/// and is moved aside, numbered, before anything is written, so a later write never replaces it.
+/// A file from a newer format, or over the format's bound, is left where it is, untouched, and
+/// this version neither trusts nor writes it.
+///
+/// The stores of earlier builds are retired. A `policy.json` in an earlier format, and every file
+/// of an earlier store such as `files.json`, with its lock and kept-aside copies, are moved into
+/// the `retired` folder. An empty file in this format is written at once. Retiring never prunes an
+/// earlier retired copy, and never counts toward the kept-aside copies of `policy.json`. Each
+/// approval is given again once, and the notice says so the first time only.
 ///
 /// Calls block on the lock and the disk, so they belong off the main actor.
 public struct ControllerTrustStore: Sendable {
   public let directory: URL
 
-  /// Which approvals the store holds, and so which files it names.
-  public let artifact: ControllerArtifact
+  /// The permission editions this build knows. A test stands in for a build of another age.
+  public let editions: ControllerPermissionEditions
 
   /// How many kept-aside files stay. The oldest go first.
   public static let keepAsideLimit = 5
 
-  public init(directory: URL, artifact: ControllerArtifact = .package) {
+  /// The earlier stores that sit beside `policy.json`, by the start of each store's file names.
+  /// `files` held script-file approvals.
+  public static let retiredStores = ["files"]
+
+  private let retiring: [String]
+
+  public init(
+    directory: URL, editions: ControllerPermissionEditions = .current,
+    retiring: [String] = ControllerTrustStore.retiredStores
+  ) {
     self.directory = directory
-    self.artifact = artifact
+    self.editions = editions
+    self.retiring = retiring
   }
 
-  /// The start of every name the store owns: `policy` for packages and `files` for script files.
-  private var baseName: String {
-    switch artifact {
-    case .package: return "policy"
-    case .file: return "files"
-    }
-  }
-
-  private var subject: String {
-    switch artifact {
-    case .package: return "controller"
-    case .file: return "script file"
-    }
-  }
+  private var baseName: String { "policy" }
 
   /// `~/Library/Application Support/uniterm/controllers`.
   public static func defaultDirectory() throws -> URL {
@@ -92,6 +115,11 @@ public struct ControllerTrustStore: Sendable {
   public var fileURL: URL { directory.appendingPathComponent("\(baseName).json") }
   private var lockURL: URL { directory.appendingPathComponent("\(baseName).lock") }
 
+  /// Where the files of earlier stores go.
+  public var retiredDirectory: URL {
+    directory.appendingPathComponent("retired", isDirectory: true)
+  }
+
   /// The kept-aside files, oldest first.
   public var keptAsideFiles: [URL] { asideEntries().map(\.url) }
 
@@ -101,41 +129,38 @@ public struct ControllerTrustStore: Sendable {
     } catch {
       return ControllerTrustState(
         policies: [], writable: false,
-        notice: "uniterm cannot read its \(subject) policies, so it remembers no trust: \(error)")
+        notice: "uniterm cannot read its controller policies, so it remembers no trust: \(error)")
     }
   }
 
-  /// Replaces the policies with what `change` makes of them, and returns the result. The file is
-  /// read again under the lock first, so a change another instance made is kept.
+  /// Replaces the policies with what `change` makes of them, and returns what it did. The file is
+  /// read again under the lock first, so a change another instance made is kept. Every entry this
+  /// build cannot read is written back unchanged.
   @discardableResult
   public func update(
     _ change: @Sendable ([ControllerPolicy]) -> [ControllerPolicy]
-  ) throws(ControllerTrustStoreError) -> [ControllerPolicy] {
+  ) throws(ControllerTrustStoreError) -> ControllerTrustChange {
     do {
       return try locked {
         let loaded = try load()
 
         guard loaded.state.writable else {
           throw ControllerTrustStoreError.readOnly(
-            loaded.state.notice ?? "uniterm cannot write its \(subject) policies")
+            loaded.state.notice ?? "uniterm cannot write its controller policies")
         }
 
         let policies = change(loaded.state.policies)
+        let encoded = ControllerPolicyFile.encode(
+          policies, kept: loaded.document.kept, members: loaded.document.members)
 
-        guard policies.count <= ControllerPolicyFile.maxPolicies else {
-          throw ControllerTrustStoreError.io(
-            "uniterm remembers at most \(ControllerPolicyFile.maxPolicies) \(subject) approvals. "
-              + "Revoke some in Controllers & Permissions first.")
-        }
-
-        let encoded = ControllerPolicyFile.encode(policies)
-
-        // The reader refuses a larger file as broken and moves it aside, which would end every
-        // remembered approval. Policies under the count cap can still pass the limit.
+        // The reader refuses a larger file, which would end every remembered approval. The size
+        // counts the kept entries too. No count of approvals comes near it, so a file this large
+        // looks damaged.
         guard encoded.count <= ControllerPolicyFile.maxBytes else {
           throw ControllerTrustStoreError.io(
-            "uniterm's \(subject) approvals would not fit in its policy file. "
-              + "Revoke some in Controllers & Permissions first.")
+            "uniterm did not save the approval. \(fileURL.path) would pass "
+              + "\(ControllerPolicyFile.maxBytes) bytes, which real approvals never reach, so the "
+              + "file looks damaged. It was left as it is.")
         }
 
         do {
@@ -144,7 +169,7 @@ public struct ControllerTrustStore: Sendable {
           throw ControllerTrustStoreError.io("\(error)")
         }
 
-        return policies
+        return ControllerTrustChange(before: loaded.state.policies, after: policies)
       }
     } catch let error as ControllerTrustStoreError {
       throw error
@@ -157,40 +182,52 @@ public struct ControllerTrustStore: Sendable {
 
   private struct Loaded {
     var state: ControllerTrustState
+    var document = ControllerPolicyDocument()
   }
 
-  /// Reads the file under the lock. An unreadable file is moved aside here.
+  /// Reads the file under the lock. An unreadable file is moved aside here, and so is an earlier
+  /// store.
   private func load() throws -> Loaded {
+    let retired = try retireEarlierStores()
     let data: Data
 
     do {
       data = try readBounded()
     } catch CocoaError.fileReadNoSuchFile {
-      return Loaded(state: ControllerTrustState(policies: [], writable: true, notice: nil))
+      return try fresh(retiredAny: retired)
     }
 
     do {
+      let document = try ControllerPolicyFile.read(data, editions: editions)
+      let notice = retired ? reapprovalNotice() : nil
+
       return Loaded(
         state: ControllerTrustState(
-          policies: try ControllerPolicyFile.decode(data, artifact: artifact), writable: true,
-          notice: nil))
+          policies: document.policies, writable: true, notice: notice,
+          unreadable: document.kept.count),
+        document: document)
     } catch .newer(let what) {
       return Loaded(
         state: ControllerTrustState(
           policies: [], writable: false,
           notice:
-            "A newer uniterm wrote the \(subject) policy file, with \(what), so this one "
+            "A newer uniterm wrote the controller policy file, with \(what), so this one "
             + "remembers no trust and saves none. The file is left as it is."))
-    } catch .older {
-      let kept = try moveAside()
-
+    } catch .tooLarge {
       return Loaded(
         state: ControllerTrustState(
-          policies: [], writable: true,
+          policies: [], writable: false,
           notice:
-            "An earlier uniterm wrote the \(subject) policy file, in a format that cannot say what "
-            + "each approval covered. Every \(subject) is approved again once, and the next "
-            + "approval is saved. The old file was kept as \(kept.lastPathComponent)."))
+            "The controller policy file is over \(ControllerPolicyFile.maxBytes) bytes, which "
+            + "real approvals never reach, so it looks damaged. It grants nothing, and it is left "
+            + "as it is at \(fileURL.path)."))
+    } catch .older(let format) {
+      let kept = try retire(fileURL.lastPathComponent)
+
+      return try fresh(
+        retiredAny: true,
+        extra:
+          "The old file, format \(format), was kept as retired/\(kept.lastPathComponent).")
     } catch {
       let kept = try moveAside()
 
@@ -198,9 +235,43 @@ public struct ControllerTrustStore: Sendable {
         state: ControllerTrustState(
           policies: [], writable: true,
           notice:
-            "The \(subject) policy file could not be used (\(error)), so it grants nothing. It "
+            "The controller policy file could not be used (\(error)), so it grants nothing. It "
             + "was kept as \(kept.lastPathComponent)."))
     }
+  }
+
+  /// An empty file in this format, written at once when an earlier store was retired, so no build
+  /// keeps retiring another's file.
+  private func fresh(retiredAny: Bool, extra: String? = nil) throws -> Loaded {
+    guard retiredAny else {
+      return Loaded(state: ControllerTrustState(policies: [], writable: true, notice: nil))
+    }
+
+    do {
+      try AtomicFile.write(ControllerPolicyFile.encode([]), to: fileURL)
+    } catch {
+      throw ControllerTrustStoreError.io("\(error)")
+    }
+
+    let notice = [reapprovalNotice(), extra].compactMap { $0 }.joined(separator: " ")
+
+    return Loaded(
+      state: ControllerTrustState(
+        policies: [], writable: true, notice: notice.isEmpty ? nil : notice))
+  }
+
+  /// The notice that every approval is given again once. It shows the first time an earlier store
+  /// is retired. An older build that writes its file again does not bring it back.
+  private func reapprovalNotice() -> String? {
+    let marker = retiredDirectory.appendingPathComponent(".notified")
+
+    guard !FileManager.default.fileExists(atPath: marker.path) else { return nil }
+
+    try? Data().write(to: marker)
+
+    return "An earlier uniterm wrote its controller and script file approvals in a format that "
+      + "cannot say what each one covered. Every controller and script file is approved again "
+      + "once, and the next approval is saved."
   }
 
   /// Reads at most one byte past the format's bound, so a huge file is refused without reading
@@ -280,6 +351,55 @@ public struct ControllerTrustStore: Sendable {
     for entry in entries.prefix(max(0, entries.count - Self.keepAsideLimit)) {
       try? FileManager.default.removeItem(at: entry.url)
     }
+
+    return target
+  }
+
+  // MARK: Retired stores
+
+  /// Moves the files of every earlier store into the retired folder. Returns whether any moved.
+  /// Nothing in the folder is ever removed or replaced, so a later retiring never prunes an earlier
+  /// one, and the kept-aside copies of `policy.json` stay out of it.
+  private func retireEarlierStores() throws -> Bool {
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+    var moved = false
+
+    for name in names.sorted() where retiring.contains(where: { name.hasPrefix($0 + ".") }) {
+      _ = try retire(name)
+      moved = true
+    }
+
+    return moved
+  }
+
+  /// Moves one file of this folder into the retired folder under a name that is not yet taken, and
+  /// returns where it went.
+  private func retire(_ name: String) throws -> URL {
+    do {
+      try FileManager.default.createDirectory(
+        at: retiredDirectory, withIntermediateDirectories: true,
+        attributes: [.posixPermissions: 0o700])
+    } catch {
+      throw ControllerTrustStoreError.io("cannot make \(retiredDirectory.path): \(error)")
+    }
+
+    var target = retiredDirectory.appendingPathComponent(name)
+    var number = 1
+    var info = stat()
+
+    while lstat(target.path, &info) == 0 {
+      number += 1
+      target = retiredDirectory.appendingPathComponent("\(name).\(number)")
+    }
+
+    let source = directory.appendingPathComponent(name)
+
+    guard rename(source.path, target.path) == 0 else {
+      throw ControllerTrustStoreError.io(
+        "cannot retire \(source.path): \(String(cString: strerror(errno)))")
+    }
+
+    AtomicFile.syncDirectory(directory)
 
     return target
   }

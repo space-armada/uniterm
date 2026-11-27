@@ -340,7 +340,7 @@ M2 has no dependency on either draft.
 
 ### M2: The trust stores keep what they cannot read
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - An approval with an unknown permission kind, an unknown selector kind, an unknown artifact kind, or an unknown edition
   grants nothing, and every other approval in the file still applies
@@ -392,6 +392,47 @@ M2 has no dependency on either draft.
   either row
 - The file's sort order breaks ties between entries that share a selector, so one set of entries has one spelling
 - An entry this build cannot read is never offered as the nearest match for a run, even when its selector parses
+
+**As built:**
+
+The format is 3, above UTERM-063's 2 and the 2 UTERM-066 planned. The format 3 file holds every approval. Each entry
+names its artifact kind, and a version approval names what it is a version of. `files.json` is gone as a store.
+
+The reader has two layers. A scanner checks the grammar of the whole file and returns the byte range of each member and
+each entry. The strict JSON reader then reads one entry's own bytes. Anything the strict reader refuses costs that one
+entry. The scanner refuses only what hides where entries begin and end. Those cases, and non-UTF-8 bytes anywhere, set
+the whole file aside. Nesting past the depth bound, an escaped NUL, an unpaired surrogate, a leading zero, and a key
+repeated at any depth each cost only their entry. Each has a fixture, and a nesting of 20,000 levels is one of them.
+The scan walks containers with its own stack, so that depth cannot exhaust the call stack.
+
+Choices the checks did not fix:
+
+- A file's top-level members that this build does not know are written back as read, after `policies`, as well as being
+  allowed. ADR-18 P2 asks for it.
+- Kept entries sort beside the approvals that share their selector. The sort reads the selector's strings from an entry
+  when it has them, grants nothing from them, and breaks ties by the entry's own bytes.
+- An earlier store's files, and an older `policy.json`, move into a `retired` folder under the store's folder. Nothing
+  there is ever pruned or replaced, and `policy.json`'s kept-aside copies stay at five. A marker file there keeps the
+  notice that every approval is given again once to a single showing.
+- The store retires any earlier store it is told the name of. `files` is the only earlier store any build wrote, so
+  it is the default. UTERM-032 now keeps input-folder approvals in `policy.json`, so no build should create a store
+  of its own for them. A build that ever writes another store must add its name.
+- Trust folds every readable entry for the selector into one. The folded entry takes the trusted run's path, so
+  several entries for one unsigned digest end with one defined path.
+- The prompt's replace choice is a box under the detail, on by default. Clearing it sends the keep-both answer. The
+  buttons stayed as they were, since a signed controller's row has no room for another.
+- Trust replaces only the approvals the prompt named. A review that named none removes nothing, and a named approval
+  that is already gone is absent. An approval added after the prompt was built stays.
+- A path or ID that the reader would refuse as a `versionOf`, such as one with a control character or past 4096 bytes,
+  is not stored. The approval is saved without it and still reads and covers. One function holds the rule for the
+  writer and the reader.
+- "No per-entry setup" is proved by a test that counts date-parser setups, which stay at one however many entries a
+  read holds, and none for the plain spelling. The wall-clock test is a coarse guard.
+- Reading 8,500 approvals, 3.8 MiB, takes about 110 ms in a one-off release measurement and about a second in a debug build. The timed
+  test allows 3 s so a debug run passes. A parse of the approval time costs 25 microseconds with the date formatter, so
+  the plain spelling uniterm writes is checked by hand, and any other spelling still goes to the formatter.
+
+The Decision Log has the amendments to UTERM-066 and the guesses above.
 
 ## Decision Log
 
@@ -495,6 +536,18 @@ M2 has no dependency on either draft.
   in memory, and the Settings window shows it. (run best guess)
 - 2026-11-27: Scrollback is recorded as meeting ADR-18, since a file is read once and deleted by design. The effect on
   a layout kept aside past 30 days goes to UTERM-071. (run best guess)
+- 2026-11-27: M2 done. Guesses the run made: the format is 3. An entry's fields are `artifact` and an optional
+  `versionOf`, which only a version approval may carry. A `retired` folder takes every earlier store, with a marker for
+  the one-time notice. The store retires `files` only, since UTERM-032's store has no name. Unknown top-level members
+  are kept as written. Non-UTF-8 bytes set the whole file aside. The replace choice is a box in Pending Requests. The
+  window's line reads "This uniterm cannot read N approvals in its policy file, so they do not apply here. A newer
+  uniterm may read them." (run best guess)
+- 2026-11-27: The M2 bullet "A UTERM-032 input-folder store, when one exists, is set aside like `files.json`" is met by
+  the mechanism only. The store retires any name it is given. `files` is the only earlier store any build wrote, and
+  UTERM-032 keeps folder approvals in `policy.json`, so a build that ever writes another store must add its name.
+  (run best guess)
+- 2026-11-27: UTERM-066's four mentions of format 2 for the policy store were amended to UTERM-067's format 3, since
+  format 2 belongs to UTERM-063 and every entry now names its kind. (run best guess)
 
 ## References
 

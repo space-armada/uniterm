@@ -76,3 +76,91 @@ None is scheduled.
 - adr-impact named three decisions the drafts will face with no ADR: what unit a store keeps unread, whether a user's
   clear removes unread entries, and how long a kept-aside file lives. Each is open in a draft, and none is settled, so
   none is recorded as an ADR candidate yet.
+
+Committed as "Check every store against ADR-18 and draft fixes for the ones that fall short".
+
+## UTERM-067 M2
+
+### What was built
+
+- `policy.json` is format 3 and holds every approval. Each entry names its artifact kind. A version approval may name
+  what it is a version of. `files.json` is no longer a store.
+- A scanner finds each entry's exact bytes. The strict reader then parses one entry on its own. A fault inside an entry
+  costs only that entry: a repeated key at any depth, nesting past the bound, an escaped NUL, an unpaired surrogate, an
+  unknown kind, or an edition above this build's. Invalid JSON, a repeated top-level key, a byte order mark, or bytes
+  that are not UTF-8 set the whole file aside.
+- An entry this build cannot read grants nothing, is never the nearest match, and is written back byte for byte.
+  Unknown top-level members are written back too.
+- The store has no count. Its only bound is 4 MiB. A file over it stays untouched and grants nothing. A write past it
+  names the file and says it looks damaged.
+- An older `policy.json` and any `files.json`, with its lock and aside copies, move into a `retired/` folder. Nothing
+  there is pruned. An empty format 3 file is written at once, and the re-approval notice shows once.
+- Trust folds every readable entry for a selector into one. Revoke removes every readable entry for it.
+- The Controllers & Permissions window shows one line with the count of approvals this build cannot read. Two entries
+  for one selector both show.
+- Trusting a new version offers to replace its older version approvals, on by default, or keep both. The prompt names
+  each approval it replaces, and says a live run of a replaced version ends. Replacing goes through the revoke path.
+- UTERM-066's four mentions of its planned format 2 now say UTERM-067's format 3.
+
+### Implementer best guesses
+
+- Old files go to a `retired/` folder with a `.notified` marker. The proposal says "set aside" and names no place. If
+  wrong, they would be numbered copies beside `policy.json`, with a second prefix to keep them out of its five.
+- `versionOf` is optional. A version entry without one reads and covers, since it takes no part in coverage.
+- The UTERM-032 store has no name in any proposal, and UTERM-032 no longer builds one. The store retires any earlier
+  store it is told of, and `files` is the only one a build ever wrote.
+- Unknown top-level members are written back, as ADR-18 P2 asks. The bullet said only that they do not break the file.
+- Bytes that are not UTF-8, and a byte order mark, set the whole file aside.
+- The replace choice is a checkbox under the review, not a second button. A signed controller's button row has no room.
+- "Well under a second" rests on a one-off release measurement of about 110 ms for 8,500 approvals at 3.8 MiB. A debug
+  read takes about 1 s. The test proves "no per-entry setup" by counting date parser setups, and keeps the wall clock
+  only as a coarse guard.
+
+### Checks
+
+- `make fmt-check lint check`: pass.
+- `make fuzz`: 24 tests pass, 297 s, after the review fixes.
+- `caffeinate -dimsu make test-package`: the coordinator's run before the fixes passed 3368 tests, 10 skipped, in 288 s.
+  The implementer's run after the fixes passed 3372 tests in 283 s. `ProcessReaperTests` passed in every run.
+- `xcodebuild build-for-testing`: TEST BUILD SUCCEEDED.
+- Test cost of the new classes, in debug: `ControllerKeptEntriesTests` about 1.8 s, `FilePolicyTests` about 4 s,
+  `StoredTrustTests` about 0.6 s.
+
+### Review
+
+- adr-impact: no conflict. The store meets ADR-18 P1 to P5, and ADR-14 holds, since a replace is a prompted revoke. The
+  store is read off the main thread, per ADR-08. It named the retiring of old trust files as a decision with no ADR. The
+  user settled that in "Old trust files are set aside", and the proposal's log says no decision earns an ADR. Not
+  recorded as a candidate.
+- The reviewer attacked the reader as the trust boundary. It found no path where an entry with an unreadable part
+  grants. A scanner and strict reader that disagree can only turn an entry into a kept one. It had nine findings, all
+  fixed:
+  - CONFIRMED: Trust This Version removed approvals the prompt never named. With two versions waiting for review,
+    trusting the second removed the first's approval and ended its runs. A replace now removes only what the review
+    named. The regression test failed on the old behaviour first.
+  - PLAUSIBLE: the timed read test allowed 3 s, so it could not catch a per-entry formatter. A count of parser setups
+    now proves the bullet.
+  - PLAUSIBLE: a script path with a newline, a tab, or over 4096 bytes produced an entry the store's own reader kept
+    unread. The trace confirmed the path can reach it. The writer and reader now share one rule, and such a path is
+    saved with no `versionOf`.
+  - A test name's typo, a missing table test for strings that look like structure, a doc that contradicted its test,
+    two docs that still said "set aside", a fourth stale format line in UTERM-066, and the UTERM-032 store's naming.
+
+### UI checks
+
+- The coordinator ran `ControllerConsentUITests`, `PendingRequestsUITests`, and `ControllerRunUITests` at 14:28: 14
+  tests, 3 failures. The two new tests passed.
+- The three failures were `ControllerConsentUITests.testASignedFilesReviewOffersTrustThisIdentity` ("Timed out while
+  synthesizing event") and both `PendingRequestsUITests` tests (a menu click with no point, and "the Pending Requests
+  panel never opened").
+- Cause: another app came to the front during each one. The run's log has `[frontmost] Activation` lines for Google
+  Chrome at 14:29:50 and WezTerm at 14:31:32, right at the failures. The machine was in use. All three passed when run
+  again at 14:32.
+- The same holds for the four failures in the UTERM-063 M2 run at 13:05, which that row's report left unresolved. Its
+  log has activations of WezTerm, Mattermost, and Google Chrome beside each failure.
+- The coordinator viewed both screenshots from the 14:28 run:
+  - `controllers-and-permissions-unreadable`: one readable row, and under the list "This uniterm cannot read 1
+    approval in its policy file, so it does not apply here. A newer uniterm may read it. The file keeps it as written."
+  - `pending-requests-replace-older`: the review says "Trust This Version replaces 1 older approval of
+    dev.uniterm.uitest.consent", names it with its version and date, and says a live run of a replaced version ends. The
+    box "Replace the older versions listed above" is checked, above the four buttons.
