@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-17
+**Updated:** 2026-11-26
 
 ## Dependencies
 
@@ -10,7 +10,7 @@
 - UTERM-002's command registry and UTERM-013: the viewer's zoom and navigation commands are registry entries it
   declares
 - UTERM-003 M2 and UTERM-004 M2 and M3: M4's control, and its exec zoom and events
-- A driver path-read power, which no proposal defines yet: M5's exec `show` and stepping
+- UTERM-065: the driver path-read power M5's exec `show` and stepping use
 - UTERM-015: app-level opening, and the path-reading power M4's `show` uses
 
 ## Impacts
@@ -628,8 +628,8 @@ Amended 2026-11-17; see Decision Log.
 
 **Status:** NOT STARTED
 
-Waits on a driver path-read power that no proposal defines yet. It is in `ideas.md`, and it needs a proposal and an ADR
-decision before this milestone can start.
+Waits on UTERM-065, which defines the driver path-read power. UTERM-065 must be accepted, and its M1 and M2 built,
+before this milestone can start.
 
 - An exec driver can `show` a file or a folder in its scope, and step through it
 - A driver's `show` path outside its scope is refused with one error, whether it is missing, not an image, or denied
@@ -851,6 +851,8 @@ decision before this milestone can start.
   UTERM-006 M4.
 - 2026-11-17: ADR candidate (hard to reverse): a driver never receives an event or an event field newer than the
   schema version it named in its hello. Undecided. Found in UTERM-006 M4.
+- 2026-11-26: Filed UTERM-065, exec drivers read paths in a scope, for the driver path-read power M5 waits on. The
+  Dependencies line and M5's note now name it. They said before that no proposal defines the power yet.
 
 ## References
 
