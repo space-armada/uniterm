@@ -62,14 +62,15 @@ extension SourceReplacing {
 }
 
 extension AppletCommand {
-  /// The pane-local "Open..." that a viewer's command set declares. It has no key, since Cmd-O
-  /// belongs to the window's File > Open, which routes by type. A user can remap a key to it.
+  /// The pane-local "Open in This Pane..." that a viewer's command set declares. It has no key,
+  /// since Cmd-O belongs to the window's File > Open, which routes by type. A user can remap a key
+  /// to it. Its title reads apart from that Open's, so a remap can name one of the two.
   ///
   /// It replaces the source of the pane the command is aimed at. Choosing the file in the panel is
   /// the user's act. The applet gets that one file and nothing more.
   public static func openSource(section: Int = 0) -> AppletCommand {
     AppletCommand(
-      name: openSourceName, title: "Open\u{2026}", home: .file, section: section,
+      name: openSourceName, title: "Open in This Pane\u{2026}", home: .file, section: section,
       isAvailable: { $0 is any SourceReplacing },
       run: { applet in
         Task { @MainActor [weak applet] in

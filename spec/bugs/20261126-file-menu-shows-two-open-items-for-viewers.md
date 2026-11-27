@@ -1,11 +1,8 @@
 # The File menu shows two items titled "Open…" while a viewer is focused
 
-**Status:** open
+**Status:** fixed 2026-11-26
+**Fixed:** 2026-11-26
 **Estimate:** small to medium; no open design decisions. The user chose the fix on 2026-11-26. See "Chosen fix".
-**Validation:** the two same-titled items are confirmed by reading the code on 2026-11-26 (`openSource` titles
-"Open…" and uniterm's Open uses the menu title "Open…"; the menu hides applet items only by type). Not confirmed on
-screen; the two items follow from the code, but how macOS binds an App Shortcuts remap of a
-title two items share was not tried.
 
 ## Observed
 
@@ -50,3 +47,9 @@ The user also asked for a rule that one thing reads the same in every place it s
 
 The fix touches `AppletKit/SourceReplacing.swift` (`openSource`), plus `WindowKitTests/SourceOpeningTests.swift` and
 `AppletCatalogTests/BuiltInCommandsTests.swift`, which pin the old title.
+
+## Fix note
+
+The viewers' pane-local Open is now "Open in This Pane…" in the File menu and the palette. uniterm's own Open keeps
+"Open…". File: `AppletKit/SourceReplacing.swift`. Regression test:
+`SourceOpeningTests.testThePaneLocalOpenReadsApartFromEveryFileMenuItem`.

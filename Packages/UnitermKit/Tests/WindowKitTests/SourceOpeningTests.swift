@@ -39,7 +39,7 @@ final class SourceOpeningTests: XCTestCase {
 
     XCTAssertNil(command.key)
     XCTAssertEqual(command.name, "open")
-    XCTAssertEqual(command.title, "Open\u{2026}")
+    XCTAssertEqual(command.title, "Open in This Pane\u{2026}")
     XCTAssertTrue(command.listedInPalette)
 
     XCTAssertTrue(command.isAvailable(FakeApplet()))
@@ -56,6 +56,21 @@ final class SourceOpeningTests: XCTestCase {
     XCTAssertNotNil(command)
     XCTAssertNil(command?.key)
     XCTAssertEqual(command?.menu?.home, .file)
+  }
+
+  /// Catches a pane-local Open that shares its File menu title with uniterm's Open, which routes by
+  /// type. An App Shortcuts remap matches by title, so two items with one title cannot be told
+  /// apart.
+  func testThePaneLocalOpenReadsApartFromEveryFileMenuItem() {
+    let registry = CommandRegistry()
+    registry.register(
+      AppletCommandSet(typeID: "fake", menuTitle: "Fake", commands: [.openSource()]))
+
+    let titles = registry.commands.filter { $0.menu?.home == .file }.map {
+      $0.menu?.title ?? $0.title
+    }
+
+    XCTAssertEqual(titles.count, Set(titles).count, "\(titles)")
   }
 
   /// Catches a source replaced from the wrong place: the file's own folder is the start directory,
