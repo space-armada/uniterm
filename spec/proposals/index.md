@@ -68,6 +68,7 @@
 | [UTERM-064](UTERM-064-programs-name-what-they-act-on.md) | Every program command names its target, and opens answer with the identity of what they made | draft |
 | [UTERM-065](UTERM-065-exec-drivers-read-paths-in-a-scope.md) | An exec driver asks for a read scope, approved for its run, and names paths in it | draft |
 | [UTERM-066](UTERM-066-verified-identity-for-exec-drivers.md) | An exec driver can be a verified package, and keep remembered approvals for its powers | draft |
+| [UTERM-067](UTERM-067-stores-keep-what-they-cannot-read.md) | Every store keeps entries it cannot read, starting with the controller trust stores | draft |
 
 ## Dependency Graph
 
@@ -130,6 +131,7 @@ UTERM-062 ← UTERM-018, UTERM-063, UTERM-064
 UTERM-064 ← UTERM-018, UTERM-063
 UTERM-065 ← UTERM-004, UTERM-015, UTERM-063
 UTERM-066 ← UTERM-004, UTERM-063
+UTERM-067 ← UTERM-004
 ```
 
 ## Not Yet Filed
