@@ -14,6 +14,8 @@
 
 ## Impacts
 
+- UTERM-004 — "Permission scopes and approval flow": a controller's `host-launch` grant never covers a package's
+  launch, so its scope narrows to drivers with no package.
 - UTERM-004 — "Exec launch context" and "Saved layouts": a declaration may name a package, and the layout saves it.
   "Verified artifact and run binding": the app, not the `uniterm` command, spawns a verified native entry for a
   driver, so the app must refuse `DYLD_` variables itself. UTERM-004 is implemented, so its text stays, and it gains
@@ -206,8 +208,9 @@ the envelope bump costs nothing, and ADR-06 keeps a newer file aside in an older
 
 ### The launch is never remembered
 
-Decision: a verified driver's launch asks as today, through UTERM-004's launch approval or a `host-launch` grant.
-Remembered approvals cover the driver's powers, never its launch.
+Decision: a verified driver's launch asks as today, through UTERM-004's launch approval. A `host-launch` grant never
+covers it, per "Where a package declaration can come from". Remembered approvals cover the driver's powers, never its
+launch.
 
 **Decided by:** new-proposal (autonomous), 2026-11-26
 
@@ -310,7 +313,9 @@ None.
 - A package whose descriptor, digests, signature, or load commands fail is refused, and nothing runs
 - A package declaration that names a `DYLD_` environment key is refused before anything runs
 - A layout request from a program can declare a package, and its launch still asks
-- A controller's `host-launch` grant never covers a package's launch
+- A controller's `host-launch` grant never covers a package's launch, on the controller-owned Run path too
+- The run's binding and its snapshot last until the transport ends, not only until the spawned process exits, so a
+  child that still holds the channel keeps its packaged files
 - The launch approval and the review of declared powers come in one prompt, or launch first and review second
 - A moved package fails to launch, and the pane names the absolute path it looked at
 - The layout is written at envelope version 4, and an older build keeps a version 4 file aside
@@ -334,6 +339,8 @@ None.
 - The start review of declared powers offers "Trust this version" and "Trust this identity" for a verified driver's
   clipboard, browser, command, capture, and read-scope powers
 - A remembered approval covers the next run of the same version or identity with no prompt
+- A remembered power used after its run ended is refused, whether through a stale channel, an earlier run, or a removed
+  snapshot
 - A changed package asks again under "Trust this version", and a package signed by another key asks again under "Trust
   this identity"
 - A driver with no verified identity is never offered a remembered approval
@@ -353,7 +360,8 @@ None.
 - Each interpreter kind the descriptor may name has a listed set of refused hook keys, tested per interpreter. It
   includes at least `PYTHONSTARTUP`, `PYTHONPATH`, `PYTHONHOME`, `PYTHONUSERBASE`, `PYTHONINSPECT`, `NODE_OPTIONS`,
   `NODE_PATH`, `RUBYOPT`, `RUBYLIB`, `PERL5OPT`, `PERL5LIB`, `PERLLIB`, `BASH_ENV`, `ENV`, and keys starting with
-  `BASH_FUNC_`. A package declaration that names one is refused before anything runs
+  `BASH_FUNC_`. The set for a kind also covers launchers that kind runs through, such as `PYENV_HOOK_PATH` for a pyenv
+  shim. A package declaration that names one is refused before anything runs
 - A Homebrew interpreter, a locally built one, a pyenv-style shim, and one in a virtual environment each run a verified
   script driver and keep a remembered approval, across the interpreter's own re-launch
 - A packaged multi-file script driver imports its packaged sibling modules under the flags the descriptor fixes
@@ -443,6 +451,11 @@ None.
   identity matching, a controller could launch a trusted relay driver at a host it chose and use the driver's
   remembered powers. Strengthened C2 to require that nothing outside the verified files changes how the interpreter
   starts. Routed checks to M1, M2, and M3. (autonomous)
+- 2026-11-26: Closing re-check of the three fixes, NOT CONVERGED, on two defects. Removed "or a `host-launch` grant"
+  from "The launch is never remembered", which contradicted the fix to "Where a package declaration can come from". The
+  other goes to the user: C2 says nothing outside the verified files changes how the interpreter starts, but a declared
+  `HOME` moves Python's user site folder, and no rule refuses it. No design change was made for it. Routed checks to
+  M1, M2, and M3, and added UTERM-004's `host-launch` scope to Impacts.
 - 2026-11-26: Recorded both reasons one entry per role beats one entry with a list of roles, at the user's request:
   the roles carry different powers, and ADR-18 P4 keeps an unknown role a whole skipped entry.
 
