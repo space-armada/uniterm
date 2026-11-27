@@ -246,24 +246,19 @@ under browser navigation. UTERM-005 defines browser read as URLs and titles, and
 reload, back, forward, and select. ADR-09 says a change in permission meaning cannot increase an existing approval. An
 approval stored under M8's meaning must not cover the new commands. Raised by the review's ADR check.
 
-Decision: browser read and browser navigation get version 2 meanings. Each permission in the descriptor carries its
-version, and an approval under version 1 covers only UTERM-005 M8's commands. Find in page moves to browser capture.
-Dialog and script events go under browser script. (autonomous)
+Decision: browser read and browser navigation each grow. A controller approved before they grew is asked again
+before it can use the new parts. An approval made before covers only UTERM-005 M8's commands. Find in page moves to
+browser capture. Dialog and script events go under browser script. Amended 2026-11-27; see Decision Log.
 
-**Decided by:** user, 2026-11-11
-**Pending override:** UTERM-063 "Permissions carry no version" (user, 2026-11-26). A descriptor names a permission by
-kind alone, so there is no "version 2" in a descriptor. The widened meanings of browser read and browser navigation
-move each kind's internal edition, and an approval made at the older edition no longer covers the kind, so the user is
-asked again. Read every "version 2" below as "the widened edition". Recorded by the UTERM-063 M1 work.
+**Decided by:** user, 2026-11-27
 
-- Browser read version 2 covers URLs and titles, plus the navigation started, committed, finished, and failed, server
-  redirect, content process terminated, and frame appeared events. Browser script also unlocks frame appeared and
-  list-frames, per "Frames".
-- Browser navigation version 2 adds user agent, zoom, and print-media emulation.
+- Browser read still covers URLs and titles. It also covers these page events: navigation started, committed, finished,
+  and failed, server redirect, content process terminated, and frame appeared. Browser script also unlocks frame
+  appeared and list-frames, per "Frames".
+- Browser navigation also covers user agent, zoom, and print-media emulation.
 - Browser capture covers find in page, beside snapshots and PDF output.
 - Browser script covers the dialog opened and script finished events, per "Commands that wait".
-- Each (kind, version) pair has one meaning, per "Permission descriptor format". Amended 2026-11-11; see Decision
-  Log.
+- Each permission has one meaning in a build, per "Permission descriptor format".
 - Each build's review text describes only what that build grants.
 
 Rationale: ADR-09 says a change in meaning cannot increase an existing approval. UTERM-004 already compares a
@@ -359,24 +354,18 @@ How the four permissions enter the controller descriptor. UTERM-004's format 1 k
 `capability`. Candidates: new kinds in a format 2, coordinated with how UTERM-004 M6 and UTERM-005 M8 add browser
 navigation and browser read, or browser permissions as one kind with typed scopes.
 
-Decision: descriptor format 2 adds a required `version` on every permission, `pane-control` and `capability`
-included. Each build knows a fixed
-set of (kind, version) pairs, each with one meaning, one review text, and the versions it covers. (autonomous)
+Decision: a descriptor lists each permission by name, with no version number. uniterm records with each approval what
+the permission allowed at the time, as an internal edition. When a permission grows, an older approval stops covering
+it, and the user is asked again. Amended 2026-11-27; see Decision Log.
 
-**Decided by:** user, 2026-11-11
-**Pending override:** UTERM-063 "Permissions carry no version" (user, 2026-11-26). The descriptor format is 0, and a
-descriptor names each permission by kind alone, with no `version`. A permission means what the running uniterm says.
-uniterm keeps an internal edition for each kind and records it with each approval. When a kind's meaning grows, its
-edition moves, and an older approval no longer covers it. A descriptor that names a version is refused by name. Read
-"(kind, version)" below as "(kind, edition)", and "format 2" as format 0. Recorded by the UTERM-063 M1 work.
+**Decided by:** user, 2026-11-27
 
-- UTERM-004 M6 builds format 2, with its clipboard and host launch kinds at version 1. UTERM-005 M8 adds browser
-  navigation and browser read at version 1. This proposal adds their version 2 and browser script, browser input,
-  browser cookies, and browser capture at version 1, in the same format. Amended 2026-11-11; see Decision Log.
-- An unknown kind or version refuses the whole descriptor at load, as an unknown kind does in format 1. The same kind
-  listed twice is refused.
-- Approvals record (kind, version, scopes), which UTERM-004 already compares. A request covered by an approved version
-  needs no new review. A higher version needs one.
+- The descriptor format is 0, per UTERM-063. This proposal adds browser script, browser input, browser cookies, and
+  browser capture as new permission names, and grows browser navigation and browser read.
+- An unknown permission name refuses the whole descriptor at load. So does a permission that names a version. The same
+  name listed twice is refused.
+- Approvals record each permission's name, edition, and scopes. A request at the approved edition needs no new review.
+  A grown permission needs one.
 - Format 1 descriptors keep working with format 1's two kinds.
 - Each command is gated on its own permission alone. A browser read at version 1 hides only the events version 2 adds.
 - Skew: a build without M6 refuses format 2 at load. A build that lacks a kind or version refuses it at load. A newer
@@ -1231,6 +1220,15 @@ Amended 2026-11-27; see Decision Log.
     editions and a descriptor that names a kind alone.
   - The two `**Decided by:**` lines read the user's choice from this log: the review gate of 2026-11-11 kept every
     decision, and chose that format 2 versions every permission.
+
+- 2026-11-27: The user confirmed that UTERM-063 is correct where it meets this proposal. "Widened browser read and
+  browser navigation" and "Permission descriptor format" now follow UTERM-063's "Permissions carry no version", and
+  their Pending override lines are removed. The first said before: "browser read and browser navigation get version 2
+  meanings. Each permission in the descriptor carries its version, and an approval under version 1 covers only UTERM-005
+  M8's commands." The second said before: "descriptor format 2 adds a required `version` on every permission,
+  `pane-control` and `capability` included. Each build knows a fixed set of (kind, version) pairs, each with one
+  meaning, one review text, and the versions it covers." Later bullets under the second decision that still say
+  "format 1", "format 2", or "version" describe the plan before UTERM-063, and are read by this rule.
 
 ## References
 
