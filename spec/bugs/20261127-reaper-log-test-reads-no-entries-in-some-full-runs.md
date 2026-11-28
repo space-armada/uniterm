@@ -1,6 +1,7 @@
 # The reaper's log test reads no log entries in some full package runs
 
 **Status:** open
+**Triaged:** 2026-11-27 (not reproducible alone; fails only in some full runs; see investigation notes)
 **Validation:** confirmed in one run; the unified log quarantined the test process 30 seconds into a failing run
 
 ## Observed
@@ -73,3 +74,15 @@ store. The fix needs a design call. The options:
   records in UI tests.
 - Read the entries another way.
 - Have the test say the store was unreadable and skip.
+
+## Investigation notes
+
+Triage run on 2026-11-27.
+
+- No separate regression test exists. The failing test is the only one that covers this path.
+- The test passes alone on the current build with `make test-package-select PACKAGE_TESTS=ProcessReaperTests`: 3 tests,
+  0 failures, 2.7 s for this test.
+- No full package run was repeated. The failure needs a full run and fails in about 7 of 19, so one pass or one run
+  would not settle it.
+- The recorded cause stands: the unified log quarantines the test process for high logging volume. The fix is still the
+  design call under "Fix".
