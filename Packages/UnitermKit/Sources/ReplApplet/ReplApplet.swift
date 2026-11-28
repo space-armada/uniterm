@@ -134,6 +134,7 @@ public final class ReplApplet: Applet, InputOwning, ControllerSuspending {
   /// The pane's control state, as the host last pushed it. The REPL's session gets the clipboard
   /// policy it implies, from its creation on.
   private var control = PaneControl.disconnected
+  private var authority = PaneAuthority.none
 
   private var clipboardPolicy: TerminalClipboardPolicy {
     TerminalClipboardPolicy(controlled: control.isControlled, generation: control.generation)
@@ -180,7 +181,15 @@ public final class ReplApplet: Applet, InputOwning, ControllerSuspending {
 
   public var publishedTabs: AppletTabList {
     AppletTabList(
-      first: AppletTab(id: tabID, title: Self.title, details: []), rest: [], selected: tabID)
+      first: authority.applyingChip(to: AppletTab(id: tabID, title: Self.title, details: [])),
+      rest: [], selected: tabID)
+  }
+
+  public func authorityDidChange(_ authority: PaneAuthority) {
+    guard authority != self.authority else { return }
+
+    self.authority = authority
+    host?.appletTabsDidChange(self)
   }
 
   /// True only while the helper reports a form evaluating. A REPL at its prompt holds nothing a

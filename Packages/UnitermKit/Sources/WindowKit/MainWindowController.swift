@@ -197,6 +197,13 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// Runs when a session ends.
   var onSessionEnded: ((UInt64, NodeID, AppletTabID, pid_t, Int) -> Void)?
 
+  /// The tab each running session root belongs to. The scripting host knows a root only by its
+  /// process, so the window keeps the tab beside it and joins the two for the controlling chip. An
+  /// entry goes before the end of its session is reported, so the refresh that report causes never
+  /// sees a tab whose session has ended. The pane is kept so that closing a pane drops any entry
+  /// whose end the applet never reported.
+  var sessionTabs: [ProcessIdentity: (pane: NodeID, tab: AppletTabID)] = [:]
+
   /// The visible area of the screen the window is on. A window never asks for more room than that.
   /// Tests replace it.
   var visibleFrameProvider: @MainActor (NSWindow) -> NSRect? = { window in
@@ -588,9 +595,27 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     drawPaneMarkers(of: applet, in: pane)
   }
 
-  private func drawPaneMarkers(of applet: any Applet, in pane: NodeID) {
-    paneArea.paneView(for: pane)?.paneMarkers =
-      applet.publishedTabs.paneLevelTab?.markers.ordered ?? []
+  func drawPaneMarkers(of applet: any Applet, in pane: NodeID) {
+    paneArea.paneView(for: pane)?.paneMarkers = Self.paneLevelMarkers(
+      of: applet.publishedTabs, driverNames: driverNames(for: pane))
+  }
+
+  /// The markers a pane draws beside its badge: those of its one tab while no bar shows, and a
+  /// chip for the drivers. A driver is bound to the pane, not to a tab, so its chip shows whatever
+  /// the tabs. A one-tab applet usually publishes it already. The names join the chip the tab has,
+  /// and none shows twice.
+  static func paneLevelMarkers(of tabs: AppletTabList, driverNames: [String]) -> [AppletMarker] {
+    var markers = AppletMarkerSet(tabs.paneLevelTab?.markers.ordered ?? [])
+
+    if !driverNames.isEmpty {
+      let published = markers[.chip]?.controllers ?? []
+
+      markers.insert(
+        AppletMarker(
+          kind: .chip, controllers: published + driverNames.filter { !published.contains($0) }))
+    }
+
+    return markers.ordered
   }
 
   /// Makes the applet ready for the window. A launcher also learns how to open its choice, and gets
@@ -1127,7 +1152,9 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     applet.close()
     paneControls.forget(pane)
     scriptTabNumbers.forget(pane: pane)
+    sessionTabs = sessionTabs.filter { $0.value.pane != pane }
     statusCenter.paneClosed(id: pane.rawValue)
+    refreshControlMarks()
 
     if let next = removed.refocus {
       paneArea.focus(next, keyboard: !isPaletteVisible)
@@ -1148,7 +1175,9 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     applet.close()
     paneControls.forget(pane)
     scriptTabNumbers.forget(pane: pane)
+    sessionTabs = sessionTabs.filter { $0.value.pane != pane }
     statusCenter.paneClosed(id: pane.rawValue)
+    refreshControlMarks()
 
     if let next = removed.refocus {
       paneArea.focus(next, keyboard: !isPaletteVisible)
@@ -1548,12 +1577,14 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     _ applet: any Applet, in pane: NodeID, sessionStarted tab: AppletTabID, pid: pid_t,
     started: Int, generation: UInt64
   ) {
+    sessionTabs[ProcessIdentity(pid: pid, started: started)] = (pane, tab)
     onSessionStarted?(scriptWindowID, pane, tab, pid, started, generation)
   }
 
   func applet(
     _ applet: any Applet, in pane: NodeID, sessionEnded tab: AppletTabID, pid: pid_t, started: Int
   ) {
+    sessionTabs[ProcessIdentity(pid: pid, started: started)] = nil
     onSessionEnded?(scriptWindowID, pane, tab, pid, started)
   }
 

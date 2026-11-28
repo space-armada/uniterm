@@ -7,6 +7,10 @@ public enum AppletMarkerKind: String, Sendable, CaseIterable, Comparable {
   /// A granted controller's command to this tab would be accepted now.
   case authority
 
+  /// A controller acts for this tab: its session is where a controller runs, or a driver drives
+  /// it. The names of the controllers ride on the marker.
+  case chip
+
   /// A run ended and left this tab, whose code may still run in it.
   case runEnded
 
@@ -16,7 +20,12 @@ public enum AppletMarkerKind: String, Sendable, CaseIterable, Comparable {
 
   /// The SF Symbol the marker draws. The run-end kind draws a slash over the same symbol, since no
   /// slashed gear exists.
-  public var symbolName: String { "gearshape.2.fill" }
+  public var symbolName: String {
+    switch self {
+    case .authority, .runEnded: return "gearshape.2.fill"
+    case .chip: return "cpu"
+    }
+  }
 
   /// True when the kind draws a slash over its symbol.
   public var isSlashed: Bool { self == .runEnded }
@@ -25,6 +34,7 @@ public enum AppletMarkerKind: String, Sendable, CaseIterable, Comparable {
   public var meaning: String {
     switch self {
     case .authority: return "A controller can act on this tab"
+    case .chip: return "A controller acts for this tab"
     case .runEnded: return "A finished run's code may still run in this tab"
     }
   }
@@ -33,6 +43,7 @@ public enum AppletMarkerKind: String, Sendable, CaseIterable, Comparable {
   public var accessibilityLabel: String {
     switch self {
     case .authority: return "Controller can act on this tab"
+    case .chip: return "Controller acts for this tab"
     case .runEnded: return "Finished run may still run in this tab"
     }
   }
@@ -40,7 +51,7 @@ public enum AppletMarkerKind: String, Sendable, CaseIterable, Comparable {
   /// The actions the kind can offer, in menu order.
   public var possibleActions: [AppletMarkerAction] {
     switch self {
-    case .authority: return []
+    case .authority, .chip: return []
     case .runEnded: return [.rebuildTab]
     }
   }
@@ -70,12 +81,23 @@ public struct AppletMarker: Sendable, Equatable {
   /// any.
   public let owners: Set<AppletCaller>
 
+  /// What the host calls each controller the marker stands for, in the order it gave them. Only the
+  /// chip has any. They are the names the pane's badge shows, passed through unchanged.
+  public let controllers: [String]
+
   public init(
-    kind: AppletMarkerKind, actions: [AppletMarkerAction] = [], owners: Set<AppletCaller> = []
+    kind: AppletMarkerKind, actions: [AppletMarkerAction] = [], owners: Set<AppletCaller> = [],
+    controllers: [String] = []
   ) {
     self.kind = kind
     self.actions = kind.possibleActions.filter(actions.contains)
     self.owners = kind == .authority ? owners : []
+    self.controllers = kind == .chip ? controllers : []
+  }
+
+  /// What the marker's tooltip says: its meaning, then a line for each controller it names.
+  public var toolTip: String {
+    ([kind.meaning] + controllers.map { "Controller: \($0)" }).joined(separator: "\n")
   }
 }
 
@@ -116,7 +138,7 @@ public final class AppletMarkerView: NSView {
   /// The size of the view a marker draws in. The filled gears are 19 by 15 points at 12 points.
   public static let size = NSSize(width: 20, height: 16)
 
-  public private(set) var kind: AppletMarkerKind
+  public private(set) var marker: AppletMarker
   private var palette: ThemePalette
 
   /// True when a click passes to the view behind, so a marker in a tab selects the tab. A marker
@@ -127,8 +149,10 @@ public final class AppletMarkerView: NSView {
 
   override public var mouseDownCanMoveWindow: Bool { false }
 
-  public init(kind: AppletMarkerKind, palette: ThemePalette = .latte) {
-    self.kind = kind
+  public var kind: AppletMarkerKind { marker.kind }
+
+  public init(_ marker: AppletMarker, palette: ThemePalette = .latte) {
+    self.marker = marker
     self.palette = palette
     super.init(frame: NSRect(origin: .zero, size: Self.size))
 
@@ -140,10 +164,10 @@ public final class AppletMarkerView: NSView {
     fatalError("init(coder:) is not supported")
   }
 
-  public func configure(kind: AppletMarkerKind) {
-    guard kind != self.kind else { return }
+  public func configure(_ marker: AppletMarker) {
+    guard marker != self.marker else { return }
 
-    self.kind = kind
+    self.marker = marker
     refresh()
   }
 
@@ -153,10 +177,12 @@ public final class AppletMarkerView: NSView {
   }
 
   private func refresh() {
-    toolTip = kind.meaning
+    toolTip = marker.toolTip
     setAccessibilityElement(true)
     setAccessibilityRole(.image)
     setAccessibilityLabel(kind.accessibilityLabel)
+    setAccessibilityValue(
+      marker.controllers.isEmpty ? nil : marker.controllers.joined(separator: ", "))
     needsDisplay = true
   }
 

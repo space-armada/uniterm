@@ -422,7 +422,7 @@ final class PaneFrameView: NSView {
     }
 
     while markerViews.count < paneMarkers.count {
-      let view = AppletMarkerView(kind: paneMarkers[markerViews.count].kind, palette: palette)
+      let view = AppletMarkerView(paneMarkers[markerViews.count], palette: palette)
 
       view.forwardsClicks = false
       view.wantsLayer = true
@@ -432,7 +432,7 @@ final class PaneFrameView: NSView {
     }
 
     for (view, marker) in zip(markerViews, paneMarkers) {
-      view.configure(kind: marker.kind)
+      view.configure(marker)
       view.apply(palette)
       view.layer?.backgroundColor = palette[.surface0].cgColor
       view.setAccessibilityIdentifier("pane-marker-\(marker.kind.rawValue)-\(paneID)")

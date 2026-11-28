@@ -126,15 +126,24 @@ extension MainWindowController {
     driverStanding(of: owner) == nil && driverMemberRefusal(pane, as: owner) == nil
   }
 
+  /// What the applet is told about its pane: who can act on its tabs, and which tabs a controller
+  /// acts for. One value carries both, so a control change never shows one current and the other
+  /// stale.
+  func paneAuthority(for pane: NodeID, applet placed: (any Applet)? = nil) -> PaneAuthority {
+    PaneAuthority(
+      owners: grantedOwners(for: pane, applet: placed), controlling: controllingTabs(in: pane),
+      drivers: driverNames(for: pane))
+  }
+
   /// Who can act on the pane's tabs now, for the applet to mark them by. Each granted owner is
   /// asked the command path's own questions, so the marker never states authority a command would
   /// refuse. The pane's access mode, a controller's pending request, and a window question never
   /// enter it. An applet that takes neither commands nor sent content gets no owners. A driver's
   /// own pane gets none for the driver, since it commands the pane through its attached channel.
-  func paneAuthority(for pane: NodeID, applet placed: (any Applet)? = nil) -> PaneAuthority {
+  private func grantedOwners(for pane: NodeID, applet placed: (any Applet)?) -> Set<AppletCaller> {
     guard control(of: pane).access == .remoteControlled,
       let applet = placed ?? paneArea.applet(for: pane), Self.takesCommandsOrContent(applet)
-    else { return .none }
+    else { return [] }
 
     var owners = Set<GroupOwner>()
 
@@ -158,7 +167,46 @@ extension MainWindowController {
       }
     }
 
-    return PaneAuthority(owners: Set(owners.map { AppletCaller(grant: $0.description) }))
+    return Set(owners.map { AppletCaller(grant: $0.description) })
+  }
+
+  /// True when the owner holds a group in this window.
+  private func ownsGroup(_ owner: GroupOwner) -> Bool {
+    paneArea.tree.groups.contains { $0.owner == owner }
+  }
+
+  /// The tabs of the pane that a controller acts for, with the names of those controllers. A
+  /// connection counts while its binding would be accepted on its next call, and it passes the
+  /// checks its commands pass: its own pane is remote-controlled, or it owns a group. The tab is
+  /// the one its session root runs in.
+  func controllingTabs(in pane: NodeID) -> [AppletTabID: [String]] {
+    guard let controllerAuthority else { return [:] }
+
+    var names: [AppletTabID: [String]] = [:]
+
+    for id in controllerAuthority.controllers(actingFrom: scriptWindowID, pane: pane).sorted() {
+      guard let root = controllerAuthority.controllerSessionRoot(id),
+        let tab = sessionTabs[root]?.tab
+      else { continue }
+
+      let owner = GroupOwner(connection: id)
+
+      guard control(of: pane).access == .remoteControlled || ownsGroup(owner) else { continue }
+
+      names[tab, default: []].append(controllerName(owner))
+    }
+
+    return names
+  }
+
+  /// The names of the exec driver attached to the pane, while it is attached, not revoked, and
+  /// owns a group.
+  func driverNames(for pane: NodeID) -> [String] {
+    guard let attachment = execAttachments[pane], let owner = attachment.owner,
+      !attachment.revoked, ownsGroup(owner)
+    else { return [] }
+
+    return [controllerName(owner)]
   }
 
   /// True when the applet accepts a controller's command or content for its tab. It handles
@@ -316,7 +364,11 @@ extension MainWindowController {
     for pane in paneArea.tree.paneIDs {
       paneArea.paneView(for: pane)?.controlMark = controlMark(for: pane)
       paneArea.paneView(for: pane)?.askingMark = askingMark(for: pane)
-      paneArea.applet(for: pane)?.authorityDidChange(paneAuthority(for: pane))
+
+      if let applet = paneArea.applet(for: pane) {
+        applet.authorityDidChange(paneAuthority(for: pane, applet: applet))
+        drawPaneMarkers(of: applet, in: pane)
+      }
     }
 
     onSuspensionChange?()

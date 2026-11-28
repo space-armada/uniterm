@@ -642,6 +642,35 @@ final class TerminalAppletTests: XCTestCase {
     XCTAssertTrue(bar.subviews.allSatisfy { !($0 is AppletMarkerView) })
   }
 
+  /// Catches a chip that lands on every tab, on the wrong one, or not in the bar. The host names the
+  /// second tab, so only that tab publishes the chip, and the bar draws it there. A terminal still
+  /// takes no authority marker. Dropping the tab from the host's value clears the chip, and the
+  /// host hears of each change.
+  func testTheTerminalPublishesTheChipOnTheTabTheHostNames() throws {
+    let (applet, _, host, _) = makeApplet()
+
+    applet.openTab()
+
+    let tabs = applet.publishedTabs.all
+    let before = host.tabChanges
+
+    applet.authorityDidChange(PaneAuthority(controlling: [tabs[1].id: ["watch (PID 5)"]]))
+
+    XCTAssertEqual(applet.publishedTabs.all[0].markers.isEmpty, true)
+    XCTAssertEqual(applet.publishedTabs.all[1].markers[.chip]?.controllers, ["watch (PID 5)"])
+    XCTAssertNil(applet.publishedTabs.all[1].markers[.authority])
+    XCTAssertGreaterThan(host.tabChanges, before)
+
+    let bar = try tabBar(of: applet)
+
+    XCTAssertEqual(bar.descendants(ofType: AppletMarkerView.self).map(\.kind), [.chip])
+
+    applet.authorityDidChange(.none)
+
+    XCTAssertTrue(applet.publishedTabs.all.allSatisfy { $0.markers.isEmpty })
+    XCTAssertTrue(bar.descendants(ofType: AppletMarkerView.self).isEmpty)
+  }
+
   /// Catches a bar close that resolves its index only when the close runs. A tab closes before the
   /// queued close runs, so the clicked tab shifts down one place. The clicked tab closes, and its
   /// neighbor stays.
@@ -1121,5 +1150,12 @@ final class TerminalAppletTests: XCTestCase {
 
     XCTAssertNotEqual(restored.publishedTabs.first.id, old)
     XCTAssertFalse(restored.selectTab(id: old))
+  }
+}
+
+extension NSView {
+  fileprivate func descendants<T: NSView>(ofType type: T.Type) -> [T] {
+    subviews.flatMap { ($0 as? T).map { [$0] } ?? [] }
+      + subviews.flatMap { $0.descendants(ofType: type) }
   }
 }

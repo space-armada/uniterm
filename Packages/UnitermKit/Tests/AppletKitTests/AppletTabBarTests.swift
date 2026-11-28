@@ -8,13 +8,13 @@ import XCTest
 /// check, since these run on the machine's own system.
 @MainActor
 final class AppletTabBarTests: XCTestCase {
-  private func tabs(_ count: Int, markers: [Int: [AppletMarker]] = [:]) -> [AppletTab] {
+  func tabs(_ count: Int, markers: [Int: [AppletMarker]] = [:]) -> [AppletTab] {
     (0..<count).map {
       AppletTab(id: .make(), title: "Tab \($0)", markers: AppletMarkerSet(markers[$0] ?? []))
     }
   }
 
-  private func makeBar(
+  func makeBar(
     width: CGFloat, tabs list: [AppletTab], selected: Int = 0, canOpenTab: Bool = true
   ) -> AppletTabBar {
     let bar = AppletTabBar(frame: NSRect(x: 0, y: 0, width: width, height: AppletTabBar.height))
@@ -426,6 +426,150 @@ final class AppletTabBarTests: XCTestCase {
     XCTAssertTrue(
       PaneAuthority.none.applyingOneTabMarker(to: authority.applyingOneTabMarker(to: tab)).markers
         .isEmpty)
+  }
+}
+
+// MARK: The controlling chip
+
+extension AppletTabBarTests {
+  /// Catches a chip that draws under the tab's title at the narrowest tab, or a symbol drawn
+  /// smaller than 12 points. A tab carrying the chip and the authority marker keeps both whole in
+  /// an 80-point tab. The chip's picture also stays inside its 20 by 16 view, with an edge of
+  /// transparent pixels all round, so nothing of it is cut. This runs on the machine's own macOS.
+  /// It cannot show that `cpu` resolves on the app's minimum, 26.0.
+  func testTheChipStaysWholeAtTwelvePointsInAnEightyPointTab() throws {
+    let both = [AppletMarker(kind: .authority), AppletMarker(kind: .chip, controllers: ["a"])]
+    let list = (0..<8).map {
+      AppletTab(
+        id: .make(), title: "Tab \($0)", markers: AppletMarkerSet($0 == 0 ? both : []))
+    }
+    let bar = AppletTabBar(frame: NSRect(x: 0, y: 0, width: 500, height: AppletTabBar.height))
+
+    bar.update(tabs: list, selected: 0, canOpenTab: true)
+    bar.layoutSubtreeIfNeeded()
+
+    let item = try XCTUnwrap(bar.descendants(ofType: AppletTabItem.self).first)
+    let close = try XCTUnwrap(item.subviews.first { $0 is NSButton })
+
+    XCTAssertEqual(item.frame.width, 80)
+
+    for frame in bar.markerFrames(inTab: 0) {
+      XCTAssertGreaterThanOrEqual(frame.minX, 0)
+      XCTAssertLessThanOrEqual(frame.maxX, close.frame.minX)
+    }
+
+    XCTAssertEqual(AppletMarkerView.symbolSize, 12)
+
+    let image = AppletMarkerView.image(
+      for: .chip, color: .systemOrange, size: AppletMarkerView.size)
+    let scale = 4
+    let rep = try XCTUnwrap(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: Int(AppletMarkerView.size.width) * scale,
+        pixelsHigh: Int(AppletMarkerView.size.height) * scale, bitsPerSample: 8,
+        samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+        bytesPerRow: 0, bitsPerPixel: 0))
+
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    image.draw(in: NSRect(x: 0, y: 0, width: rep.pixelsWide, height: rep.pixelsHigh))
+    NSGraphicsContext.restoreGraphicsState()
+
+    var minX = rep.pixelsWide
+    var maxX = -1
+    var minY = rep.pixelsHigh
+    var maxY = -1
+
+    for x in 0..<rep.pixelsWide {
+      for y in 0..<rep.pixelsHigh where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.3 {
+        minX = min(minX, x)
+        maxX = max(maxX, x)
+        minY = min(minY, y)
+        maxY = max(maxY, y)
+      }
+    }
+
+    XCTAssertGreaterThan(maxX, minX, "the chip drew nothing")
+    XCTAssertGreaterThan(minX, 0)
+    XCTAssertGreaterThan(minY, 0)
+    XCTAssertLessThan(maxX, rep.pixelsWide - 1)
+    XCTAssertLessThan(maxY, rep.pixelsHigh - 1)
+    XCTAssertGreaterThanOrEqual(CGFloat(maxY - minY + 1) / CGFloat(scale), 10)
+  }
+
+  /// Catches a chip that offers an action, or one whose tooltip and VoiceOver element leave out the
+  /// controllers the host named. The chip has no actions, its tooltip lists each name as a
+  /// "Controller:" line, and its accessibility value reads the names. A click on it selects the
+  /// tab and opens no menu.
+  func testTheChipNamesItsControllersAndIsInert() throws {
+    let names = ["build.janet (PID 11)", "watch.janet (PID 12)"]
+    let chip = AppletMarker(kind: .chip, actions: [.rebuildTab], controllers: names)
+
+    XCTAssertEqual(chip.actions, [])
+    XCTAssertEqual(AppletMarkerKind.chip.possibleActions, [])
+    XCTAssertEqual(
+      chip.toolTip,
+      "A controller acts for this tab\nController: build.janet (PID 11)\nController: watch.janet (PID 12)"
+    )
+    XCTAssertEqual(AppletMarker(kind: .authority, controllers: names).controllers, [])
+
+    let list = tabs(2, markers: [1: [chip]])
+    let bar = makeBar(width: 400, tabs: list)
+    var selected: [Int] = []
+
+    bar.onSelect = { selected.append($0) }
+
+    let view = try XCTUnwrap(bar.descendants(ofType: AppletMarkerView.self).first)
+
+    XCTAssertEqual(view.toolTip, chip.toolTip)
+    XCTAssertEqual(view.accessibilityValue() as? String, names.joined(separator: ", "))
+    XCTAssertEqual(view.accessibilityLabel(), AppletMarkerKind.chip.accessibilityLabel)
+    XCTAssertEqual(view.accessibilityIdentifier(), "tab-1-marker-chip")
+    XCTAssertNil(view.menu)
+
+    let event = try XCTUnwrap(
+      NSEvent.mouseEvent(
+        with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+        context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+
+    view.mouseDown(with: event)
+
+    XCTAssertEqual(selected, [1])
+  }
+
+  /// Catches a one-tab applet that leaves out its driver's chip, or keeps it after the driver goes.
+  /// The helper a one-tab applet publishes through sets the chip from the drivers' names, beside
+  /// the authority marker, and clears it when none remain.
+  func testAOneTabAppletPublishesItsDriversChipThroughTheHelper() {
+    let grant = AppletCaller(grant: "driver 1")
+    let tab = AppletTab(id: .make(), title: "One")
+    let driven = PaneAuthority(owners: [grant], drivers: ["perl (driver)"]).applyingOneTabMarker(
+      to: tab)
+
+    XCTAssertEqual(driven.markers.ordered.map(\.kind), [.authority, .chip])
+    XCTAssertEqual(driven.markers[.chip]?.controllers, ["perl (driver)"])
+    XCTAssertEqual(PaneAuthority.none.applyingOneTabMarker(to: driven).markers.isEmpty, true)
+  }
+
+  /// Catches a chip that moves when the controllers' names change, or one kept after the names
+  /// go. The bar redraws a chip whose names changed, and drops it when the tab no longer carries
+  /// one.
+  func testTheChipFollowsItsNames() {
+    let id = AppletTabID.make()
+    let authority = PaneAuthority(controlling: [id: ["a"]])
+    let tab = AppletTab(id: id, title: "T")
+
+    XCTAssertEqual(authority.applyingChip(to: tab).markers[.chip]?.controllers, ["a"])
+    XCTAssertEqual(
+      PaneAuthority(controlling: [id: ["b"]]).applyingChip(to: authority.applyingChip(to: tab))
+        .markers[.chip]?.controllers, ["b"])
+    XCTAssertTrue(
+      PaneAuthority.none.applyingChip(to: authority.applyingChip(to: tab)).markers.isEmpty)
+    XCTAssertNil(PaneAuthority(controlling: [id: []]).chip(forTab: id))
+    XCTAssertEqual(
+      AppletMarkerSet([AppletMarker(kind: .chip), AppletMarker(kind: .authority)]).ordered.map(
+        \.kind),
+      [.authority, .chip])
   }
 }
 

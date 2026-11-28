@@ -98,13 +98,13 @@ final class AppletTabItem: NSView {
     }
 
     while markerViews.count < markers.count {
-      let view = AppletMarkerView(kind: markers[markerViews.count].kind, palette: palette)
+      let view = AppletMarkerView(markers[markerViews.count], palette: palette)
       addSubview(view)
       markerViews.append(view)
     }
 
     for (view, marker) in zip(markerViews, markers) {
-      view.configure(kind: marker.kind)
+      view.configure(marker)
     }
 
     refreshAccessibility()

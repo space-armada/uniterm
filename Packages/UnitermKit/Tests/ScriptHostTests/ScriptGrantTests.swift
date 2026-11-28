@@ -247,6 +247,32 @@ final class ScriptGrantTests: XCTestCase {
     XCTAssertEqual(host.controllers(actingFrom: window, pane: pane), [])
   }
 
+  /// Catches a chip query that names the wrong root for an explicit grant, keeps naming one after
+  /// the user revoked the controller, or changes the connection by asking. A grant binds to the
+  /// pane's newest running session, so the query names that root. Revoking ends it, and asking
+  /// twice answers the same.
+  func testAGrantedControllerNamesItsSessionRootUntilRevoked() async throws {
+    let (_, connection) = try await grantedPeer()
+
+    XCTAssertEqual(host.controllerSessionRoot(connection), sourceRoot)
+    XCTAssertEqual(host.controllerSessionRoot(connection), sourceRoot)
+    XCTAssertEqual(host.allGrants().count, 1, "asking changed the grant")
+
+    host.revokeControllers([connection])
+
+    XCTAssertNil(host.controllerSessionRoot(connection))
+  }
+
+  /// Catches a chip that outlives the session it was granted. Removing the session root drops the
+  /// binding, so the query names no root.
+  func testAGrantedControllerNamesNoRootOnceItsSessionEnds() async throws {
+    let (_, connection) = try await grantedPeer()
+
+    host.removeSessionRoot(sourceRoot, window: window, pane: pane)
+
+    XCTAssertNil(host.controllerSessionRoot(connection))
+  }
+
   /// Catches a connection that goes away while the window layer still counts it as the owner of
   /// its groups.
   func testAClosedConnectionEndsItsAuthority() async throws {

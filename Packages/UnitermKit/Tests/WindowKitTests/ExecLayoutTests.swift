@@ -257,6 +257,56 @@ final class ExecLayoutTests: XCTestCase {
     XCTAssertEqual(controller.paneAuthority(for: members[0]).owners, [])
   }
 
+  private func driverChips(_ controller: MainWindowController, _ pane: NodeID) -> [[String]] {
+    (controller.paneArea.paneView(for: pane)?.paneMarkers ?? [])
+      .filter { $0.kind == .chip }.map(\.controllers)
+  }
+
+  /// Catches a driver whose chip is missing, or stays after the driver's standing ends. The chip
+  /// sits at the driver's pane level and names the driver as the badge does, beside the badge. It
+  /// goes when the user revokes the driver. A revoked driver owns no group, so it shows none, and
+  /// the members carry no chip of their own.
+  func testADriversChipShowsAtItsPaneWhileItOwnsAGroupAndGoesOnRevoke() async throws {
+    let fixture = try makeFixture()
+    let controller = try fixture.openWindow()
+    let (pane, members) = try await presented(fixture, controller)
+
+    await waitUntil("the driver's chip shows") {
+      driverChips(controller, pane) == [["perl (driver)"]]
+    }
+
+    XCTAssertEqual(controller.paneArea.paneView(for: pane)?.controlMark?.controllers.count, 1)
+    XCTAssertEqual(driverChips(controller, members[0]), [])
+    XCTAssertEqual(controller.paneAuthority(for: pane).controlling, [:])
+    XCTAssertEqual(controller.paneAuthority(for: pane).drivers, ["perl (driver)"])
+    XCTAssertEqual(controller.paneAuthority(for: members[0]).drivers, [])
+
+    controller.revokeController(members[0])
+
+    XCTAssertEqual(driverChips(controller, pane), [], "the revoked driver kept its chip")
+  }
+
+  /// Catches a chip that outlives its driver's group. Closing every member leaves the driver
+  /// owning no group, so its chip goes on the turn the last member closes.
+  func testADriversChipGoesWhenItsGroupDissolves() async throws {
+    let fixture = try makeFixture()
+    let controller = try fixture.openWindow()
+    let (pane, members) = try await presented(fixture, controller)
+
+    await waitUntil("the driver's chip shows") {
+      driverChips(controller, pane) == [["perl (driver)"]]
+    }
+
+    controller.closePane(members[0], appletEnded: false)
+
+    XCTAssertEqual(driverChips(controller, pane), [["perl (driver)"]], "one member still holds it")
+
+    controller.closePane(members[1], appletEnded: false)
+
+    XCTAssertTrue(controller.paneArea.tree.groups.isEmpty, "the last member left a group behind")
+    XCTAssertEqual(driverChips(controller, pane), [], "the dissolved group kept the chip")
+  }
+
   /// Runs one owner-set state against a real driver command. The driver's presentation is laid
   /// out, `change` moves the first member into the state, and the driver's next command, a notes
   /// update to that member, runs. The marker's owner set and the command must agree: a command the

@@ -13,6 +13,11 @@ public protocol ControllerAuthority: AnyObject {
   /// The connections that act for any pane of a window now.
   func controllers(actingIn window: UInt64) -> Set<UInt64>
 
+  /// The session root the connection acts for, when its next call would find its binding intact:
+  /// not revoked, its peer unchanged, its root still recorded, and its ancestry still leading to
+  /// it. Asking changes nothing.
+  func controllerSessionRoot(_ id: UInt64) -> ProcessIdentity?
+
   /// Ends the control of each connection, and refuses its calls from now on.
   func revokeControllers(_ ids: Set<UInt64>)
 
@@ -37,6 +42,7 @@ public protocol ControllerAuthority: AnyObject {
 }
 
 extension ControllerAuthority {
+  func controllerSessionRoot(_ id: UInt64) -> ProcessIdentity? { nil }
   func controllerProcessState(_ id: UInt64) -> ControllerProcessState { .other(stopped: false) }
   func suspendController(_ id: UInt64) {}
   func resumeController(_ id: UInt64) {}

@@ -303,14 +303,16 @@ the controller runs in, drawn as the chip per "The markers' look".
 
 Decision: the chip marks the controller's tab. It goes on the tab whose session the controller is bound to. That holds
 for a controller started in the tab and for one granted the pane explicitly. Each is bound to one session root and
-ends when that session ends (`ScriptHost.swift`, about line 1017). An exec driver is bound to its pane, not a tab, so
+ends when that session ends (`ScriptHost.swift`, `recordSessionRoot` and `removeSessionRoot`, about lines
+1070 and 1084). An exec driver is bound to its pane, not a tab, so
 its chip shows at the pane level, beside the control badge, whether or not the pane shows a tab bar. Amended
 2026-11-26; see Decision Log.
 Chosen by the user on 2026-11-21, at the review gate, over the review's "no addition". (addition)
 
-- This brings in recording each session root's tab, which `App/AppDelegate.swift` (about line 250) drops today, and
-  a per-tab entry in what the host hands each applet. See "When the chip shows" and "Who computes the authority
-  marker".
+- This brings in recording each session root's tab, and a per-tab entry in what the host hands each applet. The
+  window records the tab as the session reports its start, since `App/AppDelegate.swift` (about line 275) passes none
+  to the scripting host. See "When the chip shows" and "Who computes the authority marker". Amended 2026-11-27; see
+  Decision Log.
 - A chip at the pane level, whatever the tabs, would not say which tab of a multi-tab terminal holds the controller.
   It would also put a pane-level mark beside a visible tab bar, against decision 3.
 
@@ -338,8 +340,8 @@ every connected script would put one on every REPL pane with its helper attached
 ### How the host hands the chip down
 
 Original question: the settled "Who computes the authority marker" has one new call hand each applet its pane's
-granted owners. The chip is per tab, and the host knows the tab once each session root records its tab. Does the same
-call carry it?
+granted owners. The chip is per tab, and the window knows the tab once it records each session root's tab. Does the
+same call carry it? Amended 2026-11-27; see Decision Log.
 
 Decision: the same call carries, beside the owner set, the tabs that hold a controller, with each controller's name as
 the host supplies it. The applet publishes a chip on those tabs. Chosen by the user on 2026-11-21, converged in 1
@@ -368,7 +370,7 @@ revoking one controller from pane chrome, and an action path from the applet bac
 ### How an explicit grant picks its tab
 
 Original question: an explicit grant binds to the pane's newest live session (`sessionRoot` in `ScriptHost.swift`,
-about line 1101), not to a tab the user picks. The chip makes that binding visible. Should it change?
+about line 1120), not to a tab the user picks. The chip makes that binding visible. Should it change?
 
 Decision: no change. The grant binds to the pane's newest running session, and the chip shows on that tab. Closing that
 tab ends the grant. Chosen by the user on 2026-11-21.
@@ -563,14 +565,16 @@ None.
 - Left to the user: hearing each marker's meaning and reaching the markers and the close button with VoiceOver, with
   the sibling-element fallback if nesting fails, and confirming each symbol resolves on macOS 26.0. The package tests
   ran on a newer system and cannot prove 26.0. The slash's look beside Apple's own symbols is also the user's to judge.
-- The UI tests and captures, `MarkerUITests` and the changed `QuestionsUITests`, compile but had not run when M1 was
-  committed. Three runs timed out entering Automation Mode. The checks they hold, the captures and the scrolling by
-  trackpad and shift-scroll, wait on the next UI run.
+- `MarkerUITests` and `QuestionsUITests` pass. Their first run, after M1 was committed, failed on test faults: a
+  controller started in a backgrounded shell lost its ancestry, the overflow test reselected the tab already selected,
+  and two questions tests still assumed a bar for one form. The captures show the marked and unmarked browser tabs,
+  the text viewer's marker beside the badge, the overflowed bar's fades with the selected tab in view, and the slashed
+  gears in a tab bar and in the badge's corner.
 - The decisions and text this work changed are amended in place. See the Decision Log entries of 2026-11-27.
 
 ### M2: The controlling chip
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Each session root records the tab it runs in, and forgets it when the session ends
 - A controller started in a terminal tab shows the chip on that tab, and an explicit grant's chip shows on its root's
@@ -598,6 +602,45 @@ None.
   other stale
 - A one-tab pane shows its chip at the pane level, beside the badge
 - A UI test captures a two-tab terminal whose second tab runs a controller, with the chip on that tab only
+
+**As built:**
+
+- The window keeps each session root's tab, not the scripting host. The host cannot name a tab, since it does not
+  depend on AppletKit. The window records the tab as the session reports its start, and drops it before the end is
+  reported to the host. The refresh that the end causes never sees a tab whose session has ended. The app's session
+  reporting still passes no tab to the host.
+- The chip's checks read a new query on the host that asks `authorize`'s questions and changes nothing. It names the
+  session root a connection acts for, or nothing when the user revoked it, its peer changed, its root is gone, or its
+  ancestry no longer leads to its root. A lapse changes nothing on screen by itself. A window test with a real host
+  shows the chip stay until the connection's next call. That call is refused and unbinds it, and the refresh inside it
+  takes the chip away, so the chip is gone when the refusal is read. A refresh for another cause between the lapse and
+  the call would drop it earlier. A host test proves the query leaves a lapsed connection bound.
+- The host's one call carries three things: the granted owners, the tabs a controller acts for with the names the badge
+  shows, and the names of the pane's exec drivers. A driver's chip is bound to the pane. A one-tab applet publishes it
+  through the shared helper, and the host also draws it at the pane level whatever the tabs, so a pane with a bar, or
+  an applet that does not use the helper, still shows it. The names never show twice.
+- A pane that closes drops the window's session records for it, in case an applet never reported a session's end. A
+  window's records go with the window's controller.
+- Closing a pane now refreshes every pane's marks. A group dissolves when its last member closes, and the chip of a
+  controller or driver that owned only that group goes on that turn. A controller's "owns a group" counts groups in its
+  own window.
+- The chip appears inside the host's report of the bind. A test hooks the host's report after the window's own
+  refresh, and every report that sees the connection acting also sees the chip. The test cannot say when the socket
+  delivered the bind.
+- A driven pane carries the chip and the authority marker in kind order, and the reach sent to the applet covers the
+  leading edge of both. A fake applet that publishes through the shared helper proves the reach. A real map pane
+  proves the markers. The map does not use the reach.
+- The chip's accessibility element carries the controller names as its value, and its label is the kind's. The package
+  tests prove both. They cannot prove how VoiceOver speaks them.
+- Left to the user: hearing the controller names with VoiceOver, and confirming `cpu` resolves on macOS 26.0. The
+  package tests, including the check that the chip stays whole at 12 points in an 80-point tab, ran on a newer
+  system.
+- The UI test `testAControllerStartedInTheSecondTerminalTabMarksThatTabOnly` ran once, in a run that also reached M1's
+  UI tests. The held controller was refused as running in no pane. The test had put the script in the background of
+  a shell that then exited, so the script passed to launchd and lost its ancestry. The held-controller tests now run
+  the script in the foreground of the pane's shell, and the test passes. Its capture shows the chip on the second
+  tab only.
+- The citations this milestone checked are corrected in place. See the Decision Log entry of 2026-11-27.
 
 ## Decision Log
 
@@ -785,6 +828,21 @@ None.
     since M1 removed them. The citations inside "Marking the pane doing the controlling" (about lines 1017 and 250), a
     decision the user chose, are left as the user chose them. Line 1017 and the `AppDelegate.swift` record are for M2
     to verify.
+- 2026-11-27: Correction of fact, from M2's implementation. "Marking the pane doing the controlling" said:
+  "(`ScriptHost.swift`, about line 1017)". The session root's lifecycle is `recordSessionRoot` and
+  `removeSessionRoot`, about lines 1070 and 1084. Its bullet said "`App/AppDelegate.swift` (about line 250)". The
+  record is dropped at about line 275, and still is. "How an explicit grant picks its tab" said "about line 1101".
+  `sessionRoot` is at about line 1120 after M2. Only the citation numbers changed in the text the user chose. The
+  decisions themselves stand.
+- 2026-11-27: M2 records each session root's tab in the window, beside the session start report, and not in the
+  scripting host. The host does not depend on AppletKit, so it cannot name a tab. "How the host hands the chip down"
+  says the call carries the controlling tabs and names, and it does. Its value also carries the pane's driver names,
+  which follows the 2026-11-26 entry that a driver's chip shows at the pane level. (autonomous)
+- 2026-11-27: Correction of fact, from M2's review. "Marking the pane doing the controlling" said: "This brings in
+  recording each session root's tab, which `App/AppDelegate.swift` (about line 275) drops today". "How the host
+  hands the chip down" said: "the host knows the tab once each session root records its tab". The window records
+  the tab, and the scripting host holds only the root. Both sentences now say so. The decisions the user chose
+  stand. (autonomous)
 
 ## References
 

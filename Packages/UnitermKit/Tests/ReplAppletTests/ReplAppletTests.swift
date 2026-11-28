@@ -156,6 +156,27 @@ final class ReplAppletTests: XCTestCase {
       })
   }
 
+  /// Catches a REPL whose tab never carries the chip the host names for it, or keeps it after the
+  /// host drops it. The one tab shows the chip only while the host's value names it, and the host
+  /// hears of the change.
+  func testTheReplPublishesTheChipOnlyWhileTheHostNamesItsTab() {
+    let host = RecordingHost()
+    let applet = makeApplet(host: host)
+    let tab = applet.publishedTabs.first.id
+    let before = host.tabChanges
+
+    XCTAssertTrue(applet.publishedTabs.first.markers.isEmpty)
+
+    applet.authorityDidChange(PaneAuthority(controlling: [tab: ["repl (PID 7)"]]))
+
+    XCTAssertEqual(applet.publishedTabs.first.markers[.chip]?.controllers, ["repl (PID 7)"])
+    XCTAssertGreaterThan(host.tabChanges, before)
+
+    applet.authorityDidChange(.none)
+
+    XCTAssertTrue(applet.publishedTabs.first.markers.isEmpty)
+  }
+
   private func makeApplet(
     history: ReplHistory = ReplHistory(), host appletHost: RecordingHost? = nil
   ) -> ReplApplet {

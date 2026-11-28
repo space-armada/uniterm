@@ -50,6 +50,23 @@ final class MapExecWindowTests: XCTestCase {
     XCTAssertNil(map.publishedTabs.first.markers[.authority])
   }
 
+  /// Catches a real map pane that shows only one of its two markers when a granted owner can
+  /// address it and a driver is attached. Its one tab carries both in kind order, and the window
+  /// draws both beside the badge.
+  func testARealMapCarriesTheAuthorityMarkerAndTheChipInOrder() throws {
+    let fixture = try makeFixture()
+    let controller = try fixture.openWindow()
+    let (pane, map) = try mapPane(fixture, controller)
+
+    controller.enableRemoteControl(pane)
+    map.authorityDidChange(
+      PaneAuthority(owners: [AppletCaller(grant: "connection 9")], drivers: ["perl (driver)"]))
+
+    XCTAssertEqual(map.publishedTabs.first.markers.ordered.map(\.kind), [.authority, .chip])
+    XCTAssertEqual(
+      controller.paneArea.paneView(for: pane)?.paneMarkers.map(\.kind), [.authority, .chip])
+  }
+
   private func waitUntil(
     _ what: String, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line,
     _ condition: () -> Bool

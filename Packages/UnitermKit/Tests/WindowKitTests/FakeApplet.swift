@@ -45,7 +45,7 @@ class FakeApplet: Applet {
   }
 
   /// Each tab's ID and title, in order. A test sets `tabCount` or `tabTitles` and the tabs follow.
-  private var tabIDs: [AppletTabID] = [.make()]
+  private(set) var tabIDs: [AppletTabID] = [.make()]
   var tabTitles: [String] = []
   var tabDetails: [Int: [String]] = [:]
 
@@ -65,7 +65,8 @@ class FakeApplet: Applet {
       let title =
         index < tabTitles.count
         ? tabTitles[index] : (index == 0 ? self.title : "\(self.title) \(index + 1)")
-      var tab = AppletTab(id: id, title: title, details: tabDetails[index] ?? [])
+      var tab = authority.applyingChip(
+        to: AppletTab(id: id, title: title, details: tabDetails[index] ?? []))
 
       guard tabIDs.count == 1 else { return tab }
 
