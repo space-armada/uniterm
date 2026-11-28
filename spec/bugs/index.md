@@ -77,3 +77,4 @@
 | [20261127-terminal-test-exits-silently-under-make-select](20261127-terminal-test-exits-silently-under-make-select.md) | A terminal test ends the test process with no result under `make test-package-select` | open |
 | [20261127-ui-test-run-fails-in-a-fresh-checkout](20261127-ui-test-run-fails-in-a-fresh-checkout.md) | A local UI test run fails at once in a checkout with no test build folder | open |
 | [20261127-closing-a-terminal-whose-shell-is-stopped-may-hang-the-app](20261127-closing-a-terminal-whose-shell-is-stopped-may-hang-the-app.md) | Closing a terminal whose shell is stopped may block the main thread until the shell continues | open |
+| [20261127-terminal-engine-changes-the-apps-own-environment](20261127-terminal-engine-changes-the-apps-own-environment.md) | Starting the terminal engine edits the whole process's environment, which leaks between tests | open |
