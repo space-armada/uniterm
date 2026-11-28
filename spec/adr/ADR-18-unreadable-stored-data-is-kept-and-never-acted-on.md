@@ -5,9 +5,9 @@
 
 ## Context
 
-uniterm writes data for itself and reads it back in later launches. Today that is the layout file, the controller
-trust stores for packages and script files, and the browser's HSTS store. Planned work adds more, such as remembered
-approvals for exec drivers in UTERM-066.
+uniterm writes data for itself and reads it back in later launches. That is the layout file, the controller trust
+store, and the browser's HSTS store. Planned work adds more, such as remembered approvals for exec drivers in
+UTERM-066.
 
 Builds of different ages read the same stores. A user may run a newer build, then an older one, then the newer one
 again. Two builds may also run at once. A newer build writes entries an older build has never seen: a new kind of
@@ -15,8 +15,8 @@ approval, a new selector, a new node in the pane tree.
 
 When this ADR was written, an older build failed a whole store over one such entry. The trust store granted nothing at
 all when it met a permission kind it did not know, and moved the whole file aside when it met a selector it did not
-know. The layout file is kept aside whole when its envelope is newer. Every readable entry is lost along with the
-unreadable one. Splitting stores into more files works around that, but only until the next new kind.
+know. The layout file was kept aside whole when its envelope was newer. Every readable entry was lost along with the
+unreadable one. Splitting stores into more files would have worked around that, but only until the next new kind.
 
 ADR-06 already keeps an applet payload it cannot read as exact bytes, and writes it back unchanged. This ADR states that
 rule for every store a build keeps for itself.
