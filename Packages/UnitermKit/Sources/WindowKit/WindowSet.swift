@@ -398,6 +398,13 @@ public final class WindowSet {
   /// shared wait of at most `driverQuitGrace`, then SIGKILL for every group still there. The
   /// delayed SIGKILL of an ordinary close would never run, since the app exits first.
   public func endDriversForQuit() {
+    for controller in controllers {
+      for pane in controller.paneIDs {
+        (controller.paneArea.applet(for: pane) as? any ControllerSuspending)?
+          .endControllerForQuit()
+      }
+    }
+
     let channels = controllers.flatMap { $0.execAttachments.values.compactMap(\.channel) }
 
     for channel in channels { channel.close() }
@@ -405,6 +412,87 @@ public final class WindowSet {
     let deadline = Date().addingTimeInterval(Self.driverQuitGrace)
 
     for channel in channels { channel.finishForQuit(by: deadline) }
+  }
+
+  // MARK: Suspension
+
+  /// Suspends every REPL helper and exec driver in every window that is running now.
+  public func suspendAllControllers() {
+    for controller in controllers { controller.suspendAllControllers() }
+  }
+
+  /// Continues every controller that uniterm suspended, in every window. One that something outside
+  /// uniterm stopped is left alone.
+  public func resumeAllControllers() {
+    for controller in controllers { controller.resumeAllControllers() }
+  }
+
+  /// Shows the slot in every window while uniterm has suspended any controller, and clears it when
+  /// none is left.
+  func refreshSuspendedSlot() {
+    let count = controllers.reduce(0) { $0 + $1.controllersSuspendedByUniterm().count }
+
+    guard count > 0 else {
+      guard windowStates.text(of: .suspendedControllers) != nil else { return }
+
+      clearWindowState(.suspendedControllers)
+
+      return
+    }
+
+    let label = "\(count) suspended"
+    let text =
+      count == 1
+      ? "1 controller is suspended. \(SuspensionWording.pageCodeNote) Click to resume it."
+      : "\(count) controllers are suspended. \(SuspensionWording.pageCodeNote) Click to resume them."
+
+    guard
+      windowStates.text(of: .suspendedControllers) != text
+        || windowStates.label(of: .suspendedControllers) != label
+    else { return }
+
+    setWindowState(.suspendedControllers, text: text, label: label)
+  }
+
+  /// Opens the slot's menu at the pointer: each controller uniterm suspended with its Resume, then
+  /// Resume All.
+  public func presentSuspendedControllersMenu() {
+    let menu = NSMenu()
+    let actions = SuspendedMenuActions()
+    var index = 0
+
+    menu.autoenablesItems = false
+
+    for controller in controllers {
+      for entry in controller.suspendedMenuEntries() {
+        let name = controller.window?.title ?? "window"
+        let item = NSMenuItem(
+          title: "\(entry.title) in \(name)", action: #selector(SuspendedMenuActions.run(_:)),
+          keyEquivalent: "")
+
+        item.target = actions
+        item.setAccessibilityIdentifier("suspended-controllers-resume-\(index)")
+        actions.add { [weak controller] in controller?.resume(entry.target) }
+        item.tag = index
+        menu.addItem(item)
+        index += 1
+      }
+    }
+
+    guard index > 0 else { return }
+
+    menu.addItem(.separator())
+
+    let all = NSMenuItem(
+      title: "Resume All", action: #selector(SuspendedMenuActions.run(_:)), keyEquivalent: "")
+
+    all.target = actions
+    all.tag = index
+    all.setAccessibilityIdentifier("suspended-controllers-resume-all")
+    actions.add { [weak self] in self?.resumeAllControllers() }
+    menu.addItem(all)
+
+    menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
   }
 
   /// Which connections act for which pane. Every window gets it as it opens.
@@ -455,6 +543,7 @@ public final class WindowSet {
     controller.onSessionEnded = { [weak self] windowID, pane, tab, pid, started in
       self?.onSessionEnded?(windowID, pane, tab, pid, started)
     }
+    controller.onSuspensionChange = { [weak self] in self?.refreshSuspendedSlot() }
     controller.visibleFrameProvider = visibleFrame
     controller.windowStates = windowStates
     controller.refreshMinimumSize()
@@ -533,6 +622,7 @@ public final class WindowSet {
 
   private func windowDidClose(_ controller: MainWindowController) {
     controllers.removeAll { $0 === controller }
+    refreshSuspendedSlot()
     onScriptWindowClosed?(controller.scriptWindowID)
     launchAuthority.windowClosed(controller.scriptWindowID)
 
@@ -552,5 +642,22 @@ public final class WindowSet {
     Task { @MainActor [weak self] in
       self?.closing.removeAll { $0 === controller }
     }
+  }
+}
+
+/// The actions of the suspended-controllers menu. A menu item holds its target weakly, so one
+/// object keeps every item's closure alive while the menu shows.
+@MainActor
+private final class SuspendedMenuActions: NSObject {
+  private var actions: [() -> Void] = []
+
+  func add(_ action: @escaping () -> Void) {
+    actions.append(action)
+  }
+
+  @objc func run(_ item: NSMenuItem) {
+    guard actions.indices.contains(item.tag) else { return }
+
+    actions[item.tag]()
   }
 }

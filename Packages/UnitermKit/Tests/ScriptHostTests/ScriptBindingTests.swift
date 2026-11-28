@@ -243,6 +243,51 @@ final class ScriptBindingTests: XCTestCase {
     XCTAssertEqual(windows.calls.count, answered, "a call ran after the exec")
   }
 
+  /// Catches a program that a shell stopped going unseen, a continue that leaves it shown as
+  /// stopped, and a Suspend that stops a program uniterm did not start. The peer is stopped and
+  /// continued by this process, as a shell's job control does. It is no REPL helper, so the host
+  /// shows its state and never signals it.
+  func testAPeerStoppedFromOutsideReadsAsStoppedAndUnitermNeverSignalsIt() async throws {
+    let relay = try SocketRelay(path: host.instanceAddress)
+
+    defer { relay.stop() }
+
+    let pid = try await relay.connected()
+
+    defer { kill(pid, SIGCONT) }
+
+    try await relay.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
+    _ = try await relay.read()
+    try await relay.send(ScriptHelperMessage.begin(name: "relay").frame())
+    try await relay.send(ScriptHelperMessage.request(id: 1, call: .listWindows).frame())
+
+    guard case .reply(1, .ok) = try await relay.read() else {
+      return XCTFail("the bound relay's first call was not answered")
+    }
+
+    let id = try XCTUnwrap(host.controllers(actingFrom: 1, pane: NodeID(rawValue: 1)).first)
+    var changes = 0
+
+    host.onControllersChanged = { changes += 1 }
+
+    XCTAssertEqual(host.controllerProcessState(id), .other(stopped: false))
+
+    host.suspendController(id)
+
+    XCTAssertEqual(ProcessInspection.isStopped(pid: pid), false, "uniterm stopped a stranger")
+
+    XCTAssertEqual(kill(pid, SIGSTOP), 0)
+    expect(
+      await waitUntil { host.controllerProcessState(id) == .other(stopped: true) },
+      "the stop was not seen")
+    XCTAssertGreaterThan(changes, 0, "the badge was not told")
+
+    XCTAssertEqual(kill(pid, SIGCONT), 0)
+    expect(
+      await waitUntil { host.controllerProcessState(id) == .other(stopped: false) },
+      "the continue was not seen")
+  }
+
   /// Catches a revoked connection, bound by ancestry and still open, that the pane's badge keeps
   /// listing. A grant ends with the revoke, but an ancestry binding lasts until the connection
   /// closes, so only the revoked set can leave it out. What this cannot prove is the badge's own

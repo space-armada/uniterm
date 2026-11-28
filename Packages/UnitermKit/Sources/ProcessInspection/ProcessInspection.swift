@@ -95,7 +95,7 @@ public enum ProcessInspection {
   ///
   /// A zombie has exited and only waits for its parent to collect it. It still has a record, but
   /// it is not running, so a socket it left behind must carry none of its authority.
-  private static func record(of pid: pid_t) -> kinfo_proc? {
+  static func record(of pid: pid_t) -> kinfo_proc? {
     var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
     var info = kinfo_proc()
     var size = MemoryLayout<kinfo_proc>.size

@@ -72,6 +72,7 @@ final class StatusBarTests: XCTestCase {
     var states = WindowStates()
     states.set(.layoutNotSaved, text: "Not saved.")
     states.set(.pendingPermissions, text: "Programs are asking.", label: "32 requests")
+    states.set(.suspendedControllers, text: "Controllers are suspended.", label: "2 suspended")
     states.set(.survivingWork, text: "Work is still running.")
     fixture.controller.windowStates = states
   }

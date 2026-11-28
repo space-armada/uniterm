@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import HelperHost
+import ProcessInspection
 import ScriptWire
 
 /// What bounds the REPL helpers the app started.
@@ -62,12 +63,18 @@ public struct ReplProbes: Sendable {
 
   public var now: @Sendable () -> ContinuousClock.Instant
 
+  /// Whether a process is stopped, or nil when it cannot be read. The once-a-second look reads
+  /// it beside the footprint, so a helper stopped from outside is seen even when no notice came.
+  public var isStopped: @Sendable (pid_t) -> Bool?
+
   public init(
     footprint: @escaping @Sendable (pid_t) -> Int?,
-    now: @escaping @Sendable () -> ContinuousClock.Instant
+    now: @escaping @Sendable () -> ContinuousClock.Instant,
+    isStopped: @escaping @Sendable (pid_t) -> Bool? = { ProcessInspection.isStopped(pid: $0) }
   ) {
     self.footprint = footprint
     self.now = now
+    self.isStopped = isStopped
   }
 
   public static let live = ReplProbes(
@@ -249,17 +256,30 @@ extension ScriptHost {
     }
 
     let probe = replProbes.footprint
+    let stopProbe = replProbes.isStopped
     let readings = await Self.readFootprints(targets.map(\.identity), using: probe)
+    let stops = await Self.readStops(targets.map(\.identity), using: stopProbe)
 
     // The main actor may have been busy for longer than the grace. A pong that arrived meanwhile
     // is still queued behind this call, so a stalled app forgives the pings it has outstanding.
     for (index, target) in targets.enumerated() where target.channel.isAttached {
       if stalled { target.channel.forgetOutstandingPing(now: now) }
 
-      target.channel.observe(footprint: readings[index], now: now, limits: replLimits)
+      target.channel.observe(
+        footprint: readings[index], stopped: stops[index], now: now, limits: replLimits)
     }
 
     if replFootprintTotal <= replLimits.budget { budgetEpisodeAnnounced = false }
+  }
+
+  private nonisolated static func readStops(
+    _ identities: [ProcessIdentity], using probe: @Sendable (pid_t) -> Bool?
+  ) async -> [Bool?] {
+    identities.map { identity in
+      guard identity.isRunning else { return nil }
+
+      return probe(identity.pid)
+    }
   }
 
   private nonisolated static func readFootprints(

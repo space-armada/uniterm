@@ -1,5 +1,6 @@
 import AppKit
 import AppletKit
+import ProcessInspection
 import ScriptHost
 import ScriptWire
 import StatusKit
@@ -35,6 +36,12 @@ public struct ReplServices {
 
 /// Lays out the terminal above the strip that shows after the helper has gone.
 ///
+/// It also sees Ctrl-Z before the terminal does, and keeps it from the pty. Through the pty the key
+/// would be a stop request that the terminal's line discipline raises for the foreground group, and
+/// the kernel may discard it for a group like this one. It would also leave a stray byte for the
+/// helper to read on resume. So the key suspends or resumes the helper's group directly, the same
+/// way whatever the pty does, and the helper never reads it.
+///
 /// It also sees Ctrl-C before the terminal does. The terminal still gets the key and sends it
 /// through the pty. The container tells the applet too, so the app can ask the helper to stop over
 /// its control channel, which does not depend on the pty's signal reaching the helper.
@@ -42,10 +49,19 @@ public struct ReplServices {
 private final class ReplContainerView: NSView {
   var onResize: (() -> Void)?
   var onInterruptKey: (() -> Void)?
+  var onSuspendKey: ((_ isRepeat: Bool) -> Void)?
 
   override var isFlipped: Bool { true }
 
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    if ReplApplet.isSuspendKey(event), isFirstResponderInside {
+      // The key never reaches the terminal, so the helper reads no stray byte when it resumes. A
+      // held key's repeats are swallowed too, and never flip the state back.
+      onSuspendKey?(event.isARepeat)
+
+      return true
+    }
+
     if ReplApplet.isInterruptKey(event), isFirstResponderInside {
       onInterruptKey?()
     }
@@ -82,7 +98,7 @@ private final class ReplContainerView: NSView {
 /// reason and a Restart button, and so does a helper that never connected. Only the user can
 /// restart it, and the history carries over. A closed pane ends the helper.
 @MainActor
-public final class ReplApplet: Applet, InputOwning {
+public final class ReplApplet: Applet, InputOwning, ControllerSuspending {
   private static let title = "REPL"
 
   /// Why the helper is not running.
@@ -101,6 +117,7 @@ public final class ReplApplet: Applet, InputOwning {
 
   private let container = ReplContainerView()
   private let endedView = ReplEndedView()
+  private let suspendedView = ReplSuspendedView()
   private let engine: any TerminalEngine
   private let services: ReplServices
   private let home: String
@@ -112,6 +129,7 @@ public final class ReplApplet: Applet, InputOwning {
   private var processIdentity: (pid: pid_t, started: Int)?
   private var evaluating = false
   private var started = false
+  private var showsSuspended = false
 
   /// The pane's control state, as the host last pushed it. The REPL's session gets the clipboard
   /// policy it implies, from its creation on.
@@ -133,10 +151,14 @@ public final class ReplApplet: Applet, InputOwning {
 
     container.setAccessibilityIdentifier("repl-applet")
     container.addSubview(endedView)
+    container.addSubview(suspendedView)
     endedView.isHidden = true
+    suspendedView.isHidden = true
+    suspendedView.onResume = { [weak self] in self?.resumeController() }
     endedView.onRestart = { [weak self] in self?.restart() }
     container.onResize = { [weak self] in self?.layoutContents() }
     container.onInterruptKey = { [weak self] in self?.interruptKeyPressed() }
+    container.onSuspendKey = { [weak self] isRepeat in self?.suspendKeyPressed(isRepeat: isRepeat) }
   }
 
   /// Restores an applet from a description. It starts a fresh helper when the pane starts. The
@@ -199,6 +221,7 @@ public final class ReplApplet: Applet, InputOwning {
 
   public func apply(_ palette: ThemePalette) {
     endedView.apply(palette)
+    suspendedView.apply(palette)
   }
 
   public func controlDidChange(_ control: PaneControl) {
@@ -212,6 +235,66 @@ public final class ReplApplet: Applet, InputOwning {
     } catch {
       preconditionFailure("a REPL description always encodes: \(error)")
     }
+  }
+
+  // MARK: Suspension
+
+  public var controllerSuspension: SuspensionState? {
+    guard phase == .running, let channel, channel.isAttached else { return nil }
+
+    return channel.suspension
+  }
+
+  public var controllerName: String { Self.title }
+
+  public func suspendController() {
+    guard phase == .running else { return }
+
+    channel?.suspend()
+  }
+
+  public func resumeController() {
+    guard phase == .running else { return }
+
+    channel?.resume()
+  }
+
+  public func endControllerForQuit() {
+    guard phase == .running else { return }
+
+    channel?.endForQuit()
+  }
+
+  /// A Ctrl-Z in the pane. It suspends the helper, or resumes it when it is suspended. The same
+  /// key does both, so either way of resuming undoes either way of suspending. A repeat of a held
+  /// key does nothing.
+  func suspendKeyPressed(isRepeat: Bool) {
+    guard !isRepeat, phase == .running, let channel, channel.isAttached else { return }
+
+    if channel.suspension.canResume {
+      channel.resume()
+    } else {
+      channel.suspend()
+    }
+  }
+
+  /// Shows the strip and stops the pane taking input while the helper reads as stopped.
+  func suspensionChanged(_ state: SuspensionState) {
+    let suspended = state.isSuspended
+
+    showsSuspended = suspended
+
+    session?.acceptsInput = !suspended
+    suspendedView.isHidden = !suspended
+
+    if suspended {
+      suspendedView.message =
+        SuspensionWording.suspended("The REPL") + " Press Ctrl-Z to resume."
+    }
+
+    layoutContents()
+    updateSegments()
+    host?.appletDidChange(self)
   }
 
   // MARK: Helper
@@ -378,6 +461,7 @@ public final class ReplApplet: Applet, InputOwning {
     reportSessionEnded()
     releaseChannel()
 
+    clearSuspension()
     session?.onEvent = nil
     session?.view.removeFromSuperview()
     session?.close()
@@ -402,6 +486,16 @@ public final class ReplApplet: Applet, InputOwning {
     guard phase == .running, let channel else { return }
 
     channel.interruptPressed()
+  }
+
+  /// True for Ctrl-Z alone. A held key's repeats count too, so the caller can swallow them.
+  static func isSuspendKey(_ event: NSEvent) -> Bool {
+    guard event.type == .keyDown else { return false }
+
+    let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+    return modifiers.contains(.control) && modifiers.isDisjoint(with: [.command, .option, .shift])
+      && event.charactersIgnoringModifiers == "z"
   }
 
   /// True for Ctrl-C alone, as a fresh press and not a held key. Command, Option, and Shift make
@@ -469,6 +563,12 @@ public final class ReplApplet: Applet, InputOwning {
     case .attached:
       break
 
+    case .suspensionChanged(let state):
+      suspensionChanged(state)
+
+    case .suspendFailed(let text):
+      host?.applet(self, post: .warning, text: text)
+
     case .terminated(let end):
       helperEnded(Self.message(for: end))
 
@@ -513,6 +613,7 @@ public final class ReplApplet: Applet, InputOwning {
   private func helperEnded(_ message: String) {
     guard phase == .running else { return }
 
+    clearSuspension()
     evaluating = false
     releaseChannel()
     showEnded(message)
@@ -524,6 +625,7 @@ public final class ReplApplet: Applet, InputOwning {
   private func helperLeft() {
     guard phase == .running else { return }
 
+    clearSuspension()
     evaluating = false
     releaseChannel()
     host?.appletDidExit(self)
@@ -536,6 +638,12 @@ public final class ReplApplet: Applet, InputOwning {
     guard phase == .running, channel?.isAttached != true else { return }
 
     helperEnded("The REPL ended.")
+  }
+
+  private func clearSuspension() {
+    showsSuspended = false
+    suspendedView.isHidden = true
+    session?.acceptsInput = true
   }
 
   private func releaseChannel() {
@@ -558,6 +666,8 @@ public final class ReplApplet: Applet, InputOwning {
       segments = [
         AppletSegment(symbolName: "exclamationmark.triangle", text: "Ended", style: .warning)
       ]
+    } else if showsSuspended {
+      segments = [AppletSegment(symbolName: "pause.circle", text: "Suspended", style: .warning)]
     } else {
       segments = []
     }
@@ -565,10 +675,15 @@ public final class ReplApplet: Applet, InputOwning {
 
   private func layoutContents() {
     let bounds = container.bounds
-    let strip = endedView.isHidden ? 0 : ReplEndedView.height
+    let ended = endedView.isHidden ? 0 : ReplEndedView.height
+    let suspended =
+      suspendedView.isHidden ? 0 : min(suspendedView.height(for: bounds.width), bounds.height / 2)
+    let strip = max(ended, suspended)
 
     endedView.frame = NSRect(
-      x: 0, y: max(0, bounds.height - strip), width: bounds.width, height: strip)
+      x: 0, y: max(0, bounds.height - ended), width: bounds.width, height: ended)
+    suspendedView.frame = NSRect(
+      x: 0, y: max(0, bounds.height - suspended), width: bounds.width, height: suspended)
     session?.view.frame = NSRect(
       x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - strip))
   }

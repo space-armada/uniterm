@@ -187,6 +187,8 @@ extension MainWindowController {
     case .enable: enableRemoteControl(pane)
     case .disconnect: disconnect(pane)
     case .revoke: revokeController(pane)
+    case .suspend(let target): suspend(target)
+    case .resume(let target): resume(target)
     case .adopt(let owner): adoptGroup(of: pane, by: owner)
     }
   }
@@ -218,6 +220,8 @@ extension MainWindowController {
       paneArea.paneView(for: pane)?.controlMark = controlMark(for: pane)
       paneArea.paneView(for: pane)?.askingMark = askingMark(for: pane)
     }
+
+    onSuspensionChange?()
   }
 
   /// The badge's mark for a pane, from the control table, the tree, and the live controllers.
@@ -234,6 +238,7 @@ extension MainWindowController {
       enableAvailable: canEnableRemoteControl(pane), revokeAvailable: canRevokeController(pane))
 
     mark.controllers = controllers(of: pane).sorted().map(controllerName)
+    mark.controllerLines = controllerLines(for: pane)
 
     if unownedGroup(of: pane) != nil {
       mark.adoptions = adoptionCandidates().map {

@@ -46,6 +46,7 @@ final class FakeSession: TerminalSession {
   init(launch: TerminalLaunch) { self.launch = launch }
 
   func send(text: String) {}
+  var acceptsInput = true
   func perform(_ action: TerminalAction) {}
   func resize(to size: CGSize) {}
   /// How many times the applet set the session's focus or visibility, including calls that changed

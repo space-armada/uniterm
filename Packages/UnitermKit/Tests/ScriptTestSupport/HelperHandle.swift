@@ -126,7 +126,8 @@ public struct HelperWaitError: Error, CustomStringConvertible {
 /// The helper gets its three standard streams and no other descriptor of the test process. Every
 /// signal starts at its default with an empty mask, whatever the test process has set, so a test
 /// that ignores SIGPIPE cannot change how a later helper behaves. The helper stays in the test
-/// process's group, and the handle signals only the helper's own process.
+/// process's group, and the handle signals only the helper's own process. A test that stops a
+/// helper's group asks for `ownProcessGroup`, so the stop can never reach the test process.
 public final class HelperHandle: @unchecked Sendable {
   /// The name of the thread that reaps each helper. `onExit` runs on it.
   public static let reaperThreadName = "uniterm.tests.helper-reaper"
@@ -167,7 +168,7 @@ public final class HelperHandle: @unchecked Sendable {
   /// reaper thread, after the status is known.
   public static func spawn(
     executable: URL, arguments: [String], environment: [String: String],
-    directory: URL? = nil, standardInput: HelperInput = .null,
+    directory: URL? = nil, ownProcessGroup: Bool = false, standardInput: HelperInput = .null,
     standardOutput: HelperOutput = .captured, standardError: HelperOutput = .captured,
     deadlines: [HelperDeadline], onExit: (@Sendable () -> Void)? = nil
   ) throws -> HelperHandle {
@@ -251,9 +252,14 @@ public final class HelperHandle: @unchecked Sendable {
 
     posix_spawnattr_setsigdefault(&attributes, &allSignals)
     posix_spawnattr_setsigmask(&attributes, &noSignals)
-    posix_spawnattr_setflags(
-      &attributes,
-      Int16(POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK))
+    var flags = POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK
+
+    if ownProcessGroup {
+      posix_spawnattr_setpgroup(&attributes, 0)
+      flags |= POSIX_SPAWN_SETPGROUP
+    }
+
+    posix_spawnattr_setflags(&attributes, Int16(flags))
 
     let argv = ([path] + arguments).map { strdup($0) } + [nil]
     let envp =

@@ -190,8 +190,9 @@ Decision: no change. Chosen by the user on 2026-11-21, converged in 1 pass.
   would fill 4 MiB. The risk "A suspended driver's events overflow" records it.
 
 Rationale: current behavior already meets the need. Holding events with a drop count, or dropping them, would add an
-exec-wire message today's drivers cannot parse, and a dropped state event would leave a driver's view stale. Lifting
-the limits would remove the memory guard.
+exec-wire message. Under UTERM-063 it would land in place at version 0, and a driver that cannot read it is refused. A
+dropped state event would also leave a driver's view stale. Lifting the limits would remove the memory guard. Amended
+2026-11-27; see Decision Log.
 
 ### The name
 
@@ -322,7 +323,7 @@ None.
 
 ### M1: Suspend and resume
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 Builds only on control code that exists today. It adds each controller's Suspend and Resume to today's badge menu.
 M2 places them beside UTERM-042's revoke items once those land.
@@ -369,8 +370,48 @@ M2 places them beside UTERM-042's revoke items once those land.
   and selection still work
 - Ctrl-Z resumes a suspended REPL and ignores repeats. Ctrl-C resumes, then interrupts a running form, and at an idle
   prompt only resumes. Ctrl-Z at an idle prompt suspends the REPL
-- A UI test suspends a controller between two of its calls, then types into a pane. The controller opens no pane and
-  no tab until it is resumed
+- A UI test suspends a controller between two of its calls, then types into a pane. The controller's second call does
+  not land until it is resumed. Amended 2026-11-27; see Decision Log.
+
+**As built:**
+
+- Built: suspend and resume for the REPL helper and exec drivers by process group, following the process's observed
+  state. Added the badge items, the palette commands, Suspend All and Resume All, the strips, and the window slot.
+  Neither wire changed.
+- Two facts were checked first. The first was wrong for the REPL in the real app. The terminal's session child, a
+  `login` that stays the parent, leads the process group, and the helper is its child and a member of that group, not a
+  leader. A test that checked the session child, and package tests that made the helper a leader by hand, hid it. A
+  Ctrl-Z in the app then did nothing. The group signal now targets the session child, named by pid and start time,
+  and requires the helper to be a member of its group. It never targets uniterm's own group. A refusal is shown to the
+  user. `ReplProcessTreeTests` runs the real engine and the real helper to prove the tree, and the other REPL tests
+  start the helper under a group-leading wrapper, as the app does. An exec driver is spawned by uniterm into a group
+  it leads, with no wrapper, so the driver is the leader, which the exec UI test confirms.
+- The second fact held. A kqueue process notice fires for a stop and a continue from another process, but never says
+  which, so each notice starts a read that repeats until two readings agree. The watcher and the hang check read the
+  helper's own state, so a `kill -STOP` of the helper alone shows as suspended too.
+- Found: closing a terminal session whose child is stopped blocks the main thread until the child continues. The REPL
+  continues its group before it closes, whatever its record says, so a stop it never saw is covered. A helper whose
+  leader is already gone is not reached by the guarded call, which needs the leader's start time. Its stopped
+  members are left to the terminal's hang-up.
+- Found: while input is off, the view still sends a mouse event only when the child has not asked to hear the mouse.
+  Scrolling in the alternate screen can still write cursor keys. The REPL's line editor does not use it.
+- The status bar's minimum message width changed. See the Decision Log entry "StatusBarView minimum message width".
+- Checks proved by an OS rule, not product code: nothing stays stopped once the app is gone. The driver half is
+  `testAStoppedGroupWhoseParentIsGoneIsEnded`, and the REPL half is
+  `testAStoppedSessionLeaderIsGoneOnceTheMasterOfItsPtyCloses`, with `script` standing in for the app.
+- Checks with no automated proof of the real thing: the paste, drag, and composed-text paths of the input gate, and the
+  pop-up menu. A fake applet stands in for a REPL pane in the window tests, and a raw peer in the pane tests.
+- Checks left to a person: how the badge, the strips, the slot, and its menu look, and that the sentence about page
+  code stays readable in a narrow pane.
+- Every other check has a named test. A check's test is findable by its words, in `SuspensionWindowTests`,
+  `ScriptReplLimitsTests`, `ExecDriverChannelTests`, `ProcessStopTests`, `ReplAppletTests`, and `ScriptBindingTests`.
+- UI tests, both run in the real app:
+  `ExecPaneUITests.testASuspendedDriverAnswersNothingWhileTheUserTypesAndThenResumes` and
+  `ReplUITests.testCtrlZSuspendsTheReplKeepsItsContextAndTakesNoInputUntilResumed`. The second sends the real
+  Ctrl-Z and found the process group fault above. The first keeps the check's point with a driver that answers the
+  user's Next. A driver's first layout needs its pane's number, which the exec hello does not carry. See
+  `bugs/20261127-exec-driver-cannot-name-its-pane-for-a-first-layout.md`.
+- The run viewed a capture of the suspended driver strip, the suspended REPL strip, and the window slot.
 
 ### M2: Suspension beside newer control features
 
@@ -534,6 +575,19 @@ landed waits for it.
 - 2026-11-21: Accepted by the user. No decision earns an ADR.
 - 2026-11-21: Scheduled as M1 and M2 in queue.md. M1 is its own row, since it needs no other proposal, and M2 waits on
   UTERM-019 M6, UTERM-024, UTERM-028, UTERM-041, and UTERM-042.
+- 2026-11-27: Amended two passages that predate UTERM-063 (run best guess). "What uniterm sends a suspended
+  controller" said holding or dropping events "would add an exec-wire message today's drivers cannot parse". A new
+  exec-wire message now lands in place at version 0, with an older driver refused, so the rationale no longer rests on
+  drivers that cannot parse it. The decision itself, no change, stays as the user chose it. The References line read
+  "ADR-13: external wires stay compatible". It now says the rule holds from version 1, and adds UTERM-063.
+- 2026-11-27: StatusBarView minimum message width, 64 to 56 points (run best guess). A fourth icon-only slot, the one
+  for suspended controllers, needed 202 points against the window's 200-point minimum, so the bar overflowed. The
+  message area keeps 56 points, which shows a word or two. This leaves undone: the message area shrinks with each new
+  slot. A minimum that follows the slot count would be the fuller fix.
+- 2026-11-27: Amended M1's UI check (run best guess). It said "The controller opens no pane and no tab until it is
+  resumed". A driver's first layout needs its pane's number, which the exec hello does not carry, so the real app
+  cannot run one from a restored pane. The check now says the controller's second call does not land until it is
+  resumed. A driver that opens panes can be checked once UTERM-064 gives the hello its pane identity.
 
 ## References
 
@@ -545,6 +599,8 @@ landed waits for it.
 - UTERM-041: the markers
 - UTERM-042: tab actions, per-controller badge items, and palette commands
 - [ADR-04](../adr/ADR-04-uniterm-owns-key-bindings-and-terminal-config.md): key bindings
-- [ADR-13](../adr/ADR-13-outside-wires-stay-compatible-across-versions.md): external wires stay compatible
+- [ADR-13](../adr/ADR-13-outside-wires-stay-compatible-across-versions.md): external wires stay compatible from
+  version 1. At version 0 a change lands in place. Amended 2026-11-27; see Decision Log.
+- UTERM-063: external versions stay at 0 until declared stable
 - [ADR-14](../adr/ADR-14-a-controller-controls-what-it-opened.md): grants and revocation
 - [ADR-15](../adr/ADR-15-a-programs-operation-is-the-users.md): a program's operation is the user's

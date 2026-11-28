@@ -257,6 +257,16 @@ if ($mode eq "script") {
     read_app_hello();
     hello($protocol, $schema);
     sleep 600 while 1;
+} elsif ($mode eq "wait-reply") {
+    # Sends one command that waits, and reports the reply when it arrives. A test stops the driver
+    # while the command waits, so the reply can only be read after the driver continues.
+    read_app_hello();
+    hello($protocol, $schema);
+    command("wait-for-notes", {contains => "go"});
+    while (my $line = <STDIN>) {
+        my $message = $json->decode($line);
+        print STDERR "waited reply\n" if $message->{type} eq "reply";
+    }
 } elsif ($mode eq "grandchild") {
     # A background child in the driver's group that ignores SIGTERM and holds stdout open.
     my ($file) = @rest;

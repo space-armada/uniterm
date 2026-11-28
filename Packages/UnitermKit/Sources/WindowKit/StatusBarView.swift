@@ -22,9 +22,10 @@ extension ThemePalette {
 final class StatusBarView: NSView {
   static let height: CGFloat = 22
 
-  /// The least width the message area keeps, however many slots compete for the bar. It fits a
-  /// few words, which truncate. Applet segments leave the bar before the message goes below it.
-  static let minimumMessageWidth: CGFloat = 64
+  /// The least width the message area keeps, however many slots compete for the bar. At this width a
+  /// message shows a word or two, then truncates. Applet segments leave the bar before the message
+  /// goes below it. The minimum is fixed, so each new icon-only slot takes room from the message.
+  static let minimumMessageWidth: CGFloat = 56
 
   /// The room between the bar's edge and its segments, on each side.
   private static let edgeInset: CGFloat = 10

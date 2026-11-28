@@ -20,11 +20,13 @@ final class ExecPaneUITests: UnitermUITestCase {
     #"{"name":"set-deck","arguments":{"titles":["Intro","Results","Close"]}}"#
 
   /// Plants one window whose only pane is a slides fixture with a driver declared in `mode`.
-  private func plantExecPane(mode: String, keys: [String]) throws {
+  private func plantExecPane(mode: String, keys: [String], rest: [String]? = nil) throws {
     let control: [String: Any] = [
       "access": "disconnected", "driver": "exec",
       "exec": [
-        "argv": ["/usr/bin/perl", Self.driverScript, mode, "fixture-slides", "0", Self.command],
+        "argv": [
+          "/usr/bin/perl", Self.driverScript, mode, "fixture-slides", "0",
+        ] + (rest ?? [Self.command]),
         "environmentKeys": keys,
       ],
     ]
@@ -185,6 +187,72 @@ final class ExecPaneUITests: UnitermUITestCase {
     XCTAssertTrue(
       launcher(in: window).appears(timeout: 5),
       "Cmd-D did nothing while the driver stalled. \(focusReport(app))")
+  }
+
+  /// Catches a suspended driver that still answers, and a suspension that cannot be undone from the
+  /// pane's strip. The driver sets a deck at once and answers the user's Next with a second call.
+  /// The user suspends it, presses Next, and types into a terminal of their own. The driver does
+  /// nothing while they type and after a wait, and no pane of its own opens or changes. Resume then
+  /// lets the event through, and the second call lands.
+  ///
+  /// The driver acts on its own pane only. A driver's first layout needs its pane's number, which
+  /// the exec hello does not carry yet, so the real app cannot run one from a restored pane.
+  ///
+  /// This test has not been run by the agent that wrote it.
+  func testASuspendedDriverAnswersNothingWhileTheUserTypesAndThenResumes() throws {
+    try plantExecPane(mode: "script", keys: [])
+
+    let app = launchWithFixtures()
+    let window = mainWindow(in: app)
+    let run = window.buttons["pane-exec-run-1"]
+    let title = window.staticTexts["fixture-slides-title"]
+
+    XCTAssertTrue(run.appears(timeout: 20), "the restored pane shows no Run")
+
+    act("click Run", app) { run.click() }
+    approveOnce(in: app, value: nil)
+
+    XCTAssertTrue(waitFor(title, timeout: 20) { $0 == "Intro" }, "the driver never set the deck")
+
+    act("choose Suspend Controller", app) {
+      app.menuBars.menuItems["Suspend Controller"].click()
+    }
+
+    let status = window.staticTexts["pane-exec-status-1"]
+
+    XCTAssertTrue(
+      waitFor(status, timeout: 10) { $0.contains("suspended") && $0.contains("Page code") },
+      "the strip never said the driver is suspended")
+    XCTAssertEqual(run.title, "Resume")
+
+    keepScreenshot(of: window, named: "suspended-driver")
+
+    act("click Next", app) { window.buttons["fixture-slides-button"].click() }
+
+    openPane(in: app, keys: "d", modifiers: .command)
+
+    let terminal = window.textViews["terminal"]
+
+    XCTAssertTrue(terminal.appears(timeout: 15), "the user's terminal never opened")
+    XCTAssertEqual(window.groups.matching(identifier: "pane-2").count, 1)
+
+    act("type into the terminal", app) { app.typeText("echo \"S:$((6*7)):\"\n") }
+
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 15) { $0.contains("S:42:") },
+      "the typing did not reach the user's terminal")
+
+    // Cost: this 2 s wait proves a negative. A stopped driver answers nothing, and no event marks
+    // the slide change that never came.
+    Thread.sleep(forTimeInterval: 2)
+
+    XCTAssertEqual(title.value as? String, "Intro", "a suspended driver answered the user's Next")
+
+    act("click Resume", app) { run.click() }
+
+    XCTAssertTrue(
+      waitFor(title, timeout: 20) { $0 == "Results" },
+      "the held event never reached the driver after Resume")
   }
 
   /// What each interaction found: the app's state before and after it, and how long it took. A

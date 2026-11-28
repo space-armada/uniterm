@@ -322,6 +322,13 @@ extension MainWindowController {
         driverEnded(end, attachment: attachment, run: run, pane: pane)
       })
 
+    channel.onSuspensionChange = { [weak self, weak attachment] _ in
+      guard let self, let attachment, execAttachments[pane] === attachment, attachment.run == run
+      else { return }
+
+      suspensionDidChange(of: pane)
+    }
+
     attachment.state = .running(channel)
 
     do {
@@ -776,8 +783,14 @@ extension MainWindowController {
       return PaneExecStatus(
         text: "Driver \(program) waits for approval in Window > Pending Requests.", action: nil)
 
-    case .running:
-      return PaneExecStatus(text: "Driver \(program) is running.", action: nil)
+    case .running(let channel):
+      guard channel.suspension.isSuspended else {
+        return PaneExecStatus(text: "Driver \(program) is running.", action: nil)
+      }
+
+      return PaneExecStatus(
+        text: SuspensionWording.suspended("Driver \(program)"), action: "Resume",
+        isSuspended: true)
 
     case .ended(let reason):
       return PaneExecStatus(text: "Driver \(program): \(reason)", action: "Restart")

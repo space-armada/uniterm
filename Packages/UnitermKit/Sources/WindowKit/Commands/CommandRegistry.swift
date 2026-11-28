@@ -9,6 +9,15 @@ public struct AppCommandHooks {
   public var showPendingRequests: @MainActor () -> Void
   public var showControllers: @MainActor () -> Void
 
+  /// Suspends every REPL helper and exec driver in every window.
+  public var suspendAllControllers: @MainActor () -> Void
+
+  /// Resumes the controllers uniterm suspended, in every window.
+  public var resumeAllControllers: @MainActor () -> Void
+
+  /// Opens the menu of suspended controllers, from the window slot's click.
+  public var showSuspendedControllers: @MainActor () -> Void
+
   /// Asks where to put the `uniterm` command, then links it into the app bundle.
   public var installCommandLineTool: @MainActor () -> Void
 
@@ -30,6 +39,9 @@ public struct AppCommandHooks {
     showSettings: @escaping @MainActor () -> Void = {},
     showPendingRequests: @escaping @MainActor () -> Void = {},
     showControllers: @escaping @MainActor () -> Void = {},
+    suspendAllControllers: @escaping @MainActor () -> Void = {},
+    resumeAllControllers: @escaping @MainActor () -> Void = {},
+    showSuspendedControllers: @escaping @MainActor () -> Void = {},
     installCommandLineTool: @escaping @MainActor () -> Void = {},
     openFile: @escaping @MainActor (RouteAnchor?) -> Void = { _ in },
     openFileWith: @escaping @MainActor (RouteAnchor?) -> Void = { _ in },
@@ -40,6 +52,9 @@ public struct AppCommandHooks {
     self.showSettings = showSettings
     self.showPendingRequests = showPendingRequests
     self.showControllers = showControllers
+    self.suspendAllControllers = suspendAllControllers
+    self.resumeAllControllers = resumeAllControllers
+    self.showSuspendedControllers = showSuspendedControllers
     self.installCommandLineTool = installCommandLineTool
     self.openFile = openFile
     self.openFileWith = openFileWith

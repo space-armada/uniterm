@@ -79,19 +79,22 @@ let package = Package(
     .target(name: "Theme", dependencies: ["ThemeCore"]),
     .target(name: "Preferences"),
     .target(name: "StatusKit"),
-    .target(name: "AppletKit", dependencies: ["SourceAccess", "StatusKit", "Theme"]),
+    .target(
+      name: "AppletKit",
+      dependencies: ["ProcessInspection", "SourceAccess", "StatusKit", "Theme"]),
     .target(name: "PaneModel"),
     .target(name: "LayoutKit", dependencies: ["AppletKit", "AtomicFile", "PaneModel"]),
     .target(name: "FileRouting", dependencies: ["AppletKit"]),
     // An applet's exec driver: the JSON-lines wire, the bounded pipes, and the child process. It
     // reads and writes on threads of its own and hops to the main thread with bounded batches.
-    .target(name: "ExecDriver", dependencies: ["AppletKit", "StatusKit"]),
+    .target(name: "ExecDriver", dependencies: ["AppletKit", "ProcessInspection", "StatusKit"]),
     .target(
       name: "WindowKit",
       dependencies: [
         "Theme", "Preferences", "AppletKit", "StatusKit", "PaneModel", "LayoutKit", "FileRouting",
         "GeoData", "PlaceSearch", "ScriptHost", "ScriptWire", "ExecDriver", "ControllerPackage",
         "ControllerTrust", "SourceAccess", "BrowserModel", "QuestionForm", "QuestionsApplet",
+        "ProcessInspection",
       ]),
     .target(name: "SettingsKit", dependencies: ["Preferences"]),
     .binaryTarget(name: "GhosttyKit", path: ghosttyKitPath),
@@ -239,7 +242,9 @@ let package = Package(
     .target(
       name: "ReplApplet",
       dependencies: [
-        "AppletKit", "ScriptHost", "ScriptWire", "StatusKit", "TerminalSurface", "Theme",
+        "AppletKit", "ProcessInspection", "ScriptHost", "ScriptWire", "StatusKit",
+        "TerminalSurface",
+        "Theme",
       ]),
     // The Questions applet: the pane that shows the forms programs ask, a tab for each requester.
     // It draws the requester's header itself and holds no script, wire, or Janet code. A host
@@ -415,6 +420,7 @@ let package = Package(
       dependencies: [
         "ReplApplet", "AppletKit", "ScriptHost", "ScriptWire", "StatusKit", "TerminalSurface",
         "WindowKit", "Preferences", "AppletTestSupport", "ScriptTestSupport", "DefaultsTestSupport",
+        "ProcessInspection", "ScriptHelper",
       ]),
     .testTarget(name: "PaneModelTests", dependencies: ["PaneModel"]),
     .testTarget(name: "ProcessInspectionTests", dependencies: ["ProcessInspection"]),
@@ -452,7 +458,7 @@ let package = Package(
         "AppletFixtures", "ExecDriver", "ExecTestSupport", "ScriptHelper", "ControllerPackage",
         "ControllerTrust", "TestProcessGuard", "TextViewerApplet", "SourceAccess",
         "MapViewerApplet", "BrowserApplet", "BrowserModel", "BrowserTestSupport", "QuestionForm",
-        "QuestionsApplet", "DefaultsTestSupport", "ProcessTestSupport",
+        "QuestionsApplet", "DefaultsTestSupport", "ProcessTestSupport", "ProcessInspection",
       ]),
   ],
   swiftLanguageModes: [.v6],

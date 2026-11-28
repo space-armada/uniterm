@@ -413,6 +413,14 @@ class UnitermUITestCase: XCTestCase {
     window.sheets.firstMatch.disappears(timeout: timeout)
   }
 
+  /// Keeps a screenshot of uniterm's own element with the test results, never of the screen.
+  func keepElementScreenshot(_ element: XCUIElement, named name: String) {
+    let attachment = XCTAttachment(screenshot: element.screenshot())
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+  }
+
   // MARK: Diagnostics
 
   /// Who held the keyboard when a key seemed to go nowhere: the app's state, the frontmost app,
