@@ -2,7 +2,7 @@
 
 **Status:** implemented
 **Created:** 2026-10-31
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -582,8 +582,9 @@ Janet VM and existing listener; do not add a CLI terminal-I/O or signal relay.
   boundary cannot be established is refused persistent admission; there is no silent downgrade of its guarantee.
   Amended 2026-11-11; see Decision Log.
 - The bundle's command is signed with the hardened runtime and holds no get-task-allow. Its one entitlement is for
-  unsigned executable memory, which `--allow ffi-jit` needs. On that command, dyld removes every `DYLD_` variable before
-  any of its code runs, with no message, so neither the command nor the native entry it execs sees one. The app refuses
+  unsigned executable memory, which `--allow ffi-jit` needs. On that command, while System Integrity Protection is on,
+  dyld removes every `DYLD_` variable before any of its code runs, with no message, so neither the command nor the
+  native entry it execs sees one. With SIP off, dyld honors them; see UTERM-023. The app refuses
   a bundle command built otherwise. A command built without the hardened runtime, such as the package tests' helper,
   still sees a `DYLD_` variable. It refuses to start a run with an error that names it. `__XPC_DYLD_` variables are no
   loader variables: dyld never reads them, and a run proceeds with them set. Amended 2026-11-11; see Decision Log.
@@ -1667,6 +1668,11 @@ Superseded in part by UTERM-036; see Decision Log.
 - 2026-11-26: Superseded in part by UTERM-067. The policy file keeps every entry it can read when it meets one it
   cannot, keeps that entry unchanged, and grants nothing from it. A file is no longer moved aside or left untouched
   whole over one entry. Old-format files are set aside once, and the file has no count limit.
+- 2026-11-27: Correction of fact. "Verified artifact and run binding" said "On that command, dyld removes every
+  `DYLD_` variable before any of its code runs, with no message, so neither the command nor the native entry it execs
+  sees one." That holds only while System Integrity Protection is on. On GitHub's macOS runners, which have SIP off,
+  GuardMalloc loaded into the hardened command. The sentence now names the condition. UTERM-023 decides what the
+  command does with SIP off.
 
 ## References
 

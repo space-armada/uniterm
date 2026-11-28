@@ -24,7 +24,7 @@
 | [UTERM-020](UTERM-020-inspector-bridge.md) | Console, network, interception, and debugging for controller tabs through a hidden Web Inspector | accepted |
 | [UTERM-021](UTERM-021-declared-script-permissions.md) | Script files declare their powers, with strict mode by default and a lint | implemented |
 | [UTERM-022](UTERM-022-questions-applet.md) | Scripts ask the user forms in a tabbed Questions pane, with live validation | implemented |
-| [UTERM-023](UTERM-023-controller-runs-with-sip-off.md) | What uniterm does for controller runs on a Mac with SIP off | draft |
+| [UTERM-023](UTERM-023-controller-runs-with-sip-off.md) | What uniterm does for controller runs on a Mac with SIP off | accepted |
 | [UTERM-024](UTERM-024-controller-input-channel.md) | Janet controllers declare palette commands bound to keys, and read the user's invocations | accepted |
 | [UTERM-025](UTERM-025-presentation-controller.md) | Present a Markdown deck in a text viewer pane beside the terminal, stepped with the arrow keys or the palette | accepted |
 | [UTERM-026](UTERM-026-screen-control.md) | Speaker notes in a presenter view, pane zoom, windows across displays, and Pop Out Pane | accepted |
@@ -101,7 +101,7 @@ UTERM-019 ← UTERM-003, UTERM-004, UTERM-005, UTERM-041, UTERM-042
 UTERM-020 ← UTERM-019
 UTERM-021 ← UTERM-003, UTERM-004
 UTERM-022 ← UTERM-003, UTERM-004, UTERM-021
-UTERM-023 ← UTERM-003, UTERM-004
+UTERM-023 ← UTERM-003, UTERM-004, UTERM-021
 UTERM-024 ← UTERM-002, UTERM-003, UTERM-004, UTERM-013, UTERM-021
 UTERM-025 ← UTERM-003, UTERM-004, UTERM-007, UTERM-015, UTERM-021, UTERM-024, UTERM-030, UTERM-032, UTERM-036
 UTERM-026 ← UTERM-001, UTERM-002, UTERM-004, UTERM-013, UTERM-021, UTERM-024, UTERM-025, UTERM-032, UTERM-036

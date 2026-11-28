@@ -25,9 +25,11 @@ The kernel strips dyld variables from a hardened process only while System Integ
 runners turn SIP off. PR 49's second CI run printed "System Integrity Protection status: disabled." when the probes
 skipped.
 
-The app trusts a controller run only from the bundle's own command, matched by its code hash (UTERM-004, ADR-10). That
-match proves nothing about code dyld loaded into the command first. With SIP off, any process that can set the
-command's environment can load its own code into a run the app will admit.
+The app trusts a controller run only from the bundle's own command, matched by its code hash (UTERM-004, ADR-14). That
+match proves nothing about code dyld loaded into the command first. With SIP off, a library a loader variable names
+loads into the command. Only an Apple-signed library was seen loading. Whether library validation blocks others is
+unchecked. The command refuses a controller run while such a variable is set. A declared script file, an undeclared
+script, and `uniterm ask` are admitted with the library loaded.
 
 ## Repro
 
