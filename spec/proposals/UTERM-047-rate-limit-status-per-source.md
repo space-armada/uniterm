@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-21
-**Updated:** 2026-11-27
+**Updated:** 2026-11-28
 
 ## Dependencies
 
@@ -652,6 +652,7 @@ None.
   each drop a closing surface's last messages. The proposal loop's pass budget is spent, so this wording fix closes it
   without another pass.
 - 2026-11-27: Accepted. No decision earns an ADR.
+- 2026-11-28: Scheduled as M1-M2 in queue.md.
 
 ## References
 

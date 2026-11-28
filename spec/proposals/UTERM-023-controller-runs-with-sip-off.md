@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-27
+**Updated:** 2026-11-28
 
 ## Dependencies
 
@@ -221,6 +221,7 @@ None.
 - 2026-11-27: Review gate: kept all. The clean start covers every mode of the command, the ADR-10 update stays
   dropped, and UTERM-004's loader-variable sentence gets a correction of fact.
 - 2026-11-27: Accepted. No decision earns an ADR.
+- 2026-11-28: Scheduled as M1 in queue.md.
 
 ## References
 

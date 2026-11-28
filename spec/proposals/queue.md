@@ -5,12 +5,15 @@
 | UTERM-060 M5 | UTERM-060 M2 | Needs a Cmd-T stall with recording on, seen in an ordinary run. No run repeats the shortcut test to find one. `make ci-waiting-evidence` reports a CI failure of it |
 | UTERM-060 M7 | UTERM-060 M6 | Split from M6: needs a CI `app` job to reach its time limit. It advances only when `make ci-waiting-evidence` reports one |
 | UTERM-045 M4 | UTERM-045 M2 | Needs clean CI runs after M2 lands. It advances only when `make ci-waiting-evidence` reports the launcher test clean to M2's count |
+| UTERM-023 M1 | None | Fixes `20261115-loader-variables-reach-hardened-command-with-sip-off`. Placed first among the runnable rows so every later run path starts with a clean loader environment |
 | UTERM-042 M1-M3 | UTERM-041 M2 | M2 builds on UTERM-041 M1's tab bar and markers. M3 builds on its chip. M1 needs neither |
 | UTERM-054 M6 | None | Split from M1-M5: M6 amends UTERM-019 and must land before UTERM-019 M1 ships |
 | UTERM-054 M1-M4 | None | Split from M5 and M6: M1-M4 need nothing from UTERM-019. M2 builds the full-page route if UTERM-019 M4 has not |
 | UTERM-018 M1-M2 | None | Split from M3-M5: M1 builds the walk and the shared metric that UTERM-061 and UTERM-064 reuse. M2's links open browser tabs, which need no viewer tabs |
 | UTERM-069 M1-M2 | UTERM-063 M2, UTERM-067 M2, UTERM-054 M4 | Placed before UTERM-019 so every program-facing row builds on the three source kinds and without Grant Access. Needs UTERM-054 M4's terminal tab owners for a tab source's scope |
 | UTERM-064 M1 | UTERM-069, UTERM-018 M1, UTERM-054 M4, UTERM-063 M2 | Placed before UTERM-019 and every program-facing row, so they build on named targets and opaque identities once. Uses UTERM-018 M1's nearest-pane metric, moved up for it. UTERM-062 waits on it |
+| UTERM-047 M1-M2 | None | Placed after UTERM-069 and UTERM-064 M1 so a source's key and label cover external programs. It needs nothing from them |
+| UTERM-070 M1-M5 | None | Placed ahead of UTERM-062 M1, which rebuilds the source-swap path. It is early because a failed chosen open saves the bad path today. It needs nothing from UTERM-062 |
 | UTERM-019 M1-M2 | None | Split from M3: M1-M2 need nothing from UTERM-041 or UTERM-042 |
 | UTERM-019 M3 | UTERM-041 M1, UTERM-042 M2 | Split from M1-M2: M3 publishes the run-end marker. It needs UTERM-041 M1's slot and UTERM-042 M2's "Rebuild Tab" menu, so the marker never ships without a way to rebuild the tab |
 | UTERM-054 M5 | UTERM-019 M3 | Split from M1-M4: M5 needs UTERM-019 M3's handles, read-result, and byte type |
@@ -47,3 +50,4 @@
 | UTERM-006 M5 | UTERM-065 M2, UTERM-062 M4 | Split from M1-M4: a driver's `show` and stepping need UTERM-065's read grant, and name a tab, so M5 follows UTERM-062 M4's image viewer tabs |
 | UTERM-018 M3-M5 | UTERM-062 M5 | Split from M1-M2: a routed open adds a tab under UTERM-062, so these start once every viewer takes an open as a tab |
 | UTERM-049 M1-M3 | UTERM-018 M5 | M2 routes through UTERM-018's walk when no pane takes a tab file in place. M3's program open uses UTERM-018 M5's script file open |
+| UTERM-010 M1-M7 | UTERM-054 M5, UTERM-051 M2 | M1's pane screenshot check needs UTERM-054 M5's capture power for programs. M5's sidecar read uses UTERM-051 M2's off-main restore step |

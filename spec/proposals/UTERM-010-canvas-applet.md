@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-27
+**Updated:** 2026-11-28
 
 ## Dependencies
 
@@ -640,6 +640,7 @@ None.
 - 2026-11-27: The user set the rule for bounds: a payload over a bound is refused with an error that names it, and is
   never cut or ignored. Added as a settled decision and an M1 check.
 - 2026-11-27: Review gate: the user accepted the proposal. No decision earns an ADR.
+- 2026-11-28: Scheduled as M1-M7 in queue.md.
 
 ## References
 

@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-27
-**Updated:** 2026-11-27
+**Updated:** 2026-11-28
 
 ## Dependencies
 
@@ -510,6 +510,7 @@ None. Every question is settled.
   files kept per tab follow this proposal's rule. M2 to M5 remove the aside load for the user's open and keep it for a
   program's replace into a named tab. M2's budget for each file replaces the paired leases.
 - 2026-11-27: Accepted. No decision earns an ADR.
+- 2026-11-28: Scheduled as M1-M5 in queue.md.
 
 ## References
 
