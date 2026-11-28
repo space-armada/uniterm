@@ -90,7 +90,7 @@ clean-test-processes: ## End xctest processes orphaned by a hung or cancelled te
 ##@ Test
 
 .PHONY: test-ci
-test-ci: ## Verify CI change detection, result gating, and the package test time limit with fixtures
+test-ci: ## Verify CI change detection, result gating, the package test time limit, and the waiting-evidence report with fixtures
 	bash scripts/test-ci.sh
 
 .PHONY: test
@@ -267,3 +267,7 @@ ci-tested-tree:
 .PHONY: ci-result
 ci-result:
 	bash scripts/ci-result.sh
+
+.PHONY: ci-waiting-evidence
+ci-waiting-evidence: ## Report from GitHub whether CI has produced what the waiting checks need
+	bash scripts/ci-waiting-evidence.sh
