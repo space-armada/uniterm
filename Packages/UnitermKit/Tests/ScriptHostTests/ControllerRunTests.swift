@@ -49,13 +49,13 @@ final class ControllerRunTests: XCTestCase {
     windows = FakeWindowAPI()
 
     let center = StatusCenter()
+    let command = BundleHelperIdentity(helperURL: try HardenedHelper.url())
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.start(directory: directory, commandIdentity: command),
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows,
       controllers: ControllerSettings(
-        runsRoot: runs, helper: BundleHelperIdentity(helperURL: try HardenedHelper.url()),
-        trustDirectory: work.appendingPathComponent("trust")),
+        runsRoot: runs, helper: command, trustDirectory: work.appendingPathComponent("trust")),
       settings: settings.store)
     host.start()
     undeclaredWatch = host.answerUndeclaredReviews(with: .askEachUse)
@@ -167,7 +167,9 @@ final class ControllerRunTests: XCTestCase {
 
   /// Catches a script digest or path that a peer claims standing in for verification. A program
   /// that is not the bundle's command gets no controller run, whether it is another interpreter
-  /// running the same package or a raw peer naming it.
+  /// running the same package or a raw peer naming it. The other interpreter is the unsigned
+  /// SwiftPM helper, which presents the identity of its own code. The listener refuses it for not
+  /// being the app's command, before it begins a run.
   func testAnInterpreterThatIsNotTheBundleCommandGetsNoControllerRun() async throws {
     let package = try ControllerFixtures.copy("janet-hello")
     let other = try await runJanet(package, allow: ["fs-read"], using: ScriptFixtures.helper())
@@ -175,7 +177,7 @@ final class ControllerRunTests: XCTestCase {
     XCTAssertNotEqual(other.status, 0)
     XCTAssertEqual(other.standardOutput, "", "another interpreter ran the package")
     XCTAssertTrue(
-      other.standardError.contains("Only the uniterm command inside this uniterm app"),
+      other.standardError.contains("comes from another build than this running uniterm"),
       other.standardError)
 
     let peer = try ScriptFixtures.connectPeer(path: host.instanceAddress)

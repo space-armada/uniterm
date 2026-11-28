@@ -26,7 +26,7 @@ final class ScriptLimitsTests: XCTestCase {
     let center = center!
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) })
     host.start()
 
@@ -146,7 +146,7 @@ final class ScriptLimitsTests: XCTestCase {
   /// app pings it. The pong must come from the watchdog thread, and the loop must still be
   /// running afterwards, so a long legitimate script is never mistaken for a hung one.
   func testTheWatchdogAnswersAPingWhileTheScriptSpins() async throws {
-    let listener = try ScriptListener.start(
+    let listener = try ScriptListener.startForTests(
       directory: directory.appendingPathComponent("ping", isDirectory: true))
     let box = PingBox()
     let process = try ScriptFixtures.start(

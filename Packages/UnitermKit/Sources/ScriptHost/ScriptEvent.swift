@@ -6,8 +6,14 @@ public enum ScriptRefusal: Sendable, Equatable {
   /// The peer runs as another user.
   case otherUser(uid: uid_t)
 
-  /// The peer's protocol version is not this app's. The user is told to relaunch uniterm.
+  /// The peer's protocol version is not this app's. The user is told to rebuild the program or
+  /// update uniterm, and never to relaunch, since a relaunch cannot change either.
   case versionMismatch(found: UInt16)
+
+  /// The bundled command's code identity did not match, or a command that should have sent one did
+  /// not. The text says which command to run, or to relaunch uniterm. The command is not the one
+  /// this running app started with.
+  case commandIdentity(String)
 
   /// The peer sent bytes the protocol does not allow, or none in time.
   case protocolViolation(String)
@@ -34,7 +40,9 @@ public enum ScriptRefusal: Sendable, Equatable {
     switch self {
     case .otherUser(let uid):
       return "A program run by another user (\(uid)) tried to script uniterm."
-    case .versionMismatch: return ScriptProtocol.mismatchText
+    case .versionMismatch(let found):
+      return ScriptProtocol.versionMismatchText(program: found, uniterm: ScriptProtocol.version)
+    case .commandIdentity(let text): return text
     case .protocolViolation(let detail): return "A script connection broke the protocol: \(detail)"
     case .replTokenRefused:
       return "A REPL presented a token that uniterm did not issue, or had already accepted."

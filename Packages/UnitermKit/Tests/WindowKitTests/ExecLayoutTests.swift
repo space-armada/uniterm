@@ -53,8 +53,8 @@ final class ExecLayoutTests: XCTestCase {
 
     return [
       layout,
-      #"{"leaf":1,"applet":"fixture-notes","schema":[1,0],"name":"set-notes","arguments":{"text":"Hi"}}"#,
-      #"{"leaf":2,"applet":"fixture-chart","schema":[1,0],"name":"set-series","arguments":{"values":[3,1]}}"#,
+      #"{"leaf":1,"applet":"fixture-notes","schema":[0,0],"name":"set-notes","arguments":{"text":"Hi"}}"#,
+      #"{"leaf":2,"applet":"fixture-chart","schema":[0,0],"name":"set-series","arguments":{"values":[3,1]}}"#,
     ]
   }
 
@@ -154,7 +154,7 @@ final class ExecLayoutTests: XCTestCase {
     let controller = try fixture.openWindow()
     let pane = controller.focusedPane
     let command =
-      #"{"type":"command","pane":\#(pane.rawValue),"applet":"fixture-notes","schema":[1,0],"#
+      #"{"type":"command","pane":\#(pane.rawValue),"applet":"fixture-notes","schema":[0,0],"#
       + #""name":"clear"}"#
 
     try controller.declareExecDriver(fixture.declaration("script", [command]), for: pane)
@@ -179,7 +179,7 @@ final class ExecLayoutTests: XCTestCase {
     let fixture = try makeFixture()
     let controller = try fixture.openWindow()
     let later =
-      #"{"leaf":1,"later":true,"applet":"fixture-notes","schema":[1,0],"name":"set-notes","#
+      #"{"leaf":1,"later":true,"applet":"fixture-notes","schema":[0,0],"name":"set-notes","#
       + #""arguments":{"text":"after"}}"#
 
     let (pane, members) = try await presented(fixture, controller, later: [later])
@@ -206,7 +206,7 @@ final class ExecLayoutTests: XCTestCase {
     let fixture = try makeFixture()
     let controller = try fixture.openWindow()
     let pane = controller.focusedPane
-    let clear = #"{"leaf":1,"later":true,"applet":"fixture-notes","schema":[1,0],"name":"clear"}"#
+    let clear = #"{"leaf":1,"later":true,"applet":"fixture-notes","schema":[0,0],"name":"clear"}"#
 
     controller.enableRemoteControl(pane)
     try startDriver(fixture, controller, pane, presentation(pane) + [clear])
@@ -240,13 +240,13 @@ final class ExecLayoutTests: XCTestCase {
     let fixture = try makeFixture()
     let controller = try fixture.openWindow()
     let wait =
-      #"{"leaf":1,"applet":"fixture-notes","schema":[1,0],"name":"wait-for-notes","#
+      #"{"leaf":1,"applet":"fixture-notes","schema":[0,0],"name":"wait-for-notes","#
       + #""arguments":{"contains":"later"}}"#
     let never =
-      #"{"leaf":1,"applet":"fixture-notes","schema":[1,0],"name":"wait-for-notes","#
+      #"{"leaf":1,"applet":"fixture-notes","schema":[0,0],"name":"wait-for-notes","#
       + #""arguments":{"contains":"never"}}"#
     let advance =
-      #"{"leaf":1,"later":true,"applet":"fixture-notes","schema":[1,0],"name":"set-notes","#
+      #"{"leaf":1,"later":true,"applet":"fixture-notes","schema":[0,0],"name":"set-notes","#
       + #""arguments":{"text":"later"}}"#
 
     let (pane, members) = try await presented(fixture, controller, later: [wait, never, advance])

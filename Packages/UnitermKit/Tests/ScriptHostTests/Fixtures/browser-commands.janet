@@ -7,7 +7,7 @@
 (def tab {:window 7 :pane 1 :tab 3})
 
 (defn attempt [label target command arguments]
-  (def [ok result] (protect (uniterm/send-command target :browser 1 command arguments)))
+  (def [ok result] (protect (uniterm/send-command target :browser 0 command arguments)))
   (print label " " (if ok "ok" (string (result :kind)))))
 
 (attempt "open" pane :open {:url "https://example.com/"})

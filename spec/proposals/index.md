@@ -64,7 +64,7 @@
 | [UTERM-060](UTERM-060-keep-the-evidence-of-where-ui-test-input-went.md) | A failed UI run keeps XCTest's per-event confirmations and which app was frontmost, and a debug build records the input it receives | accepted |
 | [UTERM-061](UTERM-061-palette-commands-run-in-the-nearest-pane-of-their-type.md) | A palette command of another applet type runs in the nearest pane of its type | accepted |
 | [UTERM-062](UTERM-062-viewer-tabs.md) | The data, text, image, and map viewers hold several files as tabs | accepted |
-| [UTERM-063](UTERM-063-outside-wires-stay-at-version-0.md) | Every external version stays at 0 until uniterm's maintainers declare it stable | accepted |
+| [UTERM-063](UTERM-063-outside-wires-stay-at-version-0.md) | Every external version stays at 0 until uniterm's maintainers declare it stable | implemented |
 | [UTERM-064](UTERM-064-programs-name-what-they-act-on.md) | Every program command names its target, and opens answer with the identity of what they made | accepted |
 | [UTERM-065](UTERM-065-exec-drivers-read-paths-in-a-scope.md) | An exec driver asks for a read scope, approved for its run, and names paths in it | accepted |
 | [UTERM-066](UTERM-066-verified-identity-for-exec-drivers.md) | An exec driver can be a verified package, and keep remembered approvals for its powers | accepted |

@@ -44,11 +44,11 @@ final class PresentationTests: XCTestCase {
 
     (assert (= (length (uniterm/list-panes source)) 4) "the script cannot reach its panes")
 
-    (uniterm/send-command slides :fixture-slides 1 :set-deck {:titles ["Intro" "Results"]})
-    (uniterm/send-command slides :fixture-slides 1 :show-slide {:index 1})
-    (uniterm/send-command notes :fixture-notes 1 :set-notes {:text "Mention the deadline."})
-    (uniterm/send-command chart :fixture-chart 1 :set-series {:values [1.5 -2 4]})
-    (def point (uniterm/send-command chart :fixture-chart 1 :select-point {:index 2}))
+    (uniterm/send-command slides :fixture-slides 0 :set-deck {:titles ["Intro" "Results"]})
+    (uniterm/send-command slides :fixture-slides 0 :show-slide {:index 1})
+    (uniterm/send-command notes :fixture-notes 0 :set-notes {:text "Mention the deadline."})
+    (uniterm/send-command chart :fixture-chart 0 :set-series {:values [1.5 -2 4]})
+    (def point (uniterm/send-command chart :fixture-chart 0 :select-point {:index 2}))
 
     (assert (= (point :value) 4) (string "the chart answered " (point :value)))
     (print "presented")
@@ -97,7 +97,7 @@ final class PresentationTests: XCTestCase {
 
     let center = StatusCenter()
     let host = ScriptHost(
-      listener: try ScriptListener.start(directory: socketDirectory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: socketDirectory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) },
       windows: fixture.scripting)
 

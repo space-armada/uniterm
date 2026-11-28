@@ -154,7 +154,7 @@ extension TextViewerApplet {
   /// separate wait command holds a pending reply until a handle ends. No command opens a file by
   /// path. Nothing here answers with document text, heading text, the query, or a path.
   public nonisolated static let remoteSchema = AppletCommandSchema(
-    appletType: TextViewerDescription.typeID, version: AppletSchemaVersion(1, 0),
+    appletType: TextViewerDescription.typeID, version: AppletSchemaVersion(0, 0),
     commands: [
       AppletMessageSchema(
         name: "show-markdown",

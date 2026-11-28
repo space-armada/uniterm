@@ -24,7 +24,7 @@ final class ControllerRunUITests: UnitermUITestCase {
     try write(
       """
       {
-        "format": 1,
+        "format": 0,
         "id": "dev.uniterm.uitest.controller",
         "name": "UI Test Controller",
         "entry": {"kind": "janet", "path": "main.janet"},

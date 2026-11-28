@@ -54,7 +54,7 @@ final class ControlDispatcherPathTests: XCTestCase {
 
   private func submission(_ name: String, _ arguments: JSONValue) -> AppletCommandSubmission {
     AppletCommandSubmission(
-      appletType: PathsFixture.typeID, schemaVersion: AppletSchemaVersion(1, 0), name: name,
+      appletType: PathsFixture.typeID, schemaVersion: AppletSchemaVersion(0, 0), name: name,
       arguments: arguments)
   }
 

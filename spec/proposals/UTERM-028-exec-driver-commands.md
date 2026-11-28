@@ -391,4 +391,4 @@ Amended 2026-11-20; see Decision Log.
 - ADR-11: deferred applet replies never hide effects
 - ADR-03: restored state never runs a program
 - ADR-08: UI responsiveness
-- ADR-13: outside wires stay compatible across versions
+- ADR-13: external wires stay compatible across versions

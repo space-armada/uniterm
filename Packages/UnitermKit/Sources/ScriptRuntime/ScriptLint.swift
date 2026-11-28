@@ -810,7 +810,7 @@ enum ScriptLint {
       var suggestion: String?
 
       if !declares, !needed.isEmpty {
-        let list = needed.sorted().map { "{:kind :\($0) :version 1}" }.joined(separator: " ")
+        let list = needed.sorted().map { "{:kind :\($0)}" }.joined(separator: " ")
 
         suggestion = "add (declare-permissions \(list)) as the file's first form"
       }

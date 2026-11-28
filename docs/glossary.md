@@ -33,11 +33,21 @@ Terms used across uniterm's docs and specs. Each entry links to the proposal or 
 - **Disconnected.** A pane's access mode that refuses programs. An attached exec driver keeps working. See UTERM-004.
 - **Power.** A permission a controller declares, such as `pane-control`, `clipboard-read`, or `host-launch`.
 
-## Wires
+## Wires and versions
 
 - **ScriptWire.** The versioned protocol between the app and scripts or native controllers. It runs over the app's
   local listener. See UTERM-003 and UTERM-056.
 - **Exec wire.** The versioned protocol between the app and an exec driver. It is JSON lines over the driver's stdin
   and stdout. See UTERM-004, "Exec wire format".
-- **Outside wire.** Any wire to a program deployed apart from uniterm. Each one stays compatible across versions. See
-  ADR-13.
+- **External wire.** A wire to a program deployed apart from uniterm, ScriptWire and the exec wire. Its version is an
+  external version. At version 0 it makes no compatibility promise. From version 1 it stays compatible across versions,
+  per ADR-13.
+- **Internal wire.** A wire whose two ends ship in the uniterm bundle, DocumentWire and ImageWire. Its version is an
+  internal version, and it refuses any version but its own.
+- **External version.** A version that a program or file uniterm does not build names or checks. These are
+  ScriptWire's, the exec wire's, each applet command schema's, `uniterm/api-version`, the controller descriptor
+  format. It stays at 0 until uniterm's maintainers declare it version 1, per UTERM-063.
+- **Internal version.** A version only uniterm reads, such as an internal wire's, the layout file's, and a permission
+  kind's edition. It keeps its own rules.
+- **Declared stable.** An external version uniterm's maintainers have declared version 1. Its compatibility promise
+  holds from then on.

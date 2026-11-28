@@ -628,6 +628,19 @@ Fixed by: "Wait for the app to be frontmost before UI tests type, and paste open
   is not traced.
 - Status: unresolved.
 
+### `LauncherUITests.testEscapeClosesTheEmptyPane`
+
+- Seen: 2026-11-27, once in CI, in shard 1 of PR #123's first attempt. That PR changed only `run-swift-tests.sh` and
+  `test-ci.sh`, which the UI tests do not run. It ran mid-class, not first. The shard's selection was
+  `InputRecordingProofTest LaunchServicesOpenUITests LauncherUITests LayoutUITests MapViewerUITests OpenPanelUITests
+  PaneControlUITests PaneTreeUITests PendingRequestsUITests PresentationUITests QuestionsUITests`, 68 tests.
+- Evidence: `LauncherUITests.swift:104` failed when the launcher never went away after Escape. Cmd-D opened it, and
+  its Escape's "Synthesize event" step took 5.12 s, the length of XCTest's confirmation timeout. So the Escape key event
+  went unconfirmed. uniterm was frontmost, activated at the test's start. The shard's kept log was not read, so it is
+  not known whether uniterm took the event.
+- Suspected cause: the lost-key pattern of the entries above.
+- Status: unresolved.
+
 ## Fixed
 
 ### `PatternTests.testACatastrophicPatternStopsAtItsLimitAndStopsUsingCPU`

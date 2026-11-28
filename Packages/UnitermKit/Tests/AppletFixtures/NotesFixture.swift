@@ -8,7 +8,7 @@ import AppletKit
     public nonisolated static let typeID = "fixture-notes"
 
     public nonisolated static let schema = AppletCommandSchema(
-      appletType: typeID, version: AppletSchemaVersion(1, 1),
+      appletType: typeID, version: AppletSchemaVersion(0, 0),
       commands: [
         AppletMessageSchema(
           name: "set-notes", summary: "Replaces the notes.",

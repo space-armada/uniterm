@@ -9,7 +9,7 @@ import AppletKit
     public nonisolated static let typeID = "fixture-chart"
 
     public nonisolated static let schema = AppletCommandSchema(
-      appletType: typeID, version: AppletSchemaVersion(1, 0),
+      appletType: typeID, version: AppletSchemaVersion(0, 0),
       commands: [
         AppletMessageSchema(
           name: "set-series", summary: "Replaces the series.",

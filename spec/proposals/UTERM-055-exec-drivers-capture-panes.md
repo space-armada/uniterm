@@ -448,6 +448,6 @@ Waits for UTERM-063 M2, for UTERM-028 M1, and for UTERM-054 M2, M3, and M5. M5 b
 ## References
 
 - ADR-11: deferred applet replies never hide effects
-- ADR-13: outside wires stay compatible across versions
+- ADR-13: external wires stay compatible across versions
 - ADR-14: a controller controls what it opened
 - ADR-15: a program's operation is the user's

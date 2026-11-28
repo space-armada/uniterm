@@ -6,7 +6,6 @@
 | UTERM-060 M5 | UTERM-060 M2 | Needs a Cmd-T stall with recording on. It advances only when the shortcut test stalls |
 | UTERM-060 M6 | UTERM-060 M4 | Needs a shard to fail on CI. It advances only when one does |
 | UTERM-045 M4 | UTERM-045 M2 | Needs clean CI runs after M2 lands. It advances only when the launcher test has run clean to M2's count |
-| UTERM-063 M1-M2 | None | Placed before UTERM-043 M1, the first row that changes an external wire. In-place wire changes below it land after M2 |
 | UTERM-067 M1-M2 | None | Before UTERM-032 M2, which stores folder approvals in the one store M2 builds. Beside UTERM-063 M1-M2, so the two store breaks can ship together |
 | UTERM-043 M1 | None | Split from M2: M1 builds only on today's control code. M2 checks it against newer features |
 | UTERM-041 M1-M2 | None | |

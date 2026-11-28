@@ -28,7 +28,7 @@ final class ScriptAskScriptTests: XCTestCase {
     let center = StatusCenter()
 
     host = ScriptHost(
-      listener: try ScriptListener.start(directory: directory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows)
     host.start()
 
@@ -144,6 +144,7 @@ final class ScriptAskScriptTests: XCTestCase {
 
         try? socket.send(ScriptAppMessage.hello(version: ScriptProtocol.version).frame())
 
+        guard case .identity? = next() else { return names }
         guard case .undeclaredBegin? = next() else { return names }
 
         try? socket.send(ScriptAppMessage.undeclaredAdmitted.frame())

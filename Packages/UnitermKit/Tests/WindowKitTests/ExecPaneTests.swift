@@ -141,7 +141,7 @@ final class ExecPaneFixture {
   func command(
     _ controller: MainWindowController, _ pane: NodeID, _ name: String, _ arguments: String = "{}",
     type: String = SlidesFixture.typeID,
-    version: ScriptSchemaVersion = ScriptSchemaVersion(major: 1),
+    version: ScriptSchemaVersion = ScriptSchemaVersion(major: 0),
     stillAllowed: @escaping @MainActor () throws -> Void = {}
   ) async throws -> ScriptValue {
     try await scripting.sendCommand(
@@ -317,19 +317,20 @@ final class ExecPaneTests: XCTestCase {
 
     for (type, version, name, arguments, kind) in [
       (
-        ChartFixture.typeID, ScriptSchemaVersion(major: 1), "status", "{}",
+        ChartFixture.typeID, ScriptSchemaVersion(major: 0), "status", "{}",
         ScriptFailureKind.unsupported
       ),
       (SlidesFixture.typeID, ScriptSchemaVersion(major: 2), "status", "{}", .unsupported),
-      (SlidesFixture.typeID, ScriptSchemaVersion(major: 1, minor: 1), "status", "{}", .unsupported),
-      (SlidesFixture.typeID, ScriptSchemaVersion(major: 1), "run", "{}", .badArgument),
+      (SlidesFixture.typeID, ScriptSchemaVersion(major: 1), "status", "{}", .unsupported),
+      (SlidesFixture.typeID, ScriptSchemaVersion(major: 0, minor: 1), "status", "{}", .unsupported),
+      (SlidesFixture.typeID, ScriptSchemaVersion(major: 0), "run", "{}", .badArgument),
       (
-        SlidesFixture.typeID, ScriptSchemaVersion(major: 1), "show-slide", #"{"index":"1"}"#,
+        SlidesFixture.typeID, ScriptSchemaVersion(major: 0), "show-slide", #"{"index":"1"}"#,
         .badArgument
       ),
-      (SlidesFixture.typeID, ScriptSchemaVersion(major: 1), "show-slide", "[1]", .badArgument),
+      (SlidesFixture.typeID, ScriptSchemaVersion(major: 0), "show-slide", "[1]", .badArgument),
       (
-        SlidesFixture.typeID, ScriptSchemaVersion(major: 1), "show-slide", "not json",
+        SlidesFixture.typeID, ScriptSchemaVersion(major: 0), "show-slide", "not json",
         .badArgument
       ),
     ] {

@@ -226,10 +226,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// Where controller runs keep their snapshots, and the bundle command that may ask for one. The
   /// snapshots that ended instances left are removed first. A failure leaves scripting running
   /// without controller packages, and says so in the log.
-  private func makeControllerSettings() -> ControllerSettings? {
+  private func makeControllerSettings(helper: BundleHelperIdentity) -> ControllerSettings? {
     do {
       return try ControllerSettings.atLaunch(
-        root: try controllerRunsDirectory(), trustDirectory: controllerPolicyDirectory())
+        root: try controllerRunsDirectory(), trustDirectory: controllerPolicyDirectory(),
+        helper: helper)
     } catch {
       logger.error("controller runs are off: \(String(describing: error), privacy: .public)")
       return nil
@@ -240,7 +241,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// scripting, and says so.
   private func startScripting(windows: WindowSet) {
     do {
-      let listener = try ScriptListener.start(directory: try scriptDirectory())
+      // The command's identity is read at once, and the listener checks the command against it
+      // before it admits a call. The same value serves the controller settings, so one read of the
+      // command's file is what both keep.
+      let command = BundleHelperIdentity.current()
+      let listener = try ScriptListener.start(
+        directory: try scriptDirectory(), commandIdentity: command)
 
       let host = ScriptHost(
         listener: listener,
@@ -253,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           self?.logger.error("a script connection was refused: \(refusal.text, privacy: .public)")
           self?.windowSet?.post(level: .warning, text: refusal.text)
         },
-        controllers: makeControllerSettings(), clipboard: clipboard,
+        controllers: makeControllerSettings(helper: command), clipboard: clipboard,
         permissionRequests: windows.permissionRequests, settings: settings)
 
       host.start()

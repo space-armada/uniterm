@@ -53,7 +53,7 @@ final class ScriptListenerTests: XCTestCase {
   /// Catches an owner that does not claim the address, or one whose address reaches a different
   /// listener than its own.
   func testTheFirstInstanceOwnsTheWellKnownAddressAndItReachesThatInstance() throws {
-    let first = try ScriptListener.start(directory: directory)
+    let first = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     defer { first.stop() }
 
@@ -67,7 +67,7 @@ final class ScriptListenerTests: XCTestCase {
   /// Catches a second instance that takes the address, breaks the first one's socket, or loses its
   /// own. Two listeners in one process stand for two instances, since the lock is per open file.
   func testASecondInstanceNeitherTakesOverNorBreaksTheFirstOnesSocket() async throws {
-    let first = try ScriptListener.start(directory: directory)
+    let first = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
     let firstInode = try inode(of: wellKnown)
 
     let sibling = try startAnotherInstance(in: directory)
@@ -92,14 +92,14 @@ final class ScriptListenerTests: XCTestCase {
   /// A second process has its own ID, so its socket file has its own name. The stand-in names the
   /// file itself, and takes the lock claim as a second instance would.
   private func startAnotherInstance(in directory: URL) throws -> ScriptListener {
-    try ScriptListener.start(directory: directory, instanceName: "9999999")
+    try ScriptListener.startForTests(directory: directory, instanceName: "9999999")
   }
 
   /// Catches an address that goes on pointing at an owner that quit, or one that a second
   /// instance quietly takes over. After the owner stops, the address is gone and stays gone, and
   /// the second instance is still reachable at its own.
   func testAfterTheOwnerQuitsTheAddressIsGoneAndTheSecondInstanceKeepsItsOwn() throws {
-    let first = try ScriptListener.start(directory: directory)
+    let first = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
     let second = try startAnotherInstance(in: directory)
 
     defer { second.stop() }
@@ -132,7 +132,7 @@ final class ScriptListenerTests: XCTestCase {
       XCTAssertEqual(code, ECONNREFUSED)
     }
 
-    let owner = try ScriptListener.start(directory: directory)
+    let owner = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     defer { owner.stop() }
 
@@ -145,7 +145,7 @@ final class ScriptListenerTests: XCTestCase {
   /// The lock is held while the owner runs and free after it stops. Its descriptor is
   /// close-on-exec, so no child keeps the address owned after the app quits.
   func testTheLockIsHeldWhileTheOwnerRunsAndFreeAfterItStops() throws {
-    let owner = try ScriptListener.start(directory: directory)
+    let owner = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     defer { owner.stop() }
 
@@ -209,7 +209,7 @@ final class ScriptListenerTests: XCTestCase {
   /// Catches a listener that serves a peer of another user. The credential reader reports one, since
   /// a second user cannot be made in a test. The peer is closed, and the app reports the refusal.
   func testAPeerOfAnotherUserIsRejected() async throws {
-    let listener = try ScriptListener.start(
+    let listener = try ScriptListener.startForTests(
       directory: directory,
       readPeer: { descriptor in
         let real = try ScriptPeer.read(descriptor: descriptor)
@@ -262,7 +262,7 @@ final class ScriptListenerTests: XCTestCase {
   /// Catches a peer that calls the host after its hello without declaring a script or a REPL.
   /// The call must never reach the host, and the peer must be closed.
   func testACallBeforeBeginOrAttachIsRefusedAndNeverReachesTheHost() async throws {
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     defer { listener.stop() }
 
@@ -281,7 +281,7 @@ final class ScriptListenerTests: XCTestCase {
   /// Catches a script that begins again after it has called the host, which would rename its
   /// session. A second begin is refused, so only the first name is ever reported.
   func testBeginAfterACallIsRefusedAndKeepsTheFirstName() async throws {
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     defer { listener.stop() }
 
@@ -302,7 +302,7 @@ final class ScriptListenerTests: XCTestCase {
   /// The bound is injected, so the test runs in a fraction of a second. A peer that declared is
   /// past the bound for good, and the sleep past it is the only way to show that.
   func testAPeerThatNeverDeclaresIsClosedAndADeclaredPeerIsNot() async throws {
-    let listener = try ScriptListener.start(directory: directory, declarationTimeout: 0.25)
+    let listener = try ScriptListener.startForTests(directory: directory, declarationTimeout: 0.25)
 
     defer { listener.stop() }
 
@@ -335,7 +335,7 @@ final class ScriptListenerTests: XCTestCase {
   /// reads nothing. The app queues each reply for the writer, so the queue must stop at its bounds
   /// and the peer must be disconnected, whatever the peer does.
   func testAPeerThatNeverReadsIsDisconnectedWhenItsQueueFills() async throws {
-    let listener = try ScriptListener.start(directory: directory)
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     defer { listener.stop() }
 

@@ -34,7 +34,7 @@ final class TextViewerScriptTests: XCTestCase {
     (def [_ viewer] (layout :panes))
 
     (defn send [name arguments]
-      (def [ok result] (protect (uniterm/send-command viewer :text-viewer [1 0] name arguments)))
+      (def [ok result] (protect (uniterm/send-command viewer :text-viewer [0 0] name arguments)))
 
       (unless ok
         (error (if (struct? result)
@@ -74,7 +74,7 @@ final class TextViewerScriptTests: XCTestCase {
 
     let center = StatusCenter()
     let host = ScriptHost(
-      listener: try ScriptListener.start(directory: socketDirectory),
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: socketDirectory),
       issueProducer: { center.issueProducer(kind: .script, name: $0) },
       windows: fixture.scripting)
 
@@ -120,7 +120,7 @@ final class TextViewerScriptTests: XCTestCase {
         + """
         (def doubled (string/repeat "\\"\\\\" \(cap / 2)))
         (def accepted (send :show-markdown {:text doubled}))
-        (def [ok failure] (protect (uniterm/send-command viewer :text-viewer [1 0] :show-markdown
+        (def [ok failure] (protect (uniterm/send-command viewer :text-viewer [0 0] :show-markdown
                                      {:text (string/repeat "\\x01" \(cap))})))
         (print (not (nil? (accepted :handle))) " " ok " " (failure :kind))
         """

@@ -1,4 +1,4 @@
-# ADR-13: Outside Wires Stay Compatible Across Versions
+# ADR-13: External Wires Stay Compatible Across Versions
 
 **Status:** accepted
 **Date:** 2026-11-16
@@ -35,17 +35,20 @@ update.
   programs it breaks. Otherwise a program breaks with no one having weighed it.
 - **P4**: The rule governs the wire's protocol version. A version of a contract the wire carries, such as an applet's
   command schema version, keeps its own rule, since that contract has its own version.
-- **P5**: The rule holds from the version named for each wire. For the exec wire that is 4. For ScriptWire's
-  messages other than the bundled command's own, it is 14. Earlier versions were refused before the rule applied, so it
-  does not reach them.
+- **P5** (amended): the rule holds for each wire from version 1. A wire reaches version 1 only when uniterm's
+  maintainers declare it stable. Until then it is at version 0, under C1.
 - **P6**: Messages made for the app and its own bundled command may refuse every version but their own, whichever
   program sends them, since the two ship together and a relaunch heals a mismatch. Every other ScriptWire message is an
-  outside wire. UTERM-024 "Version skew" holds the command's form of the rule.
+  external wire. UTERM-024 "Version skew" holds the command's form of the rule.
+- **C1** (relaxes P1, P2, P3, and P5): a wire whose protocol is at version 0 carries no compatibility promise. A change
+  may land in place, without a new version, and an older program may stop working. An older program's message is still
+  read with its old meaning or refused, never reinterpreted, which keeps P1's reason. Version 0 marks a wire whose shape
+  has not settled, offered to no program outside the project. A contract the wire carries keeps its own rule, per P4.
 
 ## Consequences
 
-- The app carries every version of an outside wire that it still accepts, with each version's behavior.
-- An outside wire's handshake lets the two sides agree on a version. Later versions extend the handshake without
+- The app carries every version of an external wire that it still accepts, with each version's behavior.
+- An external wire's handshake lets the two sides agree on a version. Later versions extend the handshake without
   breaking programs on earlier ones. UTERM-028 "Version skew" holds the exec wire's form of it.
 - Dropping a version is a breaking change. It needs its own proposal and its own risk entry.
 
@@ -69,6 +72,11 @@ update.
   versions 2 and 3 were already refused then." Removed: "A wire whose two sides always ship together, such as
   ScriptWire, may refuse every version but its own, per UTERM-024 "Version skew"." The Decision and Rationale sections
   were rewritten as principles with no other change in meaning.
+- 2026-11-26: Added C1. A wire whose shape has not settled carries no compatibility promise, since no outside program
+  relies on it. C1 keeps P1's reason: an older program is refused, never reinterpreted. P5 names version 1, since the
+  starting versions it named no longer exist. Removed: "The rule holds from the version named for each wire. For the
+  exec wire that is 4. For ScriptWire's messages other than the bundled command's own, it is 14. Earlier versions were
+  refused before the rule applied, so it does not reach them."
 
 ## References
 

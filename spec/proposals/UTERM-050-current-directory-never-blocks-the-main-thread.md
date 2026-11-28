@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-22
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -23,8 +23,8 @@ An applet's `currentDirectory` stops checking the file system on the main thread
 the same directories by the code that uses them. The rule goes into the applet contract, so no applet can break it
 later. The property returns the path as held. One resolver checks a directory off the main thread before a terminal
 starts in it or a panel opens in it. A fourth libghostty patch removes libghostty's own main-thread open of the start
-directory. A terminal tab that waits on its folder shows that it is waiting. `list-panes` reports the path as held, with
-a bump of `uniterm/api-version`.
+directory. A terminal tab that waits on its folder shows that it is waiting. `list-panes` reports the path as held, in place, with no
+bump of `uniterm/api-version`, which UTERM-063 keeps at 0. Amended 2026-11-27; see Decision Log.
 
 ## Motivation
 
@@ -204,6 +204,12 @@ script changes it." The tabs in the same reply carry no directory. `list-panes` 
 Decision: report the path as held, and bump `uniterm/api-version` and ScriptWire's version. Decided autonomously on
 2026-11-22. Amended 2026-11-23; see Decision Log.
 
+**Decided by:** user, 2026-11-23
+**Pending override:** UTERM-063 (user, 2026-11-26) keeps ScriptWire and `uniterm/api-version` at 0, so neither bumps.
+The path as held lands in place after UTERM-063 M2. A held `:directory` that may be gone is a changed meaning, so it
+takes a new key, or `:directory` keeps its old meaning of a folder that exists, checked off the main thread. A version
+14 connection no longer exists, since UTERM-063 refuses it at the hello. Recorded by the UTERM-063 M1 work.
+
 - A connection on ScriptWire 14 keeps today's rule, with `:directory` only for a folder that exists. The check runs off
   the main thread. Whichever of this and UTERM-056 lands second builds it.
 - The `list-panes` doc and the scripting docs say the path may be gone, unreachable, or from another machine whose
@@ -341,9 +347,9 @@ or a panel still checks the same path on the main thread, as it does today.
 - The contract's doc comment on `currentDirectory` states the rule, and says the path may be gone or unreachable
 - A contract test over the built-in applet catalog builds each applet over a path that does not exist and expects
   `currentDirectory` to return the raw path or nil. Its table's keys equal the catalog's type IDs
-- ScriptWire's version is bumped. When UTERM-056 has landed, a version 14 connection still gets `:directory` only for a
-  folder that exists, with no main-thread check
-- `uniterm/api-version` is bumped, and the `list-panes` doc and the scripting docs say `:directory` may be gone or
+- ScriptWire stays at 0 and does not bump. `:directory` keeps its old meaning of a folder that exists, or the held path
+  takes a new key, so no program reads a held path under the old meaning. The existence check runs off the main thread
+- `uniterm/api-version` stays at 0, and the `list-panes` doc and the scripting docs say `:directory` may be gone or
   unreachable
 - A new tab with no directory named still falls back to the starting directory, then home, when the reported one is
   gone. It never hands libghostty a raw path the property returned
@@ -511,6 +517,16 @@ gone.
   ScriptWire version covers what is inside a reply, and that this proposal bumps ScriptWire and keeps the existence check
   for version 14. The text said "`list-panes` rides only ScriptWire, whose sides ship together, so ADR-13 does not
   apply", and "report the path as held, and bump `uniterm/api-version`".
+- 2026-11-27 (override pending): From UTERM-063. ScriptWire and `uniterm/api-version` stay at 0, so this proposal bumps
+  neither. The held path lands in place after UTERM-063 M2, and a held `:directory` that may be gone takes a new key,
+  or `:directory` keeps its old meaning.
+  - Amended the Summary. It said "`list-panes` reports the path as held, with a bump of `uniterm/api-version`."
+  - Amended M1. It said "ScriptWire's version is bumped. When UTERM-056 has landed, a version 14 connection still gets
+    `:directory` only for a folder that exists, with no main-thread check" and "`uniterm/api-version` is bumped".
+  - Left "What `list-panes` reports for a directory" as written, with a pending override. The user chose its bump and
+    its version 14 rule on 2026-11-23, and UTERM-063 reverses both. The user answers the override. Which of the new key
+    or the kept meaning M1 builds is that answer.
+  - The `**Decided by:**` line reads the user's choice from the 2026-11-23 entry above.
 
 ## References
 

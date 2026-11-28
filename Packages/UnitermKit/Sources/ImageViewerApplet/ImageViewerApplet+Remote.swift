@@ -361,7 +361,7 @@ extension ImageViewerApplet {
   /// actual size, or a multiple of actual size. Every command with an effect answers at once with
   /// a handle, and `wait` holds a pending reply until the handle ends.
   public nonisolated static let remoteSchema = AppletCommandSchema(
-    appletType: ImageViewerDescription.typeID, version: AppletSchemaVersion(1, 0),
+    appletType: ImageViewerDescription.typeID, version: AppletSchemaVersion(0, 0),
     commands: [
       AppletMessageSchema(
         name: "show",

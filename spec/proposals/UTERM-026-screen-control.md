@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -152,7 +152,7 @@ permission kind of its own. A controller's zoom behaves as the user's zoom, so t
 - The refusals are distinct: already zoomed, and not a member. The reply and `list-windows` say which pane is zoomed and
   who made the zoom.
 - A window holds one zoom at a time, so a second zoom is refused as already zoomed, whether or not the window is key.
-- The kind is `:pane-zoom`, version 1, in declared files only. A package that names it is refused, and an exec driver
+- The kind is `:pane-zoom`, named by kind alone and at edition 0, in declared files only. A package that names it is refused, and an exec driver
   never gets it. The approval says the controller may hide your other panes in the windows it controls.
 - The user ends zoom with Zoom Pane again, a split, a close, or a focus move to a hidden pane.
 - A script's `open-pane` is the user's split. So it ends zoom, and its new pane takes focus.
@@ -291,7 +291,7 @@ window. And each new kind's skew in both directions.
 Decision: noun-first kinds and verb-noun calls, as clipboard reads and writes pair them today. Packages cannot declare
 either kind. (autonomous)
 
-- The kinds are `:window-open` and `:window-placement`, each at version 1. "Pane zoom" adds `:pane-zoom` under the same
+- The kinds are `:window-open` and `:window-placement`, each named by kind alone and at edition 0. "Pane zoom" adds `:pane-zoom` under the same
   rules, and every skew line below covers all three kinds.
 - `(uniterm/open-window layout)` opens a window holding only new panes, on a display that is not the audience's. It
   returns the window and pane references.
@@ -312,8 +312,9 @@ either kind. (autonomous)
 Version skew:
 
 - The helper and the app run no call when their versions differ: at ScriptWire's hello, or at the helper's begin once
-  UTERM-056 has landed. The added `:window` field is a new ScriptWire version, per ADR-13 P1, and a connection on an older
-  version does not get it. Amended 2026-11-23; see Decision Log.
+  UTERM-056 has landed. ScriptWire is at 0 under UTERM-063, so the added `:window` field lands in place after UTERM-063
+  M2, with no new version. An older program's message is read with its old meaning or refused by name. Amended
+  2026-11-27; see Decision Log.
 - An older build refuses a declared file that names either kind, before any effect.
 - An approval of either kind is kept unread by a build that does not know it, and every other approval keeps working,
   as UTERM-024 "Stores that older builds read" states under UTERM-067. Amended 2026-11-26; see Decision Log.
@@ -670,6 +671,11 @@ Amended 2026-11-20; see Decision Log.
     panes get detach, and reattach when zoom ends." The hidden panes now get no lifecycle event and keep running.
   - Amended M1. Its check said "Zoom sends detach to each hidden pane and reattach when it ends, and a playing video or
     audio pauses while hidden". It now checks that a hidden pane gets no event and its video or audio carries on.
+- 2026-11-27: From UTERM-063. ScriptWire is at 0 and does not bump, and each permission kind has an internal edition in
+  place of a version. The added `:window` field lands in place after UTERM-063 M2.
+  - Amended "Names and version skew". Its skew line said "The added `:window` field is a new ScriptWire version, per
+    ADR-13 P1, and a connection on an older version does not get it." Its kinds were "each at version 1".
+  - Amended "Pane zoom". It said "The kind is `:pane-zoom`, version 1".
 
 ## References
 

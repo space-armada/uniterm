@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -16,13 +16,13 @@
 ## Impacts
 
 - UTERM-032 — "The declaration and the host functions", "The input file is read by the command", "Calls without an
-  input file", and the sheet line: a PDF and an image folder join text as input kinds, under version 2 of the declarable
+  input file", and the sheet line: a PDF and an image folder join text as input kinds, under a new edition of the declarable
   `input-file` kind. The command opens a PDF and passes its descriptor instead of reading text. The UTF-8 check and the
   size cap apply to text input only. New host functions return the kind, the input's base name, a PDF's pages, and a
   folder's images, which amends "No function returns the file's own path". `input-text` raises for a PDF or folder
   input. The sheet line and the stored folder kind's meaning name PDF pages, with no change to the stored version.
 - UTERM-030 — "Slide images": a slide image may name one page of a PDF in the granted folder, drawn in the sandboxed
-  document helper. The viewer advertises it with a schema minor version.
+  document helper. The viewer takes it in place at schema 0.0, with no minor, per UTERM-063. Amended 2026-11-27; see Decision Log.
 - UTERM-007 — the document helper's protocol gains a page-raster request and a page-count-and-outline request, each on
   a descriptor the app passes. Each request starts and ends its own helper, as its other decodes do. This supersedes in
   part its M1 check that "a PDF or Markdown pane starts none": a pane showing a PDF page reference starts a helper for
@@ -31,7 +31,7 @@
   deck may name PDF pages. Its Impacts line for this proposal cites a risk that this review replaced.
 - UTERM-026 — "Speaker notes" and "A second window": wrapper decks carry notes in its syntax, and Go to Slide's index
   moves to its notes window once that window exists.
-- UTERM-003 — ScriptWire gains a message that carries the input file's descriptor, under a new protocol version.
+- UTERM-003 — ScriptWire gains a message that carries the input file's descriptor. ScriptWire is at 0 under UTERM-063, so the message lands in place after UTERM-063 M2. Amended 2026-11-27; see Decision Log.
 
 ## Summary
 
@@ -99,8 +99,9 @@ rules as they are. (autonomous)
 
 - A `.pdf` that does not parse, or is locked, ends the run after approval with a message, before any pane opens. A text
   file that holds PDF bytes fails UTERM-032's UTF-8 check, as it does today.
-- A script declares `{:kind :input-file :version 2}` to take PDF and folder inputs. Version 1 keeps text only, so an
-  older presenter given a PDF is refused as non-UTF-8, and given a folder as non-regular.
+- A script declares `{:kind :input-file}`, and the kind's edition moves with the new inputs, so an approval made at the
+  earlier edition no longer covers it and the user is asked again. A script written for text only that is given a PDF
+  fails by name when it calls `input-text`, and one given a folder fails the same way.
 - `(uniterm/input-kind)` returns `:text`, `:pdf`, or `:folder`. `(uniterm/input-name)` returns the input's canonical
   base name, not its path, so a generated reference names the file inside the granted folder.
 - `(uniterm/input-pages)` returns a PDF input's page count and its outline titles by page. `(uniterm/input-images)`
@@ -147,8 +148,8 @@ is the open parameter of RFC 8118, which Preview and browsers already follow. A 
 - An existing document holding such a reference changes from alt text to the page, with no format marker. That is
   accepted: the author plainly meant the image, and UTERM-025's marker rule guards against text shown that the author
   did not mean.
-- The viewer advertises PDF page references with a schema minor version. The presenter requires it before it sends a
-  slide that names a PDF, so an older viewer refuses the run instead of showing alt text.
+- The viewer's schema is at 0.0 and does not bump, so PDF page references land in place. An older viewer refuses a
+  command it does not know by name, per UTERM-063. The presenter does not gate on a minor.
 
 Rationale: generated slides and authored decks share one form, so the viewer never tells them apart. A form other
 viewers already follow means a deck author does not learn a uniterm syntax. A query string such as `?page=3` names no
@@ -222,14 +223,15 @@ every layout.
 Decision: every contract this proposal changes ships in one app bundle with its peers, or is refused by version.
 (autonomous)
 
-- ScriptWire, between the `uniterm` command and the app, gains the descriptor message under a new protocol version.
-  It is the command's own message, so ADR-13 P6 lets it refuse every version but its own, and a relaunch heals a
-  mismatch. Amended 2026-11-23; see Decision Log.
+- ScriptWire, between the `uniterm` command and the app, gains the descriptor message in place, since ScriptWire is at
+  0 under UTERM-063. A mismatched command is refused by name, and a swapped bundle is caught by its identity check.
+  Amended 2026-11-27; see Decision Log.
 - The document helper ships in the app bundle and refuses a protocol mismatch at its hello, as it does today.
-- The viewer advertises PDF page references with a schema minor. A newer presenter on an older viewer refuses to send a
-  slide that names a PDF. An older presenter on a newer viewer works, and a `![](x.pdf)` it sends now shows the page.
-  That changes what an existing minor renders, and is accepted for the reason in "PDF page references".
-- An older build refuses `input-file` version 2 at load. An older presenter declares version 1 and gets text only.
+- The viewer's schema stays 0.0. A newer presenter on an older viewer is refused by name where its command changed. An
+  older presenter on a newer viewer works, and a `![](x.pdf)` it sends now shows the page. That changes what an
+  existing command renders, and is accepted for the reason in "PDF page references".
+- An older build reads an approval at the `input-file` edition it does not know as newer, and keeps it unread. An
+  older presenter declares the kind alone and fails by name when it calls `input-text` on a PDF or a folder.
 - The stored folder kind keeps its version, so a build without this proposal reads a folder remembered by a newer one.
   That older build shows images only, which is narrower.
 
@@ -261,7 +263,8 @@ None.
   there is an amendment that names this proposal.
 - **The new host functions are a published script API** — likelihood: low, impact: medium. Example scripts and users'
   copies will call `input-kind`, `input-name`, `input-pages`, and `input-images`. Mitigation: they exist only under
-  `input-file` version 2, so a change in meaning takes a new version, and an older script keeps the meaning it declared.
+  the `input-file` kind, so a change in meaning moves its edition, and an older script fails by name on a kind it never
+  read.
 
 ## Milestones
 
@@ -314,7 +317,7 @@ None.
 - Rapid stepping keeps at most a stated number of page-draw helpers running at once
 - When a step misses the budget, M2 is done with the miss recorded, and a follow-up proposal for a cache is filed
 - A file name with spaces, parentheses, `#`, or `%` in it loads when the deck escapes it
-- A presenter on a viewer without the page-reference minor version refuses to send a slide naming a PDF, with a message
+- A newer presenter on a viewer that predates PDF page references is refused by name, with a message
 - A `notes:` comment beside a page reference does not show on the slide
 
 ### M3: PDF and image-folder inputs
@@ -336,9 +339,8 @@ None.
   regular files, even with an image extension
 - A PDF with a huge page count or outline, or a folder with a huge number of images, ends the run with a message
   instead of overflowing ScriptWire's frame cap or the slide size cap
-- UTERM-032's "Calls without an input file" errors name the `input-file` version that takes the kind in use, which is
-  version 2 for `input-pages` and `input-images`
-- A version 1 presenter given a PDF is refused as non-UTF-8, and given a folder as non-regular
+- UTERM-032's "Calls without an input file" errors name the `input-file` kind that takes the input in use
+- A text-only presenter given a PDF fails by name when it calls `input-text`, and given a folder fails the same way
 - A symlink inside a folder deck that resolves to an image inside the folder is listed, and one that leaves it is not
 - The page count, outline, and image limits are stated. Past a limit the run ends with a message naming it
 - UTERM-007's M1 check that "a PDF or Markdown pane starts none" carries a "Superseded in part by UTERM-029" marker,
@@ -347,11 +349,11 @@ None.
 - The input kind follows "Input kinds and host functions", and `input-text` raises for a PDF or a folder with a
   message naming the kind
 - The sheet line names images and PDF pages for every input kind
-- ScriptWire's new version refuses a mismatched command at the hello, or at its begin once UTERM-056 has landed. Amended
-  2026-11-23; see Decision Log
+- A mismatched command is refused by name at the first message that changed, and a swapped bundle by its identity
+  check. Amended 2026-11-27; see Decision Log
 - A PDF re-exported mid-rehearsal with fewer pages shows alt text past its end, never another file's page
 - A symlinked input names the canonical file in its generated references
-- An older build refuses the new input kind version at load
+- An older build reads an approval at the new `input-file` edition as newer, and keeps it unread
 
 ## Decision Log
 
@@ -409,6 +411,20 @@ None.
 - 2026-11-21: Scheduled as UTERM-029 M1-M3 in queue.md.
 - 2026-11-23: From UTERM-056's acceptance. "Version skew" said "ScriptWire needs an exact match at the hello, per ADR-13's
   exemption", and the check had a mismatched command refused only at the hello.
+- 2026-11-27: From UTERM-063. ScriptWire and the viewer's schema are at 0 and do not bump, and permission kinds carry an
+  internal edition in place of a version. This proposal's changes land in place after UTERM-063 M2.
+  - Amended "Version skew". It said ScriptWire "gains the descriptor message under a new protocol version", and that the
+    viewer "advertises PDF page references with a schema minor". An older build "refuses `input-file` version 2 at
+    load. An older presenter declares version 1 and gets text only."
+  - Amended "PDF page references". It said "The presenter requires it before it sends a slide that names a PDF, so an
+    older viewer refuses the run instead of showing alt text."
+  - Amended "Input kinds and host functions". It said a script declares `{:kind :input-file :version 2}`, and that
+    "Version 1 keeps text only". The kind is named alone now, and a text-only script given a PDF fails by name at
+    `input-text`. A user whose approval was made at the earlier edition is asked again.
+  - Amended the Impacts lines for UTERM-030, UTERM-003, and the input-file kind, the risk on the new host functions,
+    and the M2 and M3 checks that named a minor, a version 1 presenter, or a new protocol version.
+  - Open: UTERM-063 gives a changed permission no way to say which edition a script needs, so a script that wants
+    PDF inputs cannot declare it. UTERM-063's "Permissions carry no version" records that as undone.
 
 ## References
 

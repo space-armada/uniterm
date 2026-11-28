@@ -56,7 +56,7 @@ final class MapRemoteTests: XCTestCase {
 
   private func send(
     _ name: String, _ arguments: [String: JSONValue] = [:], to applet: MapViewerApplet,
-    version: AppletSchemaVersion = AppletSchemaVersion(1, 0)
+    version: AppletSchemaVersion = AppletSchemaVersion(0, 0)
   ) -> Call {
     let call = Call()
     let submission = AppletCommandSubmission(
@@ -559,12 +559,12 @@ final class MapRemoteTests: XCTestCase {
   // MARK: Versions
 
   /// Catches a command written for another major, or a minor the map lacks, running before it is
-  /// refused.
+  /// refused. A caller written for 1.0, before the reset, is another major.
   func testACommandWrittenForAnotherVersionIsRefusedBeforeAnyEffect() {
     let (applet, _, _) = pane()
 
     for version in [
-      AppletSchemaVersion(2, 0), AppletSchemaVersion(1, 1), AppletSchemaVersion(0, 9),
+      AppletSchemaVersion(1, 0), AppletSchemaVersion(0, 1), AppletSchemaVersion(2, 0),
     ] {
       var fields: [String: JSONValue] = [:]
 
@@ -586,7 +586,7 @@ final class MapRemoteTests: XCTestCase {
     let schema = MapViewerApplet.remoteSchema
 
     XCTAssertEqual(schema.appletType, "map-viewer")
-    XCTAssertEqual(schema.version, AppletSchemaVersion(1, 0))
+    XCTAssertEqual(schema.version, AppletSchemaVersion(0, 0))
     XCTAssertEqual(
       schema.commands.map(\.name), ["add", "remove", "clear", "set-layer", "set-region"])
     XCTAssertEqual(schema.events.map(\.name), ["map-clicked", "pin-selected"])

@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-11
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -18,14 +18,15 @@
 
 - UTERM-005 — "Control": its line "No command evaluates script in a page" stays true for a controller without browser
   script, and stops being true for one with it. That line is superseded in part once this proposal is accepted.
-  Browser read and browser navigation gain version 2 meanings, per "Widened browser read and browser navigation". M8
-  ships their version 1 in descriptor format 2, per "Permission descriptor format".
+  Browser read and browser navigation gain a widened meaning, per "Widened browser read and browser navigation".
+  UTERM-063 replaces the descriptor's permission versions: a descriptor names each kind alone, and each kind has an
+  internal edition. See "Permission descriptor format". Amended 2026-11-27; see Decision Log.
 - UTERM-004 — "Permission scopes and approval flow" and "Verified artifact and run binding": four new permission kinds
-  join the descriptor's permission set. Descriptor format 2 adds a version to every permission, and each (kind,
-  version) has one meaning, per "Permission descriptor format".
+  join the descriptor's permission set. UTERM-063 sets the descriptor format to 0, names each permission by kind alone,
+  and gives each kind an internal edition, per "Permission descriptor format". Amended 2026-11-27; see Decision Log.
 - UTERM-003 — "The API is one Janet module": a second built-in module, `uniterm/browser`, joins `uniterm`, per
-  "Helper names". A byte-string value reaches Janet, and ScriptWire takes the next version after the one it is at when this
-  lands, per "Result encoding". It is 12 after UTERM-007 M5.
+  "Helper names". A byte-string value reaches Janet, and the change lands in place while ScriptWire is at 0, after UTERM-063 M2, per
+  "Result encoding". Amended 2026-11-27; see Decision Log.
 - UTERM-001 — "Commands that wait" and "Result encoding": the applet contract has a pending reply that an applet
   completes later, built by UTERM-007 M5. This proposal adds a byte carrier beside `JSONValue`.
 - UTERM-022 — "Commands that wait": the Questions applet's form calls are host calls, so its pending reply lives in
@@ -249,6 +250,12 @@ Decision: browser read and browser navigation get version 2 meanings. Each permi
 version, and an approval under version 1 covers only UTERM-005 M8's commands. Find in page moves to browser capture.
 Dialog and script events go under browser script. (autonomous)
 
+**Decided by:** user, 2026-11-11
+**Pending override:** UTERM-063 "Permissions carry no version" (user, 2026-11-26). A descriptor names a permission by
+kind alone, so there is no "version 2" in a descriptor. The widened meanings of browser read and browser navigation
+move each kind's internal edition, and an approval made at the older edition no longer covers the kind, so the user is
+asked again. Read every "version 2" below as "the widened edition". Recorded by the UTERM-063 M1 work.
+
 - Browser read version 2 covers URLs and titles, plus the navigation started, committed, finished, and failed, server
   redirect, content process terminated, and frame appeared events. Browser script also unlocks frame appeared and
   list-frames, per "Frames".
@@ -330,10 +337,11 @@ capability returns a new applet code, `unsupported-capability`, carried on the e
 - The message names the capability. Janet sees `:unsupported`, as it does for a wrong applet type or schema version.
   The script already knows which type and version it sent.
 - Any caller that may command the pane may call the capabilities command. It needs no browser permission.
-- Skew: the schema version is a major and a minor, per UTERM-007 M5. New commands and new reply keys bump the minor,
-  never the major. A script on a build without this proposal gets `:bad-argument` from the capabilities command, and
-  nothing runs. The shipped helpers read that as an empty set. An older script on this build keeps working, since its
-  major is the same and its minor is no higher than the applet's. Amended 2026-11-15; see Decision Log.
+- Skew: the browser schema is at 0.0, per UTERM-063, so new commands and new reply keys land in place with no bump. An
+  older script's message is read with its old meaning or refused by name, never reinterpreted. A script on a build
+  without this proposal gets `:bad-argument` from the capabilities command, and nothing runs. The shipped helpers read
+  that as an empty set. From schema 1.0 on, new commands and new reply keys bump the minor, never the major, per
+  UTERM-007 M5. Amended 2026-11-27; see Decision Log.
 
 Rationale: an unknown command already maps to `:bad-argument`, so the open question's premise, that a script cannot
 tell "this build cannot" from "no such command", does not hold. A new wire kind would buy a distinction no current
@@ -354,6 +362,13 @@ navigation and browser read, or browser permissions as one kind with typed scope
 Decision: descriptor format 2 adds a required `version` on every permission, `pane-control` and `capability`
 included. Each build knows a fixed
 set of (kind, version) pairs, each with one meaning, one review text, and the versions it covers. (autonomous)
+
+**Decided by:** user, 2026-11-11
+**Pending override:** UTERM-063 "Permissions carry no version" (user, 2026-11-26). The descriptor format is 0, and a
+descriptor names each permission by kind alone, with no `version`. A permission means what the running uniterm says.
+uniterm keeps an internal edition for each kind and records it with each approval. When a kind's meaning grows, its
+edition moves, and an older approval no longer covers it. A descriptor that names a version is refused by name. Read
+"(kind, version)" below as "(kind, edition)", and "format 2" as format 0. Recorded by the UTERM-063 M1 work.
 
 - UTERM-004 M6 builds format 2, with its clipboard and host launch kinds at version 1. UTERM-005 M8 adds browser
   navigation and browser read at version 1. This proposal adds their version 2 and browser script, browser input,
@@ -689,12 +704,10 @@ text form. Janet callers get Janet data notation, and exec drivers get JSON. (au
 - The app's serializer enforces the bounds that ScriptValue's limits enforced before: the per-result byte cap, and a
   nesting cap that is the same for both forms. A result past either is refused with a structured error.
 - A handle reads in the form of the caller kind that made it. The byte size, the cap, and the offsets count that form.
-- Skew: ScriptWire takes the next version after the one it is at when this lands. It is at 12 after UTERM-007 M5, which
-  moved it from 11 and the exec protocol from 3 to 4. App and helper ship in one bundle, and a mismatch is refused
-  before any call in either direction. Once UTERM-056 lands, a program on an older version keeps running, and a chunk it
-  cannot read answers `replyLost` with the version it needs. Amended 2026-11-23; see Decision Log. On the exec wire, base64 appears only in replies to new commands, so this proposal
-  does not move the exec protocol version, which stays at 4 unless another change moves it. Amended 2026-11-15; see
-  Decision Log.
+- Skew: ScriptWire is at 0, per UTERM-063, so the byte type lands in place with no new version, after UTERM-063 M2.
+  A program built before the byte type is refused by name at its first message that changed, and never reads a chunk
+  under another meaning. On the exec wire, base64 appears only in replies to new commands, so this proposal does not
+  move the exec protocol, which is at 0 and stays there. Amended 2026-11-27; see Decision Log.
 
 Rationale: a byte type carries images, PDFs, and UTERM-020's 16 KiB body chunks at full size. Each caller reads with
 a parser it already has and trusts: Janet's core `parse`, or the driver's own JSON library. The only new code that
@@ -851,7 +864,7 @@ Starts after UTERM-005 M8.
 - A Ctrl-C during next-events takes effect within next-events' maximum timeout, and never ends the helper
 - An exec driver gets a deferred reply matched by request ID, and sees `unsupported-capability` as a code string
 - The per-run event byte budget holds across all of a run's tabs
-- List-frames and frame-appeared are refused or hidden for a caller without browser read version 2 or browser script
+- List-frames and frame-appeared are refused or hidden for a caller without browser read at its widened edition or browser script
 - A packaged `uniterm/browser.janet` file cannot shadow the built-in module
 - A full buffer drops its oldest events, and the next reply reports how many
 - A flood of events, such as a page that creates a thousand iframes, never pushes a reply past the reply cap and never
@@ -1202,6 +1215,22 @@ Amended 2026-11-27; see Decision Log.
   - Amended M3. Its check said "A detached pane holds the user's view of its dialog until reattach, and the script can
     answer it meanwhile". It now checks the same for a tab that is not selected.
   - Amended M4 and M6. Their checks said "an unselected tab or a tab in a detached pane".
+- 2026-11-27 (override pending): From UTERM-063. The browser schema is at 0.0 and ScriptWire and the exec protocol are at 0, and none
+  bumps. This proposal's changes to them land in place, after UTERM-063 M2, and an older program's message is read
+  with its old meaning or refused by name.
+  - Amended the Impacts lines for UTERM-005, UTERM-004, and UTERM-003. They said permission versions, "descriptor format
+    2", and "ScriptWire takes the next version after the one it is at when this lands. It is 12 after UTERM-007 M5."
+  - Amended "Capability names and the unavailable error". Its skew bullet said "the schema version is a major and a
+    minor, per UTERM-007 M5. New commands and new reply keys bump the minor, never the major." The rule from schema 1.0
+    is unchanged.
+  - Amended "Result encoding". Its skew bullet said "ScriptWire takes the next version after the one it is at when this
+    lands. It is at 12 after UTERM-007 M5", and that the exec protocol "stays at 4 unless another change moves it".
+  - Amended the frames check in the milestone checks. It said "browser read version 2".
+  - Two decisions are the user's and are left as written, each with a pending override: "Widened browser read and
+    browser navigation" and "Permission descriptor format". UTERM-063 replaces permission versions with internal
+    editions and a descriptor that names a kind alone.
+  - The two `**Decided by:**` lines read the user's choice from this log: the review gate of 2026-11-11 kept every
+    decision, and chose that format 2 versions every permission.
 
 ## References
 

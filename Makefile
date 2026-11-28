@@ -201,7 +201,7 @@ lint: fmt-check ## Lint Swift sources and check the scripts parse
 	sh -n Support/ghostty-bin/ghostty
 
 .PHONY: check
-check: check-ghosttykit-imports check-janet-isolation check-janet-vendor check-test-defaults check-ui-wheel ## Check the Swift language mode, the GhosttyKit and Janet boundaries, the vendored Janet, test defaults domains, UI test wheels, and that the sandbox is off
+check: check-ghosttykit-imports check-janet-isolation check-janet-vendor check-test-defaults check-ui-wheel check-external-versions ## Check the Swift language mode, the GhosttyKit and Janet boundaries, the vendored Janet, test defaults domains, UI test wheels, external versions, and that the sandbox is off
 	scripts/check-swift-mode.sh
 	scripts/check-sandbox-off.sh
 
@@ -213,6 +213,11 @@ check-test-defaults: ## Fail when a test opens a named defaults domain without T
 check-ui-wheel: ## Fail when a UI test sends an XCUI wheel outside the shared call, which skips its pointer settle
 	scripts/check-ui-wheel.sh --self-test
 	scripts/check-ui-wheel.sh
+
+.PHONY: check-external-versions
+check-external-versions: ## Fail when an external version moves off 0 without being declared stable
+	scripts/check-external-versions.sh --self-test
+	scripts/check-external-versions.sh
 
 .PHONY: check-ghosttykit-imports
 check-ghosttykit-imports: ## Fail when any module but TerminalSurface can reach GhosttyKit

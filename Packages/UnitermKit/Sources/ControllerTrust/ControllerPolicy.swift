@@ -103,8 +103,9 @@ public struct ControllerPolicy: Hashable, Sendable {
 }
 
 /// The semantic comparison of a request with an approval. A request is covered when each of its
-/// permissions is the same as, or narrower than, one approved permission. A broader scope, another
-/// power, or a meaning this version does not know is never covered.
+/// permissions is the same as, or narrower than, one approved permission at the same edition. A
+/// broader scope, another power, or an approval made at another edition is never covered, so a
+/// kind whose meaning grew asks the user again.
 public enum PermissionContainment {
   public static func uncovered(
     _ requested: Set<ControllerPermission>, by approved: Set<ControllerPermission>
@@ -113,37 +114,30 @@ public enum PermissionContainment {
 
     return requested.filter { wanted in
       if case .pathRead(let scope) = wanted.kind {
-        return !isCovered(scope, version: wanted.version, by: reads)
+        return !isCovered(scope, edition: wanted.edition, by: reads)
       }
 
       return !approved.contains { wanted.isCovered(by: $0) }
     }.sorted()
   }
 
-  /// The path-reading scopes of a set, each with the version it was approved at.
+  /// The path-reading scopes of a set, each with the edition it was approved at.
   private static func readScopes(in permissions: Set<ControllerPermission>) -> [(
-    scope: ReadScope, version: Int
+    scope: ReadScope, edition: Int
   )] {
     permissions.compactMap { permission in
       guard case .pathRead(let scope) = permission.kind else { return nil }
 
-      return (scope, permission.version)
+      return (scope, permission.edition)
     }
   }
 
-  /// A read scope is covered by the union of the approved scopes whose version covers it, so two
-  /// approvals that together hold a request cover it.
+  /// A read scope is covered by the union of the approved scopes at its edition, so two approvals
+  /// that together hold a request cover it.
   private static func isCovered(
-    _ scope: ReadScope, version: Int, by approved: [(scope: ReadScope, version: Int)]
+    _ scope: ReadScope, edition: Int, by approved: [(scope: ReadScope, edition: Int)]
   ) -> Bool {
-    guard ControllerPermission.meaning(kind: "path-read", version: version) != nil else {
-      return false
-    }
-
-    let usable = approved.filter { holder in
-      ControllerPermission.meaning(kind: "path-read", version: holder.version)?.covers
-        .contains(version) == true
-    }
+    let usable = approved.filter { $0.edition == edition }
 
     guard let first = usable.first else { return false }
 
@@ -160,17 +154,17 @@ public enum PermissionContainment {
     var result = existing
 
     for permission in added where !result.contains(where: { permission.isCovered(by: $0) }) {
-      // Two read scopes of one version add up to one, so the list never holds the power twice.
+      // Two read scopes of one edition add up to one, so the list never holds the power twice.
       if case .pathRead(let scope) = permission.kind,
         let held = result.first(where: {
-          if case .pathRead = $0.kind { return $0.version == permission.version }
+          if case .pathRead = $0.kind { return $0.edition == permission.edition }
 
           return false
         }), case .pathRead(let heldScope) = held.kind
       {
         result.remove(held)
         result.insert(
-          ControllerPermission(.pathRead(heldScope.union(scope)), version: permission.version))
+          ControllerPermission(.pathRead(heldScope.union(scope)), edition: permission.edition))
 
         continue
       }
@@ -185,15 +179,13 @@ public enum PermissionContainment {
 extension ControllerPermission {
   /// True when this permission asks for no more than `approved` allows.
   ///
-  /// The kinds must match, and the approved version's meaning must cover this version, so a higher
-  /// version, or one this build does not know, is never covered. A host launch is narrower when it
+  /// The kinds and the editions must match, so an approval made at an older edition never covers
+  /// a kind whose meaning has grown. A host launch is narrower when it
   /// names the same executable, a directory inside the approved one, and no environment key
   /// beyond the approved keys. A path-reading scope is narrower when its effective scope, with the
   /// protected locations removed, lies inside the approved one. Every other scope must be the same.
   public func isCovered(by approved: ControllerPermission) -> Bool {
-    guard meaning != nil, let allowed = approved.meaning, kind.name == approved.kind.name,
-      allowed.covers.contains(version)
-    else { return false }
+    guard kind.name == approved.kind.name, edition == approved.edition else { return false }
 
     switch (kind, approved.kind) {
     case (.hostLaunch(let wanted), .hostLaunch(let scope)):
@@ -251,6 +243,6 @@ extension ControllerPermission {
         + ", leaving out the protected locations it contains"
     }
 
-    return version == 1 ? text : "\(text) (version \(version))"
+    return text
   }
 }

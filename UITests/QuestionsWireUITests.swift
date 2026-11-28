@@ -33,7 +33,7 @@ final class QuestionsWireUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Ask"}
-        {:kind :ask-user :version 1})
+        {:kind :ask-user})
 
       (import uniterm)
 
@@ -113,7 +113,7 @@ final class QuestionsWireUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Helper"}
-        {:kind :ask-user :version 1})
+        {:kind :ask-user})
 
       (import uniterm)
 

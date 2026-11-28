@@ -351,6 +351,13 @@ final class ScriptSession: @unchecked Sendable {
 
     try ScriptAppMessage.validateHello(hello)
 
+    // The bundled command proves it comes from the same build as the app. It goes right after the
+    // hello, before any declaration. A command that cannot read its own signature sends none, and
+    // the app refuses it as one that did not present its identity.
+    if let hash = CommandCodeIdentity.codeDirectoryHash() {
+      try session.socket.send(ScriptHelperMessage.identity(codeDirectoryHash: hash).frame())
+    }
+
     return session
   }
 
@@ -371,7 +378,7 @@ final class ScriptSession: @unchecked Sendable {
     } catch WireError.closed {
       lost(quitText)
     } catch {
-      lost("the connection to uniterm failed: \(error)")
+      lost("the connection to uniterm failed: \(scriptWireText(error))")
     }
   }
 
@@ -512,7 +519,8 @@ final class ScriptSession: @unchecked Sendable {
     } catch WireError.closed {
       lost(quitText)
     } catch {
-      lost("the connection to uniterm failed while the script was running: \(error)")
+      lost(
+        "the connection to uniterm failed while the script was running: \(scriptWireText(error))")
     }
   }
 

@@ -253,7 +253,7 @@ extension BrowserApplet: AppletCommandHandling {
   /// Open and the tab commands need browser navigation, and read needs browser read. Every
   /// command answers at once. The commands after open act on the tab the command's target names.
   public nonisolated static let remoteSchema = AppletCommandSchema(
-    appletType: BrowserDescription.typeID, version: AppletSchemaVersion(1, 0),
+    appletType: BrowserDescription.typeID, version: AppletSchemaVersion(0, 0),
     commands: [
       AppletMessageSchema(
         name: "open",

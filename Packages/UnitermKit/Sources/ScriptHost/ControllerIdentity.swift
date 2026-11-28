@@ -96,6 +96,16 @@ public protocol ControllerHelperIdentity: Sendable {
   /// Reads whatever the cheap check keeps, so the first connection does not pay for it. The host
   /// calls it off the main actor.
   func prepare()
+
+  /// Where this app's own command is, or nil when the identity names no path. The listener asks a
+  /// peer that runs from this path for its code identity. A listener that holds an identity with no
+  /// path refuses every program, since it cannot tell its own command from another.
+  var commandPath: String? { get }
+
+  /// The code directory hash of this app's own command, as kept when the app launched. It waits for
+  /// that read to finish, and is nil when the command could not be read. A command replaced on
+  /// disk later never changes it.
+  func keptCodeDirectoryHash() -> Data?
 }
 
 extension ControllerHelperIdentity {
@@ -104,6 +114,10 @@ extension ControllerHelperIdentity {
   }
 
   public func prepare() {}
+
+  public var commandPath: String? { nil }
+
+  public func keptCodeDirectoryHash() -> Data? { nil }
 }
 
 /// The bundle's command, matched by its code directory hash.
@@ -116,12 +130,25 @@ extension ControllerHelperIdentity {
 public struct BundleHelperIdentity: ControllerHelperIdentity {
   public let helperURL: URL
 
-  /// What the command's file said when it was last read. A failed read is not kept, so the next
-  /// call reads again.
+  /// What the command's file said when it was read at launch. A failed read is kept too, as a
+  /// command that was unreadable at launch. No later call reads the disk again, since a command
+  /// that appears or becomes valid later may be a swapped one.
   private let reference = CommandReference()
 
+  /// Starts reading the command's identity at once, off the calling thread, so the app keeps what
+  /// the command was at launch. A connection waits for that read before it is admitted.
   public init(helperURL: URL) {
     self.helperURL = helperURL
+
+    let reference = reference
+
+    DispatchQueue.global(qos: .utility).async { _ = reference.identity(of: helperURL) }
+  }
+
+  public var commandPath: String? { helperURL.path }
+
+  public func keptCodeDirectoryHash() -> Data? {
+    reference.identity(of: helperURL)?.codeDirectoryHash
   }
 
   /// Compares the running code's dynamic signing information with the command's file, which is
@@ -150,7 +177,7 @@ public struct BundleHelperIdentity: ControllerHelperIdentity {
   }
 
   public func refusal(forPeer token: AuditToken) -> String? {
-    guard let expected = CodeIdentity.ofFile(at: helperURL) else {
+    guard let expected = reference.identity(of: helperURL) else {
       return "uniterm cannot read the signature of its own command at \(helperURL.path)."
     }
 
@@ -171,33 +198,26 @@ public struct BundleHelperIdentity: ControllerHelperIdentity {
         + "with that command."
     }
 
-    // The file was just read and the peer matches it, so a command replaced on disk since the
-    // cheap check's copy was kept is the command now. Later checks are cheap again.
-    reference.replace(with: expected)
-
     return nil
   }
 }
 
-/// The command's validated identity, read once and shared by every copy of the identity value.
+/// The command's validated identity, read once and shared by every copy of the identity value. The
+/// one read is the launch read. Its result is kept for the life of the process, whether the command
+/// was readable or not, and the first caller to arrive makes the read while the others wait.
 private final class CommandReference: @unchecked Sendable {
   private let lock = NSLock()
+  private var read = false
   private var kept: CodeIdentity?
-
-  func replace(with identity: CodeIdentity) {
-    lock.lock()
-    defer { lock.unlock() }
-
-    kept = identity
-  }
 
   func identity(of url: URL) -> CodeIdentity? {
     lock.lock()
     defer { lock.unlock() }
 
-    if let kept { return kept }
-
-    kept = CodeIdentity.ofFile(at: url)
+    if !read {
+      kept = CodeIdentity.ofFile(at: url)
+      read = true
+    }
 
     return kept
   }

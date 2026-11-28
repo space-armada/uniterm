@@ -31,6 +31,7 @@ public final class ScriptListener: @unchecked Sendable {
   private let wakeWrite: Int32
   private let readPeer: @Sendable (Int32) throws -> ScriptPeer
   private let declarationTimeout: TimeInterval
+  private let identityCheck: CommandIdentityCheck?
   private let lock = NSLock()
   private var connections: [UInt64: ScriptConnection] = [:]
   private var serving = 0
@@ -40,7 +41,7 @@ public final class ScriptListener: @unchecked Sendable {
   private init(
     path: String, listenDescriptor: Int32, wellKnown: ScriptSocketFiles.WellKnown?,
     wake: (Int32, Int32), readPeer: @escaping @Sendable (Int32) throws -> ScriptPeer,
-    declarationTimeout: TimeInterval
+    declarationTimeout: TimeInterval, identityCheck: CommandIdentityCheck?
   ) {
     let (events, continuation) = AsyncStream<ScriptEvent>.makeStream()
 
@@ -54,6 +55,7 @@ public final class ScriptListener: @unchecked Sendable {
     self.wakeWrite = wake.1
     self.readPeer = readPeer
     self.declarationTimeout = declarationTimeout
+    self.identityCheck = identityCheck
   }
 
   /// Listens at `<directory>/<pid>.sock`. Each running instance has its own address, named by its
@@ -63,26 +65,42 @@ public final class ScriptListener: @unchecked Sendable {
   /// owns it until it stops. A later instance leaves the address alone. A socket file that a
   /// crashed instance left is removed first.
   ///
-  public static func start(directory: URL) throws -> ScriptListener {
-    try start(directory: directory, readPeer: nil)
+  /// `commandIdentity` is the identity of the app's own command. The command's code identity
+  /// message is checked against what the app kept at launch. It has no default, so a caller cannot
+  /// leave the check out by accident. A test that wants no check calls
+  /// `startWithoutCommandIdentityForTests`, or `startForTests` from inside this module.
+  public static func start(
+    directory: URL, commandIdentity: any ControllerHelperIdentity
+  ) throws -> ScriptListener {
+    try startForTests(directory: directory, commandIdentity: commandIdentity)
   }
 
-  /// `readPeer` reads who is on the other end of a connection. Only a test replaces it, so it can
-  /// play a peer of another user. `declarationTimeout` is likewise only a test's to change.
-  static func start(
+  /// A listener with no command identity, which admits any identity without a comparison. Only a
+  /// test starts one this way, and the name says so. The app starts its listener with `start`.
+  public static func startWithoutCommandIdentityForTests(directory: URL) throws -> ScriptListener {
+    try startForTests(directory: directory)
+  }
+
+  /// The listener as a test starts it. `commandIdentity` defaults to none, which admits any
+  /// identity without a comparison. `readPeer` reads who is on the other end of a connection, and
+  /// a test replaces it to play a peer of another user. `declarationTimeout` is likewise only a
+  /// test's to change.
+  static func startForTests(
     directory: URL, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil,
-    declarationTimeout: TimeInterval = ScriptListener.declarationTimeout
+    declarationTimeout: TimeInterval = ScriptListener.declarationTimeout,
+    commandIdentity: (any ControllerHelperIdentity)? = nil
   ) throws -> ScriptListener {
-    try start(
+    try startForTests(
       directory: directory, instanceName: String(getpid()), readPeer: readPeer,
-      declarationTimeout: declarationTimeout)
+      declarationTimeout: declarationTimeout, commandIdentity: commandIdentity)
   }
 
   /// Starts with a name other than the process ID. Only a test uses it, to stand two instances in
   /// one process.
-  static func start(
+  static func startForTests(
     directory: URL, instanceName: String, readPeer: (@Sendable (Int32) throws -> ScriptPeer)? = nil,
-    declarationTimeout: TimeInterval = ScriptListener.declarationTimeout
+    declarationTimeout: TimeInterval = ScriptListener.declarationTimeout,
+    commandIdentity: (any ControllerHelperIdentity)? = nil
   ) throws -> ScriptListener {
     try ScriptSocketDirectory.prepare(directory)
 
@@ -120,7 +138,8 @@ public final class ScriptListener: @unchecked Sendable {
     let listener = ScriptListener(
       path: path, listenDescriptor: descriptor, wellKnown: wellKnown, wake: (wake[0], wake[1]),
       readPeer: readPeer ?? { try ScriptPeer.read(descriptor: $0) },
-      declarationTimeout: declarationTimeout)
+      declarationTimeout: declarationTimeout,
+      identityCheck: commandIdentity.map { CommandIdentityCheck(helper: $0) })
     let thread = Thread { listener.acceptLoop() }
 
     thread.name = "uniterm.script.accept"
@@ -240,6 +259,8 @@ public final class ScriptListener: @unchecked Sendable {
   private func serve(descriptor: Int32, id: UInt64) {
     let socket = FramedSocket(descriptor: descriptor)
 
+    identityCheck?.awaitKept()
+
     // The audit token carries the process ID version that every call is checked against, so a
     // peer without one has no generation to keep and is turned away.
     guard let peer = try? readPeer(descriptor), peer.token != nil else {
@@ -269,7 +290,7 @@ public final class ScriptListener: @unchecked Sendable {
 
       return
     } catch {
-      continuation.yield(.refused(peer, .protocolViolation("\(error)")))
+      continuation.yield(.refused(peer, .protocolViolation(describe(error))))
       socket.shutdownAndClose()
 
       return
@@ -335,6 +356,7 @@ public final class ScriptListener: @unchecked Sendable {
     var role = Role.undeclared
     var fileBegun = false
     var fileDeclared = false
+    var identity: Data?
 
     while !connection.isClosed {
       do {
@@ -344,9 +366,26 @@ public final class ScriptListener: @unchecked Sendable {
 
         let frame = try connection.socket.readFrame(limit: ScriptHelperMessage.bodyLimit(type:))
 
-        switch try ScriptHelperMessage.decode(type: frame.type, body: frame.body) {
+        let message = try ScriptHelperMessage.decode(type: frame.type, body: frame.body)
+
+        if message.declaresRole, role == .undeclared,
+          refuseCommandIdentity(identity, of: connection, answeringAttach: message.isAttach)
+        {
+          return
+        }
+
+        switch message {
         case .hello:
           throw WireError.badValue("a second hello")
+
+        case .identity(let hash):
+          guard role == .undeclared, identity == nil else {
+            throw WireError.badValue(
+              "a code identity after the connection began, or twice. It must come right after "
+                + "the hello")
+          }
+
+          identity = hash
 
         case .begin(let name):
           guard role == .undeclared else { throw WireError.badValue("a second begin") }
@@ -455,12 +494,39 @@ public final class ScriptListener: @unchecked Sendable {
         return
       } catch {
         if !connection.isClosed {
-          continuation.yield(.refused(connection.peer, .protocolViolation("\(error)")))
+          continuation.yield(.refused(connection.peer, .protocolViolation(describe(error))))
         }
 
         return
       }
     }
+  }
+
+  /// Refuses a connection whose command identity does not hold, and tells the peer why when it can
+  /// still read. Returns true when the connection was refused. It runs when the peer first
+  /// declares what it is, so the refusal reaches the way the peer waits for its answer: a REPL
+  /// reads an attach refusal, and every other declaration reads a controller refusal.
+  private func refuseCommandIdentity(
+    _ presented: Data?, of connection: ScriptConnection, answeringAttach: Bool
+  ) -> Bool {
+    guard let identityCheck else { return false }
+
+    let peerPath = ProcessInspection.executablePath(of: connection.peer.pid)
+
+    guard let text = identityCheck.refusal(presented: presented, peerPath: peerPath) else {
+      return false
+    }
+
+    let answer: ScriptAppMessage = answeringAttach ? .attachRefused(text) : .controllerRefused(text)
+
+    try? connection.socket.send(answer.frame())
+    continuation.yield(.refused(connection.peer, .commandIdentity(text)))
+
+    return true
+  }
+
+  private func describe(_ error: any Error) -> String {
+    scriptWireText(error)
   }
 
   /// Zero removes the bound. A positive time is at least a millisecond, since a zero timeval

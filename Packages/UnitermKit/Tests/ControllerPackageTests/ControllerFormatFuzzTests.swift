@@ -30,8 +30,8 @@ final class ControllerFormatFuzzTests: XCTestCase {
     return [
       try Data(contentsOf: package.appendingPathComponent("controller.json")),
       try Data(contentsOf: package.appendingPathComponent("controller.sig")),
-      try ControllerFixtures.descriptor(ControllerFixtures.formatTwo),
-      try ControllerFixtures.descriptor(ControllerFixtures.formatTwoBrowser),
+      try ControllerFixtures.descriptor(ControllerFixtures.formatZero),
+      try ControllerFixtures.descriptor(ControllerFixtures.formatZeroBrowser),
     ] + (try ControllerFixtures.rejected.map { try ControllerFixtures.descriptor($0.name) })
   }
 
@@ -63,10 +63,10 @@ final class ControllerFormatFuzzTests: XCTestCase {
     var random = SplitMix64(seed: seed &+ 2)
     let inputs = [
       #"{"header":{"id":"dev.example.tidy","name":"Tidy"},"permissions":[]}"#,
-      #"{"permissions":[{"kind":"pane-control","version":1},{"kind":"clipboard-read","version":1}]}"#,
-      #"{"permissions":[{"kind":"capability","version":1,"name":"fs-read"}]}"#,
-      #"{"permissions":[{"kind":"host-launch","version":1,"executable":"/usr/bin/git","directory":"/a","environment":["HOME"]}]}"#,
-      #"{"permissions":[{"kind":"path-read","version":1,"directories":["/a","/a/b"]}]}"#,
+      #"{"permissions":[{"kind":"pane-control"},{"kind":"clipboard-read"}]}"#,
+      #"{"permissions":[{"kind":"capability","name":"fs-read"}]}"#,
+      #"{"permissions":[{"kind":"host-launch","executable":"/usr/bin/git","directory":"/a","environment":["HOME"]}]}"#,
+      #"{"permissions":[{"kind":"path-read","directories":["/a","/a/b"]}]}"#,
       #"{"header":{"kynd":"x"},"permissions":[{"kidn":"y"}]}"#,
     ].map { [UInt8]($0.utf8) }
 

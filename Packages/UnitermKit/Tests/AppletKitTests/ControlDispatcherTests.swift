@@ -32,7 +32,7 @@ final class ControlDispatcherTests: XCTestCase {
 
   private func submission(
     _ name: String, _ arguments: JSONValue = .object([:]), type: String = SlidesFixture.typeID,
-    version: AppletSchemaVersion = AppletSchemaVersion(1, 0)
+    version: AppletSchemaVersion = AppletSchemaVersion(0, 0)
   ) -> AppletCommandSubmission {
     AppletCommandSubmission(
       appletType: type, schemaVersion: version, name: name, arguments: arguments)
@@ -53,7 +53,8 @@ final class ControlDispatcherTests: XCTestCase {
       (submission("set-deck", deck(["a"])), { AppletCommandError(.refused, "no") }),
       (submission("set-deck", deck(["a"]), type: "fixture-chart"), { nil }),
       (submission("set-deck", deck(["a"]), version: AppletSchemaVersion(2, 0)), { nil }),
-      (submission("set-deck", deck(["a"]), version: AppletSchemaVersion(0, 0)), { nil }),
+      (submission("set-deck", deck(["a"]), version: AppletSchemaVersion(1, 0)), { nil }),
+      (submission("set-deck", deck(["a"]), version: AppletSchemaVersion(0, 1)), { nil }),
       (submission("launch-run"), { nil }),
       (submission("set-deck", .object(["titles": .string("a")])), { nil }),
       (submission("set-deck", .object(["titles": .array([]), "extra": .bool(true)])), { nil }),
@@ -70,8 +71,8 @@ final class ControlDispatcherTests: XCTestCase {
     XCTAssertEqual(
       codes,
       [
-        .refused, .unsupportedApplet, .unsupportedVersion, .unsupportedVersion, .unknownCommand,
-        .badArgument, .badArgument, .badArgument, .badArgument,
+        .refused, .unsupportedApplet, .unsupportedVersion, .unsupportedVersion, .unsupportedVersion,
+        .unknownCommand, .badArgument, .badArgument, .badArgument, .badArgument,
       ])
     XCTAssertEqual(dispatch.queuedCount, 0)
     XCTAssertTrue(pending.isEmpty)
@@ -197,9 +198,9 @@ final class ControlDispatcherTests: XCTestCase {
   // MARK: Schema versions
 
   /// Catches a version check that stays an exact match, or one that lets a newer minor or another
-  /// major run. The applet claims 1.2, so 1.0 through 1.2 run and 1.3, 2.0, and 0.9 are refused
+  /// major run. This tests the rule for a declared-stable schema. The applet claims 1.2, so 1.0 through 1.2 run and 1.3, 2.0, and 0.9 are refused
   /// before any effect, with a message that names both versions.
-  func testAnAppletTakesItsMajorAndAnyMinorUpToItsOwn() {
+  func testADeclaredStableAppletTakesItsMajorAndAnyMinorUpToItsOwn() {
     let dispatch = dispatcher()
     let applet = NotesFixture()
     var outcomes: [String] = []

@@ -1,8 +1,8 @@
 # UTERM-063: External Versions Stay at 0 Until Declared Stable
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-26
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Impacts
 
@@ -196,7 +196,15 @@ identity in a message right after the hello. The app compares it with the identi
 and refuses a mismatch before any call runs. The app never adopts a command it finds on disk later as its own. A
 mismatch from this bundle's own command path says to relaunch uniterm. One from another install's command names the
 running app's own command path. Programs built outside the bundle, such as native controllers, send no identity and are
-unaffected. (autonomous)
+unaffected. The app tells the bundled command from a native controller by the peer's executable path. A program that
+runs from the app's own command path must present its identity, and is refused when it presents none. A program from any
+other path may present none, and is admitted as before. A program that presents an identity is compared with the kept
+one wherever it runs. The check fails closed: a program whose path the kernel cannot name, and that presented no
+identity, is refused, and an identity with no command path refuses every program. A command that was unreadable at
+launch stays unreadable for the life of the process. A swapped command copied to another path that sends no identity is
+admitted as a generic peer, as any native-style peer is. The begin-time check of the peer's code still gates controller,
+file, undeclared, and question sessions. A plain `begin` script session and a REPL's non-token path are not gated by it.
+(autonomous) Amended 2026-11-27; see Decision Log.
 
 Rationale: replacing the bundle under a running app pairs an old app with a new command. The exact version match caught
 this before, and ScriptWire's code documents the refusal. At a frozen 0 both sides say 0. Without this check the first
@@ -280,7 +288,7 @@ None. Every question is settled.
 
 ### M1: Reset to version 0 and freeze
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 No external interface changes shape in this milestone, so a pre-reset program is refused at the hello, and two builds at
 0
@@ -295,8 +303,8 @@ agree on every message.
 - A protocol-mismatched exec hello is never admitted on its placeholder schema of 0.0
 - `uniterm/api-version` reports 0, and its doc says it stays at 0 until uniterm's maintainers declare it
 - A policy file written before the reset is set aside with a notice, and the next approval is saved. The file is told
-  apart by its format number, which this milestone moves when it lands after UTERM-067, so no pre-reset scope is ever
-  read as an edition
+  apart by its format number. This milestone moves the format from 1 to 2, and UTERM-067 M2 moves it again to 3, so no
+  pre-reset scope is ever read as an edition. Amended 2026-11-27; see Decision Log.
 - The bundled `uniterm` command, the Janet helper, every test fixture, and every example driver and controller in the
   repository speak version 0, `Tests/ExecTestSupport/Fixtures/driver.pl` and the controller package fixtures included.
   Tests that compute an older version as the current one minus 1 still work at 0
@@ -328,9 +336,27 @@ agree on every message.
   at 0, with no version offer
 - The impacted proposals that plan a version bump say the change lands in place while the wire is at 0, after M2
 
+**As built:**
+
+- The policy file's format moved from 1 to 2 and a scope stores its edition. A file in an earlier format is set aside
+  with a notice. See the Decision Log entry for 2026-11-27 (run best guess) on the policy file format.
+- An approval covers a request only at the edition it was made at. An older edition reads and covers nothing, and an
+  edition above the build's reads as newer. UTERM-067 M2 narrows the newer case to one entry. Not built here.
+- A hello at another exec protocol version decodes to its own case that carries no schema. The channel refuses it
+  before any schema check, so the placeholder schema 0.0 can never admit a hello. The refusal text names both versions.
+- The descriptor reader refuses a permission that names a version, by name, in a package and in a script file.
+- `controller.sig`'s own format number stays 1. It is not in the freeze list, and the check does not read it. It names
+  the signature file format that controller authors' tools write, so it may belong on the list. That is the maintainers'
+  call.
+- The `janet-hello` fixture is signed again. An Ed25519 signature from CryptoKit differs on every run, so the new
+  signature is a new value. The descriptor digest and the key fingerprint reproduce on every run. The method is in
+  `ControllerFixtures.swift`.
+- ADR-18 also said "outside wires", and now says "external wires". No other live prose in docs, ADRs, or the README
+  used the old term.
+
 ### M2: Refuse stale programs by name
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 These guards are changes at version 0, so C1 covers them. No other in-place change lands before this milestone.
 
@@ -356,6 +382,28 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   it finds on disk later
 - The ScriptWire library that native controllers link never sends an identity on its own. A native controller built
   against it is admitted as before. The app never sends its own identity first
+
+**As built:**
+
+- ScriptWire refuses an unknown or retired message tag, call tag, enumerated value, and trailing byte by name, with text
+  that says to rebuild the program or update uniterm. `token`, the two digests, and the new identity read exactly their
+  size, so a longer body is refused as trailing bytes. A reply's payload and a send's content are the rest of their body
+  by design, and each is read to its end by its own decoder. A hello of another version is read for its version alone,
+  in both directions.
+- The exec decoder knows each message's keys and refuses any other by name. A command without `pane` also refuses
+  `applet` and `schema`, which mean something only with a pane. Both forms of an error's text still read. A hello reads
+  its protocol first, and one at another version never reaches the key check.
+- Each wire has a table of retired names, empty. Each wire's test sends every entry of its table, and also builds a table
+  of its own, so the refusal is proved while the shipped table is empty.
+- The hello refusal on the app and on the command names both versions and says to rebuild or update. It never says to
+  relaunch and never compares the numbers.
+- The identity is the command's code directory hash, in one message that follows the hello and comes before any
+  declaration. The app tells the bundled command from a native controller by the peer's executable path. See the
+  Decision Log entry for 2026-11-27 (run best guess) on the executable-path rule.
+- The app's own command is read when its identity is made at launch, in the background. The listener waits for that read
+  before it serves a connection. A command that appears on disk later is never adopted. The check fails closed. See the
+  Decision Log entry for 2026-11-27 (run best guess) on the fail-closed identity check.
+- The helper and the REPL print the refusal text they are sent. A REPL reads it as an attach refusal.
 
 ## Decision Log
 
@@ -433,6 +481,38 @@ These guards are changes at version 0, so C1 covers them. No other in-place chan
   version this build does not know. It is now told apart by the store's format number, which the later of M1 and
   UTERM-067 moves. Otherwise a pre-reset scope at version 1 could later be read as edition 1 of its kind. The M1 check
   said before: "A policy file written before the reset is set aside with a notice, and the next approval is saved".
+- 2026-11-27 (run best guess): The policy file format moves from 1 to 2 in M1, for both `policy.json` and `files.json`,
+  and a scope stores its edition in place of a permission version. A file in an earlier format is set aside with a
+  notice that each controller or script file is approved again once, and the next approval is saved. A newer format
+  stays untouched. The decision "The controller policy file at the reset" stands as the user wrote it. Its rule that
+  whichever of M1 and UTERM-067 M2 lands second moves the number does not forbid the first one from moving it too. M1
+  landed first and moves it to 2, and UTERM-067 M2 then moves it to 3. M1's check on the policy file said before: "The
+  file is told apart by its format number, which this milestone moves when it lands after UTERM-067, so no pre-reset
+  scope is ever read as an edition". It now says what M1 does. Either order breaks the file twice, as UTERM-067's risk "Every approval is given again once" says.
+- 2026-11-27: M1 built. Each impacted proposal that plans a version change was amended to land in place, and each
+  carries its own Decision Log entry. UTERM-019 and UTERM-050 hold a decision the user made, so each keeps its text and
+  carries a pending override that cites this proposal's user decisions of 2026-11-26. UTERM-028, UTERM-055, UTERM-062,
+  UTERM-064, and UTERM-056 already said so.
+- 2026-11-27 (run best guess): The app tells the bundled command from a native controller by the peer's executable
+  path, which the kernel reports. The decision said only that programs built outside the bundle send no identity and
+  are unaffected, and left open how the app knows which peer must send one. A peer at the app's own command path must
+  send one. A peer at another path may send none. A peer that sends one is compared wherever it runs, so a command
+  copied from another install is refused with the app's own command path. If the guess is wrong, a native controller
+  that happened to run from the app's command path would be refused, and a command from another install that sent no
+  identity would be admitted as a generic peer. ADR-13 P6 and the existing begin-time check of the peer's code still
+  gate controller, file, undeclared, and question sessions, so an admitted generic peer gets no more than before. A
+  swapped command copied to another path that sends no identity is admitted as a generic peer. A plain `begin` script
+  session and a REPL's non-token path are not gated by that check.
+- 2026-11-27 (run best guess): The identity check fails closed, and a command unreadable at launch is never re-read.
+  Trace: `ProcessInspection.executablePath(of:)` returns nil when the kernel cannot look the process up, which happens
+  for a peer that has already exited, so a live same-user peer is named in practice. `BundleHelperIdentity.commandPath`
+  is never nil, since it is the bundle URL's path. Only an identity with no path, such as a test fake, returns nil. Even
+  so, a nil peer path with no presented identity would have passed a stale command at the app's own path, so it is now
+  refused with text that says the app could not tell where the program runs. A nil command path now refuses every
+  program. Native controllers lose only when the lookup itself fails. A failed launch read is kept for the life of the
+  process, so `keptCodeDirectoryHash()` stays nil and the refusals for an unreadable command apply. The text said before
+  that a failed read is not kept and the next call reads again, which could adopt a command that appeared later. If the
+  guess is wrong, a native controller whose path lookup failed would be refused until it reconnects.
 
 ## References
 

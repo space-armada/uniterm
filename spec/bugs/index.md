@@ -68,8 +68,10 @@
 | [20261126-failed-pane-open-drops-the-old-source](20261126-failed-pane-open-drops-the-old-source.md) | A failed Open in This Pane drops the pane's old file instead of keeping it | fixed |
 | [20261126-iso-gain-map-images-show-as-sdr](20261126-iso-gain-map-images-show-as-sdr.md) | An image with an ISO 21496-1 gain map shows as SDR in the image viewer | fixed |
 | [20261126-unanswered-reviews-fill-connection-slots](20261126-unanswered-reviews-fill-connection-slots.md) | Unanswered reviews hold connection slots until every script is refused | rejected |
+| [20261127-ci-kept-log-collected-twice-on-a-failed-shard](20261127-ci-kept-log-collected-twice-on-a-failed-shard.md) | A failed CI shard collects its kept log twice, and the second copy replaces the first | open |
 | [20261127-exec-driver-cannot-name-its-pane-for-a-first-layout](20261127-exec-driver-cannot-name-its-pane-for-a-first-layout.md) | An exec driver cannot make its first layout, since nothing tells it its pane's number | proposed |
 | [20261127-chosen-open-check-misses-full-load-failures](20261127-chosen-open-check-misses-full-load-failures.md) | A file that passes the open check but fails its full load still replaces the pane's old file | proposed |
 | [20261127-image-load-messages-say-image-twice](20261127-image-load-messages-say-image-twice.md) | The image viewer's load messages say "image" twice | fixed |
 | [20261127-input-records-lost-to-log-quarantine](20261127-input-records-lost-to-log-quarantine.md) | The unified log can drop every input record of a UI test iteration, and the kept log shows no sign of it | open |
 | [20261127-terminal-test-exits-silently-under-make-select](20261127-terminal-test-exits-silently-under-make-select.md) | A terminal test ends the test process with no result under `make test-package-select` | open |
+| [20261127-ui-test-run-fails-in-a-fresh-checkout](20261127-ui-test-run-fails-in-a-fresh-checkout.md) | A local UI test run fails at once in a checkout with no test build folder | open |

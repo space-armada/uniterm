@@ -61,33 +61,57 @@ final class ControllerPolicyTests: XCTestCase {
     }
   }
 
-  /// Catches a version rule that lets a higher version of a kind, or one this build does not know,
-  /// ride on an approval of version 1, or that makes a format 1 approval useless for the same kind
-  /// at version 1 in format 2.
-  func testAFormatOneApprovalCoversVersionOneAndAHigherVersionNeedsReview() throws {
-    let files = #"{"main.janet": "sha256:\#(String(repeating: "a", count: 64))"}"#
-    let formatOne = try ControllerDescriptor.parse(
-      Data(
-        #"{"format": 1, "id": "dev.uniterm.fixture.v", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "pane-control"}]}"#
-          .utf8))
-    let formatTwo = try ControllerDescriptor.parse(
-      Data(
-        #"{"format": 2, "id": "dev.uniterm.fixture.v", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "pane-control", "version": 1}]}"#
-          .utf8))
+  /// Catches an approval that keeps covering a kind whose meaning grew. A test grows the kind's
+  /// edition through an injected table, then checks that the approval made at the older edition
+  /// covers nothing of the request, so the user is asked again. A new approval at the grown
+  /// edition covers it.
+  func testAnApprovalAtAnOlderEditionNoLongerCoversAGrownKind() throws {
+    let grown = ControllerPermissionEditions(["pane-control": 1, "clipboard-read": 0])
+    let old: Set<ControllerPermission> = [.paneControl, .clipboardRead]
+    let asked = ControllerPermission(.paneControl, edition: 1)
 
+    XCTAssertEqual(old.first { $0.kindName == "pane-control" }?.edition, 0)
+    XCTAssertEqual(PermissionContainment.uncovered([asked], by: old), [asked])
     XCTAssertEqual(
-      PermissionContainment.uncovered(formatTwo.permissions, by: formatOne.permissions), [])
+      PermissionContainment.uncovered([asked, .clipboardRead], by: old), [asked],
+      "a kind whose edition did not move stays covered")
 
-    let higher = ControllerPermission(.paneControl, version: 2)
+    let stored = ControllerPolicyFile.encode([Self.policy(old)])
+    let decoded = try ControllerPolicyFile.decode(stored, editions: grown)
 
-    XCTAssertEqual(PermissionContainment.uncovered([higher], by: formatOne.permissions), [higher])
-    XCTAssertFalse(
-      higher.isCovered(by: higher), "a version this build does not know covers nothing")
+    XCTAssertEqual(decoded[0].scopes, old, "an older edition reads, and keeps its edition")
+    XCTAssertEqual(decoded[0].uncovered([asked]), [asked])
+
+    let approved = PermissionContainment.merged(old, with: [asked])
+
+    XCTAssertEqual(PermissionContainment.uncovered([asked], by: approved), [])
+
+    let saved = ControllerPolicyFile.encode([Self.policy(approved)])
+
+    XCTAssertEqual(try ControllerPolicyFile.decode(saved, editions: grown)[0].scopes, approved)
+  }
+
+  /// Catches an approval at an edition above this build's that reads as something narrower. A file
+  /// written by a build whose kind is at edition 1 reads as newer to a build at edition 0, so it
+  /// grants nothing there and is left alone. An approval at a higher edition than a request
+  /// covers nothing either, since the two meanings differ.
+  func testAnEditionAboveThisBuildsIsNewerAndNeverCovers() throws {
+    let above = ControllerPermission(.paneControl, edition: 1)
+    let bytes = ControllerPolicyFile.encode([Self.policy([above])])
+
+    XCTAssertThrowsError(try ControllerPolicyFile.decode(bytes)) { error in
+      XCTAssertEqual(error as? ControllerPolicyFileError, .newer("pane-control edition 1"))
+    }
+
+    XCTAssertEqual(PermissionContainment.uncovered([.paneControl], by: [above]), [.paneControl])
+    XCTAssertEqual(
+      try ControllerPolicyFile.decode(
+        bytes, editions: ControllerPermissionEditions(["pane-control": 1]))[0].scopes, [above])
   }
 
   // MARK: The file format
 
-  /// Catches a codec that loses a selector, a scope, or a version on the way through the file, or
+  /// Catches a codec that loses a selector, a scope, or an edition on the way through the file, or
   /// that writes the same policies two ways.
   func testPoliciesRoundTripThroughTheFile() throws {
     let policies = [
@@ -110,25 +134,25 @@ final class ControllerPolicyTests: XCTestCase {
   /// values this build refuses to parse is kept.
   func testNewerFormatWithValuesOutsideTheIntegerDomainReadsAsNewer() throws {
     for extra in ["true", "false", "null", "-1", "0.5", "1e3"] {
-      let text = "{\"format\": 2, \"policies\": [], \"flag\": \(extra)}"
+      let text = "{\"format\": 3, \"policies\": [], \"flag\": \(extra)}"
 
       XCTAssertThrowsError(try ControllerPolicyFile.decode(Data(text.utf8)), extra) { error in
-        XCTAssertEqual(error as? ControllerPolicyFileError, .newer("format 2"), extra)
+        XCTAssertEqual(error as? ControllerPolicyFileError, .newer("format 3"), extra)
       }
     }
   }
 
-  /// Catches a widened reader that lets a format 1 file hold a value kind it refused before, or
-  /// reads a negative or fractional format or version as a newer one.
+  /// Catches a widened reader that lets a current format file hold a value kind it refused before,
+  /// or reads a negative or fractional format or edition as a newer one.
   func testCurrentFormatStillRefusesTheNewValueKinds() {
     let good = String(
       decoding: ControllerPolicyFile.encode([Self.policy([.paneControl])]), as: UTF8.self)
 
     for extra in ["true", "null", "-1", "0.5"] {
       for text in [
-        "{\"format\": 1, \"policies\": [], \"flag\": \(extra)}",
+        "{\"format\": 2, \"policies\": [], \"flag\": \(extra)}",
         "{\"format\": \(extra), \"policies\": []}",
-        good.replacingOccurrences(of: "\"version\": 1", with: "\"version\": \(extra)"),
+        good.replacingOccurrences(of: "\"edition\": 0", with: "\"edition\": \(extra)"),
       ] {
         XCTAssertThrowsError(try ControllerPolicyFile.decode(Data(text.utf8)), text) { error in
           guard case .unreadable? = error as? ControllerPolicyFileError else {
@@ -140,8 +164,8 @@ final class ControllerPolicyTests: XCTestCase {
   }
 
   /// Catches a reader that reads a newer or unknown meaning as a narrower known one, or that takes
-  /// a newer build's file for a broken one. A newer format, and a kind or version this build does
-  /// not know, read as newer. A repeated key or an unknown field reads as broken.
+  /// a newer build's file for a broken one. A newer format, a kind this build does not know, and
+  /// an edition above this build's read as newer. A repeated key or an unknown field reads as broken.
   func testUnknownMeaningsReadAsNewerAndBrokenFilesAsUnreadable() throws {
     let good = String(
       decoding: ControllerPolicyFile.encode([Self.policy([.paneControl])]), as: UTF8.self)
@@ -151,13 +175,13 @@ final class ControllerPolicyTests: XCTestCase {
         good.replacingOccurrences(
           of: "\"kind\": \"pane-control\"",
           with: "\"kind\": \"pane-everything\", \"reach\": \"far\""),
-        "pane-everything version 1"
+        "the kind pane-everything"
       ),
       (
-        good.replacingOccurrences(of: "\"version\": 1", with: "\"version\": 2"),
-        "pane-control version 2"
+        good.replacingOccurrences(of: "\"edition\": 0", with: "\"edition\": 2"),
+        "pane-control edition 2"
       ),
-      (good.replacingOccurrences(of: "\"format\": 1", with: "\"format\": 2"), "format 2"),
+      (good.replacingOccurrences(of: "\"format\": 2", with: "\"format\": 3"), "format 3"),
     ] {
       XCTAssertThrowsError(try ControllerPolicyFile.decode(Data(text.utf8))) { error in
         XCTAssertEqual(error as? ControllerPolicyFileError, .newer(expected))
@@ -213,7 +237,7 @@ final class ControllerPolicyTests: XCTestCase {
 
     try store.update { _ in [Self.policy([.paneControl])] }
 
-    let corrupt = Data("{\"format\": 1, \"policies\": [".utf8)
+    let corrupt = Data("{\"format\": 2, \"policies\": [".utf8)
 
     try corrupt.write(to: store.fileURL)
 
@@ -230,8 +254,60 @@ final class ControllerPolicyTests: XCTestCase {
     XCTAssertEqual(store.read().policies, [Self.policy([.clipboardRead])])
   }
 
+  /// Catches a file from before approvals carried an edition that is read as one. Its scopes name
+  /// a permission version, which this build must never read as an edition. The file is kept aside
+  /// byte for byte with a notice that each approval is given again once, and the next approval is
+  /// saved. The same holds for the script file store.
+  func testAFileFromBeforeEditionsIsSetAsideWithANoticeAndTheNextApprovalIsSaved() throws {
+    let before = Data(
+      """
+      {
+        "format": 1,
+        "policies": [
+          {
+            "approved": "2026-11-11T10:00:00Z",
+            "name": "Fixture",
+            "scopes": [{"kind": "pane-control", "version": 1}],
+            "selector": {"controller": "dev.uniterm.fixture.policy", "kind": "version", "version": "\(Self.version)"}
+          }
+        ]
+      }
+
+      """.utf8)
+
+    for (artifact, subject) in [(ControllerArtifact.package, "controller"), (.file, "script file")]
+    {
+      let directory = folder.appendingPathComponent(
+        subject.replacingOccurrences(of: " ", with: "-"))
+      let store = ControllerTrustStore(directory: directory, artifact: artifact)
+
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      try before.write(to: store.fileURL)
+
+      let state = store.read()
+
+      XCTAssertEqual(state.policies, [], subject)
+      XCTAssertTrue(state.writable, subject)
+      XCTAssertTrue(state.notice?.contains("approved again once") == true, "\(state)")
+      XCTAssertTrue(state.notice?.contains("aside-1.json") == true, "\(state)")
+      XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(store.keptAsideFiles.first)), before)
+
+      let policy =
+        artifact == .package
+        ? Self.policy([.paneControl])
+        : ControllerPolicy(
+          selector: .fileVersion(version: Self.version), name: "Fixture", scopes: [.paneControl],
+          approved: "2026-11-11T10:00:00Z")
+
+      try store.update { _ in [policy] }
+
+      XCTAssertEqual(store.read().policies, [policy], subject)
+      XCTAssertEqual(store.read().notice, nil, subject)
+    }
+  }
+
   /// Catches an older build that trusts a newer file's policies, or rewrites the file and loses
-  /// them. A newer format and a permission version this build lacks both grant nothing, write
+  /// them. A newer format and a permission edition this build lacks both grant nothing, write
   /// nothing, and leave the bytes where they are, so two builds that run together never move each
   /// other's file aside.
   func testANewerFileGrantsNothingAndIsLeftUntouched() throws {
@@ -242,9 +318,9 @@ final class ControllerPolicyTests: XCTestCase {
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
     for newerText in [
-      current.replacingOccurrences(of: "\"format\": 1", with: "\"format\": 7"),
-      current.replacingOccurrences(of: "\"version\": 1", with: "\"version\": 4"),
-      "{\"format\": 2, \"policies\": [], \"flag\": true}",
+      current.replacingOccurrences(of: "\"format\": 2", with: "\"format\": 7"),
+      current.replacingOccurrences(of: "\"edition\": 0", with: "\"edition\": 4"),
+      "{\"format\": 3, \"policies\": [], \"flag\": true}",
     ] {
       let newer = Data(newerText.utf8)
 
@@ -401,9 +477,10 @@ final class ControllerPolicyTests: XCTestCase {
     XCTAssertEqual(PermissionContainment.uncovered([.paneControl], by: split), [.paneControl])
     XCTAssertEqual(
       PermissionContainment.uncovered(
-        [ControllerPermission(.pathRead(try ReadScope(directories: ["/a"])), version: 2)], by: split
+        [ControllerPermission(.pathRead(try ReadScope(directories: ["/a"])), edition: 1)],
+        by: split
       ).count,
-      1, "a version this build does not know is never covered")
+      1, "an approval at another edition is never covered")
   }
 
   /// Catches a merge that lists the power twice, which a later review would show as two powers.
@@ -423,7 +500,7 @@ final class ControllerPolicyTests: XCTestCase {
     XCTAssertTrue(
       String(decoding: bytes, as: UTF8.self).contains("\"directories\""), "the scope is written")
     XCTAssertTrue(
-      String(decoding: bytes, as: UTF8.self).contains("\"format\": 1"),
+      String(decoding: bytes, as: UTF8.self).contains("\"format\": 2"),
       "the policy file format did not change")
   }
 
@@ -447,7 +524,7 @@ final class ControllerPolicyTests: XCTestCase {
   /// Catches an approval of pane control, or of one browser power, that covers another power. ADR-09
   /// keeps one power from granting another, and an approval that predates the browser kinds holds
   /// neither of them.
-  func testBrowserPowersAreCoveredOnlyByThemselvesAtAKnownVersion() {
+  func testBrowserPowersAreCoveredOnlyByThemselvesAtTheirOwnEdition() {
     let both: Set<ControllerPermission> = [.browserNavigation, .browserRead]
 
     XCTAssertEqual(PermissionContainment.uncovered(both, by: [.paneControl]).count, 2)
@@ -460,9 +537,9 @@ final class ControllerPolicyTests: XCTestCase {
     XCTAssertEqual(PermissionContainment.uncovered(both, by: both), [])
     XCTAssertEqual(
       PermissionContainment.uncovered(
-        [ControllerPermission(.browserRead, version: 2)], by: both
+        [ControllerPermission(.browserRead, edition: 1)], by: both
       ).count,
-      1, "a version this build does not know is never covered")
+      1, "an approval at another edition is never covered")
   }
 
   /// Catches a browser power lost in the file, written with a field it should not carry, or read
@@ -475,7 +552,7 @@ final class ControllerPolicyTests: XCTestCase {
     XCTAssertEqual(try ControllerPolicyFile.decode(bytes), policies)
     XCTAssertTrue(text.contains("\"browser-navigation\""))
     XCTAssertTrue(text.contains("\"browser-read\""))
-    XCTAssertTrue(text.contains("\"format\": 1"), "the policy file format did not change")
+    XCTAssertTrue(text.contains("\"format\": 2"), "the policy file format did not change")
 
     let extra = text.replacingOccurrences(
       of: "\"kind\": \"browser-read\"", with: "\"kind\": \"browser-read\", \"directories\": []")
@@ -492,7 +569,7 @@ final class ControllerPolicyTests: XCTestCase {
 
     XCTAssertEqual(try ControllerPolicyFile.decode(bytes), policies)
     XCTAssertTrue(text.contains("\"ask-user\""))
-    XCTAssertTrue(text.contains("\"format\": 1"), "the policy file format did not change")
+    XCTAssertTrue(text.contains("\"format\": 2"), "the policy file format did not change")
 
     let extra = text.replacingOccurrences(
       of: "\"kind\": \"ask-user\"", with: "\"kind\": \"ask-user\", \"directories\": []")
@@ -526,12 +603,12 @@ final class ControllerPolicyTests: XCTestCase {
     let current = String(
       decoding: ControllerPolicyFile.encode([Self.policy([try reads("/work")])]), as: UTF8.self)
 
-    XCTAssertTrue(current.contains("\"format\": 1"))
+    XCTAssertTrue(current.contains("\"format\": 2"))
 
     let older = current.replacingOccurrences(of: "\"path-read\"", with: "\"path-reading\"")
 
     XCTAssertThrowsError(try ControllerPolicyFile.decode(Data(older.utf8))) { error in
-      XCTAssertEqual(error as? ControllerPolicyFileError, .newer("path-reading version 1"))
+      XCTAssertEqual(error as? ControllerPolicyFileError, .newer("the kind path-reading"))
     }
 
     let store = ControllerTrustStore(directory: folder)

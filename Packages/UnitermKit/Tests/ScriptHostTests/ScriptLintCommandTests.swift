@@ -53,7 +53,7 @@ final class ScriptLintCommandTests: XCTestCase {
 
     let file = try write(
       """
-      (declare-permissions {:kind :pane-control :version 1})
+      (declare-permissions {:kind :pane-control})
       (import uniterm)
       (spit "\(marker.path)" "ran")
       (uniterm/read-clipboard)
@@ -77,12 +77,12 @@ final class ScriptLintCommandTests: XCTestCase {
   /// not read is 65, with the file that is missing at 66.
   func testTheExitStatusTellsCleanFromFindingsFromUnreadable() async throws {
     let clean = try write(
-      "(declare-permissions {:kind :pane-control :version 1})\n(import uniterm)\n"
+      "(declare-permissions {:kind :pane-control})\n(import uniterm)\n"
         + "(uniterm/list-windows)\n", named: "clean.janet")
     let dirty = try write("(import uniterm)\n(uniterm/read-clipboard)\n", named: "dirty.janet")
     let broken = try write("(print 1", named: "broken.janet")
     let badDeclaration = try write(
-      "(declare-permissions {:kind :nope :version 1})\n", named: "bad.janet")
+      "(declare-permissions {:kind :nope})\n", named: "bad.janet")
 
     let cleanRun = try await lint([clean.path])
 
@@ -95,7 +95,7 @@ final class ScriptLintCommandTests: XCTestCase {
     XCTAssertTrue(dirtyRun.standardOutput.contains("declares nothing"), dirtyRun.standardOutput)
     XCTAssertTrue(
       dirtyRun.standardOutput.contains(
-        "add (declare-permissions {:kind :clipboard-read :version 1}) as the file's first form"),
+        "add (declare-permissions {:kind :clipboard-read}) as the file's first form"),
       dirtyRun.standardOutput)
 
     let brokenRun = try await lint([broken.path])

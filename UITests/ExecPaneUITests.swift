@@ -24,7 +24,7 @@ final class ExecPaneUITests: UnitermUITestCase {
     let control: [String: Any] = [
       "access": "disconnected", "driver": "exec",
       "exec": [
-        "argv": ["/usr/bin/perl", Self.driverScript, mode, "fixture-slides", "1", Self.command],
+        "argv": ["/usr/bin/perl", Self.driverScript, mode, "fixture-slides", "0", Self.command],
         "environmentKeys": keys,
       ],
     ]

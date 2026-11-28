@@ -51,9 +51,9 @@ final class DeclaredFileTests: XCTestCase {
   func testAValidDeclarationReadsEachKindAndTheHeader() throws {
     let declaration = try parse(
       """
-      {"kind":"pane-control","version":1},{"kind":"clipboard-read","version":1},
-      {"kind":"clipboard-write","version":1},{"kind":"capability","version":1,"name":"fs-read"},
-      {"kind":"host-launch","version":1,"executable":"/usr/bin/git","directory":"/Users/me/src",
+      {"kind":"pane-control"},{"kind":"clipboard-read"},
+      {"kind":"clipboard-write"},{"kind":"capability","name":"fs-read"},
+      {"kind":"host-launch","executable":"/usr/bin/git","directory":"/Users/me/src",
        "environment":["PATH","HOME"]}
       """,
       header: #"{"id":"dev.example.tidy","name":"Tidy"}"#)
@@ -82,26 +82,26 @@ final class DeclaredFileTests: XCTestCase {
   /// through the descriptor's entry and the file's, and both return the same set.
   func testThePackageAndTheFileShareOnePermissionReader() throws {
     let text = """
-      [{"kind":"pane-control","version":1},{"kind":"capability","version":1,"name":"fs-read"},
-       {"kind":"clipboard-write","version":1}]
+      [{"kind":"pane-control"},{"kind":"capability","name":"fs-read"},
+       {"kind":"clipboard-write"}]
       """
     let value = try StrictJSONReader.parse(Data(text.utf8), maxBytes: 4096)
 
     for subject in [ControllerPermissionReader.Subject.controller, .file] {
       XCTAssertEqual(
         try ControllerPermissionReader.read(
-          value, allowsCapabilities: true, format: 2, subject: subject),
+          value, allowsCapabilities: true, subject: subject),
         [.paneControl, .capability("fs-read"), .clipboardWrite])
     }
 
     for kind in ["ffi", "ffi-define", "ffi-jit", "ffi-use", "modules"] {
       let refused = try StrictJSONReader.parse(
-        Data(#"[{"kind":"capability","version":1,"name":"\#(kind)"}]"#.utf8), maxBytes: 4096)
+        Data(#"[{"kind":"capability","name":"\#(kind)"}]"#.utf8), maxBytes: 4096)
 
       for subject in [ControllerPermissionReader.Subject.controller, .file] {
         XCTAssertThrowsError(
           try ControllerPermissionReader.read(
-            refused, allowsCapabilities: true, format: 2, subject: subject), kind
+            refused, allowsCapabilities: true, subject: subject), kind
         ) { error in
           XCTAssertTrue("\(error)".contains("cannot declare \(kind)"), "\(error)")
         }
@@ -113,30 +113,31 @@ final class DeclaredFileTests: XCTestCase {
   /// version, a kind listed twice, a native capability, and a field a kind does not take.
   func testEachBrokenPermissionIsRefusedWithAMessageNamingIt() {
     XCTAssertTrue(
-      refusal(#"{"kind":"everything","version":1}"#).contains(
+      refusal(#"{"kind":"everything"}"#).contains(
         ":everything is not a permission kind"))
     XCTAssertTrue(
       refusal(#"{"kind":"pane-control","version":2}"#).contains(
-        "pane-control version 2 is not one this uniterm knows"))
+        ":pane-control names a :version"))
     XCTAssertTrue(
-      refusal(#"{"kind":"pane-control","version":1},{"kind":"pane-control","version":1}"#)
+      refusal(#"{"kind":"pane-control"},{"kind":"pane-control"}"#)
         .contains("pane-control is listed twice"))
     XCTAssertTrue(
       refusal(
-        #"{"kind":"capability","version":1,"name":"fs-read"},{"kind":"capability","version":1,"name":"fs-read"}"#
+        #"{"kind":"capability","name":"fs-read"},{"kind":"capability","name":"fs-read"}"#
       ).contains("capability is listed twice"))
 
     for native in ["ffi", "ffi-define", "ffi-jit", "ffi-use", "modules"] {
       XCTAssertTrue(
-        refusal(#"{"kind":"capability","version":1,"name":"\#(native)"}"#).contains(
+        refusal(#"{"kind":"capability","name":"\#(native)"}"#).contains(
           "a script file cannot declare \(native)"), native)
     }
 
     XCTAssertTrue(
-      refusal(#"{"kind":"pane-control","version":1,"name":"x"}"#).contains("takes no name"))
-    XCTAssertTrue(refusal(#"{"kind":"pane-control"}"#).contains("missing \"version\""))
+      refusal(#"{"kind":"pane-control","name":"x"}"#).contains("takes no name"))
     XCTAssertTrue(
-      refusal(#"{"kind":"pane-control","version":1,"executable":"/x"}"#).contains(
+      refusal(#"{"kind":"pane-control","version":0}"#).contains(":pane-control names a :version"))
+    XCTAssertTrue(
+      refusal(#"{"kind":"pane-control","executable":"/x"}"#).contains(
         "only host-launch takes"))
   }
 
@@ -145,14 +146,14 @@ final class DeclaredFileTests: XCTestCase {
   func testTheDuplicateKeyIsTheKindAndItsScope() throws {
     let two = try parse(
       """
-      {"kind":"capability","version":1,"name":"fs-read"},
-      {"kind":"capability","version":1,"name":"fs-write"}
+      {"kind":"capability","name":"fs-read"},
+      {"kind":"capability","name":"fs-write"}
       """)
 
     XCTAssertEqual(two.capabilities, ["fs-read", "fs-write"])
 
     let launch = { (directory: String) in
-      #"{"kind":"host-launch","version":1,"executable":"/usr/bin/git","directory":"\#(directory)","environment":[]}"#
+      #"{"kind":"host-launch","executable":"/usr/bin/git","directory":"\#(directory)","environment":[]}"#
     }
 
     XCTAssertTrue(
@@ -169,7 +170,7 @@ final class DeclaredFileTests: XCTestCase {
     XCTAssertTrue(header.contains(":kynd"), header)
 
     let later = refusal(
-      #"{"kind":"pane-control","version":1},{"kidn":"clipboard-read","version":1}"#,
+      #"{"kind":"pane-control"},{"kidn":"clipboard-read","version":1}"#,
       typos: #"{"struct":2,"key":"kidn"}"#)
 
     XCTAssertTrue(later.contains("permission 2 has no :kind"), later)
@@ -218,12 +219,12 @@ final class DeclaredFileTests: XCTestCase {
   /// Catches a version that is not the SHA-256 of the whole file, a copy that is writable, and a
   /// copy that differs from the source. The digest was computed outside the code under test.
   func testTheCopyHoldsTheWholeFileReadOnlyAndTheVersionIsItsDigest() throws {
-    let text = "(declare-permissions {:kind :pane-control :version 1})\n(print :ran)\n"
+    let text = "(declare-permissions {:kind :pane-control})\n(print :ran)\n"
     let source = try write(text)
     let made = try DeclaredFileSnapshot.create(from: source.path, in: runs)
 
     XCTAssertEqual(
-      made.versionHex, "e4a68c979ba6642bf93b32acb572ee552d2f138f30509e378be6cefd11ba97db")
+      made.versionHex, "687547e1c963f8097c23ed1982b20f9293fcd6430656017ad3a78af1c477b4a9")
     XCTAssertEqual(try Data(contentsOf: made.file), Data(text.utf8))
     XCTAssertEqual(mode(made.file), 0o400)
     XCTAssertEqual(mode(made.directory), 0o500)

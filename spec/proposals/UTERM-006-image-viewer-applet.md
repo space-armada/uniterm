@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-10-31
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -631,9 +631,11 @@ Amended 2026-11-17; see Decision Log.
 **Status:** NOT STARTED
 
 Waits on UTERM-065, which defines the driver path-read power, and on UTERM-062 M4, which gives the image viewer
-tabs. Amended 2026-11-26; see Decision Log.
+tabs. Also waits on UTERM-063 M2, which builds the guards against stale drivers. Amended 2026-11-27; see Decision Log.
 
 - An exec driver can `show` a file or a folder in its scope, and step through it
+- The viewer's command schema is at 0.0, so M5's changes to its commands land in place with no schema bump. An older
+  driver's command is read with its old meaning or refused by name, per UTERM-063
 - A driver's `show`, stepping, and `zoom` name the tab they act on, per UTERM-062 "What a program addresses in a viewer
   pane", and a command that names no tab is refused
 - A driver's `show` path outside its scope is refused with one error, whether it is missing, not an image, or denied
@@ -873,6 +875,11 @@ tabs. Amended 2026-11-26; see Decision Log.
   - Amended M2. Its check said the slideshow "pauses on detach, and resumes on reattach only if it was playing".
   - Amended M3. Its check said "On detach a zoomed pane releases its 1:1 decode, its tiles, and an animation's zoomed
     frames, and keeps only its backdrop."
+- 2026-11-27: From UTERM-063. The image viewer's command schema is at 0.0 and does not bump. M5 lands its driver
+  commands in place, after UTERM-063 M2, and an older driver's command is read with its old meaning or refused by
+  name. Amended M5. Its note said before: "Waits on UTERM-065, which defines the driver path-read power, and on
+  UTERM-062 M4, which gives the image viewer tabs." The "Control levels" schema-compatibility bullet describes the rule
+  from schema 1.0, and M4's As built keeps its wording as history.
 
 ## References
 

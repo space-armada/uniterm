@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -35,7 +35,8 @@
 - UTERM-013 — "What one shortcut declaration is" and "Which keys uniterm reserves": supersedes in part its two-owner
   model. A controller joins uniterm and applet types as a third key owner, after uniterm's keys and the user's remaps.
 - UTERM-004 — "Exec wire format": an invocation is a host event, not an applet event, so "remote callers receive no
-  applet events" stands and nothing there is superseded. ScriptWire's version goes up.
+  applet events" stands and nothing there is superseded. ScriptWire is at 0 and does not bump, per UTERM-063. The
+  change lands in place, after UTERM-063 M2. Amended 2026-11-27; see Decision Log.
 - UTERM-030 — "The Markdown page opts in": the text viewer's Markdown body opts in to controller keys, per "Which panes
   take a controller's keys".
 - UTERM-019 — "Page events" and "Script helpers": the event read here takes the same cursor, timeout, and
@@ -174,11 +175,13 @@ Decision: these follow from accepted ADRs.
 
 ### Version skew
 
-Decision: ScriptWire refuses an unknown version at the hello, as it does today, until UTERM-056 lands. Then the command's
-own messages keep exact match and the rest of ScriptWire is an outside wire. Amended 2026-11-23; see Decision Log.
+Decision: ScriptWire is at version 0 and stays there, per UTERM-063. The new messages land in place, after UTERM-063
+M2, and the hello refuses a version it does not speak, as it does today. Until UTERM-056 lands, the command's own
+messages keep exact match. Amended 2026-11-27; see Decision Log.
 
-- A new helper with an old app, or an old helper with a new app: the run fails at the hello before any effect, with
-  the message to relaunch uniterm. The helper is the bundle's own, so a relaunch heals it.
+- A new helper with an old app, or an old helper with a new app: the old side's first message that changed is refused
+  by name before any effect. The helper is the bundle's own, so a swapped bundle is caught by its identity check, and
+  the message says to relaunch uniterm.
 - A declared file that names the new permission kind or declares commands is refused whole by an older build.
 - A file store holding an approval of the new kind makes an older build treat that whole store as newer. See "Stores
   that older builds read" and Risks.
@@ -373,7 +376,7 @@ Decision: commands are fields of the permission entry, and the helpers read thro
   file. The shared reader cannot tell the two apart once they are JSON.
 - The app derives the approval's scope, the canonical key set, from the entry itself.
 - A stored approval holds each key in this keyword spelling, which never changes meaning. A later build that folds
-  keys differently, such as through another keyboard layout, adds a new version of the kind rather than changing how a
+  keys differently, such as through another keyboard layout, moves the kind's edition rather than changing how a
   stored key reads.
 - `(uniterm/read-command-events cursor timeout)` is the raw read. It returns `{:events [...] :cursor n :dropped n}`.
 - `(uniterm/command-events)` returns a reader that holds its own cursor. `(uniterm/next-command reader &opt timeout)`
@@ -463,8 +466,8 @@ None.
 - **A new ScriptWire version, permission kind, Janet functions, and event shape are published contracts** —
   likelihood: high, impact: medium. Mitigation: ScriptWire refuses an unknown version at the hello, and an unknown
   permission kind fails closed. See "Version skew". The Janet names follow UTERM-019's rule that a name never changes
-  meaning and a rename adds a name. On the wire, an added event field is a new ScriptWire version, per ADR-13 P1. Amended
-  2026-11-23; see Decision Log.
+  meaning and a rename adds a name. On the wire, an added event field lands in place while ScriptWire is at 0, and is a new ScriptWire version from
+  version 1, per ADR-13 P1 and C1. Amended 2026-11-27; see Decision Log.
 - **An older build stops honoring approvals of the new kind** — likelihood: high on a development machine, low
   elsewhere, impact: low. A build with UTERM-067's reader that does not know the kind keeps those approvals unread, and
   every other approval keeps working. Accepted: it fails closed, and the approvals apply again on the new build. See
@@ -488,7 +491,7 @@ None.
   places.
 - **The stored key spelling is a published contract** — likelihood: low, impact: high. If a later build read a stored
   key differently, two keys could compare equal and widen an approval without consent. Mitigation: a stored key's
-  spelling never changes meaning, and a new folding is a new version of the kind. See "Names".
+  spelling never changes meaning, and a new folding moves the kind's edition. See "Names".
 - **The package refusal waits on UTERM-032's placement rule** — likelihood: medium, impact: medium. UTERM-032 is
   accepted but not built. If UTERM-024 M1 is built first, nothing keeps the kind out of `controller.json`.
   Mitigation: UTERM-032 is a dependency, so the queue orders UTERM-032 M1 before UTERM-024 M1.
@@ -526,8 +529,8 @@ None.
 - A controller's title is neutralized and bounded in the palette, as tab details are
 - A declaration of the new kind without pane control is refused, and its error says to add pane control
 - Revoking a controller while the palette is open removes its rows, and choosing a stale row records nothing
-- An older command and a newer app refuse each other before any effect: at the hello, or at the command's begin once
-  UTERM-056 has landed. Amended 2026-11-23; see Decision Log. A build without the kind reads a store holding it
+- An older command and a newer app refuse each other before any effect: at the hello, or at the first message that
+  changed, by name. Amended 2026-11-27; see Decision Log. A build without the kind reads a store holding it
   as newer, without moving the file aside
 - A `controller.json` that names the new permission kind is refused, and its error says a package cannot declare
   commands
@@ -716,6 +719,16 @@ Amended 2026-11-20; see Decision Log.
   line, "a reader that skips only the policy it cannot read", which UTERM-067 builds. The risk was "An older build
   stops honoring every file approval", rated medium impact, and is now "An older build stops honoring approvals of the
   new kind", rated low.
+- 2026-11-27: From UTERM-063. ScriptWire is at 0 and does not bump, so the new messages land in place after UTERM-063
+  M2, and a changed message is refused by name. A permission kind carries an internal edition, not a version.
+  - Amended Impacts. It said "ScriptWire's version goes up."
+  - Amended "Version skew". It said "ScriptWire refuses an unknown version at the hello, as it does today, until
+    UTERM-056 lands. Then the command's own messages keep exact match and the rest of ScriptWire is an outside wire."
+    and "the run fails at the hello before any effect, with the message to relaunch uniterm."
+  - Amended "Names" and its risk. They said a new key folding "adds a new version of the kind".
+  - Amended the published-contract risk. It said "an added event field is a new ScriptWire version, per ADR-13 P1."
+  - Amended the M1 check on an older command. It said the two refuse each other "at the hello, or at the command's
+    begin once UTERM-056 has landed."
 
 ## References
 

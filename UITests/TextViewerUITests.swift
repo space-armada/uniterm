@@ -675,7 +675,7 @@ final class TextViewerUITests: UnitermUITestCase {
     try write(
       """
       (declare-permissions {:name "Synthetic Notes"}
-        {:kind :pane-control :version 1})
+        {:kind :pane-control})
 
       (import uniterm)
 
@@ -690,7 +690,7 @@ final class TextViewerUITests: UnitermUITestCase {
       (def [_ viewer] (layout :panes))
 
       (defn send [name arguments]
-        (def [ok result] (protect (uniterm/send-command viewer :text-viewer [1 0] name arguments)))
+        (def [ok result] (protect (uniterm/send-command viewer :text-viewer [0 0] name arguments)))
 
         (unless ok
           (error (if (struct? result)

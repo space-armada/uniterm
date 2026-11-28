@@ -425,7 +425,7 @@ final class ScriptAskJanetTests: XCTestCase {
                   uniterm/ask-number uniterm/ask-color uniterm/ask-file uniterm/post-status]
         (assert (or (function? name) (cfunction? name)) "a helper is not a function"))
       (gccollect)
-      (assert (= (uniterm/api-version) 1))
+      (assert (= (uniterm/api-version) 0))
       """, host: host())
   }
 

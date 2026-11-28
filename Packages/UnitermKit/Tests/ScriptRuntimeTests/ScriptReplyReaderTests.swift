@@ -184,7 +184,7 @@ final class ScriptReplyReaderTests: XCTestCase {
       (import uniterm)
       (def [ok _] (protect (uniterm/list-windows)))
       (assert (not ok))
-      (assert (= (uniterm/api-version) 1))
+      (assert (= (uniterm/api-version) 0))
       """
 
     let (status, message) = run(script, reply: [9])

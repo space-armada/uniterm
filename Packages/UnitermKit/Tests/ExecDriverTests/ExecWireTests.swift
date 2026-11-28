@@ -90,16 +90,16 @@ final class ExecWireTests: XCTestCase {
       .clipboardWrite(id: .string("w"), text: "a\nb"))
   }
 
-  /// Catches a hello from another protocol that fails as a malformed line. Protocol 3 wrote its
-  /// schema as one whole number. The app must still read that hello, so the refusal names the
-  /// protocol versions and says to update. A hello of the current protocol with that schema stays
-  /// malformed.
+  /// Catches a hello from another protocol that fails as a malformed line, or that carries a
+  /// placeholder schema the schema check could accept. Protocol 3 wrote its schema as one whole
+  /// number. The app must still read that hello, so the refusal names the protocol versions and
+  /// says to update. The decoded hello holds no schema at all. A hello of the current protocol
+  /// with that schema stays malformed.
   func testAHelloOfAnotherProtocolDecodesWhateverShapeItsSchemaHas() throws {
     XCTAssertEqual(
       try ExecWire.decode(
         Data(#"{"type":"hello","protocol":3,"applet":"fixture-notes","schema":1}"#.utf8)),
-      .hello(
-        protocolVersion: 3, appletType: "fixture-notes", schemaVersion: AppletSchemaVersion(0, 0)))
+      .helloOfAnotherVersion(protocolVersion: 3))
 
     XCTAssertThrowsError(
       try ExecWire.decode(

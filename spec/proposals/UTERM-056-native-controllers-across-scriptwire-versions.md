@@ -325,7 +325,7 @@ waits on ScriptWire's declaration with the rest of this proposal.
 
 ## References
 
-- [ADR-13](../adr/ADR-13-outside-wires-stay-compatible-across-versions.md): outside wires stay compatible across
+- [ADR-13](../adr/ADR-13-outside-wires-stay-compatible-across-versions.md): external wires stay compatible across
   versions, and ScriptWire's exact-match line
 - [UTERM-028](UTERM-028-exec-driver-commands.md): "Version skew", the exec wire's version offer
 - [UTERM-024](UTERM-024-controller-input-channel.md): "Version skew", ScriptWire's exact-match rule

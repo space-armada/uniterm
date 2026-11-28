@@ -27,9 +27,6 @@ public struct FileDeclaration: Equatable, Sendable {
     self.permissions = permissions
   }
 
-  /// The permission format a declaration is read as.
-  static let permissionFormat = ControllerDescriptor.format
-
   /// The Janet capabilities the declaration lists.
   public var capabilities: Set<String> {
     Set(permissions.compactMap(\.capabilityName))
@@ -80,7 +77,7 @@ public struct FileDeclaration: Equatable, Sendable {
     }
 
     let permissions = try ControllerPermissionReader.read(
-      fields["permissions"]!, allowsCapabilities: true, format: permissionFormat, subject: .file)
+      fields["permissions"]!, allowsCapabilities: true, subject: .file)
 
     return FileDeclaration(id: id, name: name, permissions: permissions)
   }

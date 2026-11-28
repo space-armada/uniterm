@@ -99,7 +99,7 @@ final class ScriptCodecTests: XCTestCase {
       .fileBegin(FileBegin(path: "/Users/synthetic/tidy.janet")),
       .fileBegin(
         FileBegin(path: "/tmp/caf\u{00E9}.janet", capabilities: ["fs-read", "net-connect"])),
-      .fileDeclaration(#"{"permissions":[{"kind":"pane-control","version":1}]}"#),
+      .fileDeclaration(#"{"permissions":[{"kind":"pane-control"}]}"#),
       .fileDeclaration(""),
       .undeclaredBegin(UndeclaredBegin(name: "tidy.janet")),
       .undeclaredBegin(
@@ -153,18 +153,21 @@ final class ScriptCodecTests: XCTestCase {
     }
   }
 
-  /// Catches an old command or an old app that the version 14 side accepts. Version 13 has no form
-  /// calls and no question-only begin, so an old command could never ask a form and an old app
-  /// would read the new begin as an unknown message. Version 12 has no open begin. Version 11
-  /// writes a command's schema version as one number. Each side refuses the other at the hello,
-  /// before any call or admission.
-  func testTheFormCallsVersionRefusesTheVersionBeforeIt() {
-    XCTAssertEqual(ScriptProtocol.version, 14)
+  /// Catches a program built before the reset that the version 0 side accepts. Versions 1 through
+  /// 14 counted breaking revisions made before any program outside the project relied on them.
+  /// Each side refuses all of them at the hello, before any call or admission, and the version
+  /// the hello carries keeps its one field.
+  func testEveryVersionBeforeTheResetIsRefusedAtTheHello() {
+    XCTAssertEqual(ScriptProtocol.version, 0)
 
-    for older: UInt16 in [10, 11, 12, 13] {
-      XCTAssertThrowsError(try ScriptHelperMessage.validateHello(.hello(version: older)))
-      XCTAssertThrowsError(try ScriptAppMessage.validateHello(.hello(version: older)))
+    for other: UInt16 in 1...14 {
+      XCTAssertThrowsError(try ScriptHelperMessage.validateHello(.hello(version: other)))
+      XCTAssertThrowsError(try ScriptAppMessage.validateHello(.hello(version: other)))
     }
+
+    XCTAssertNoThrow(
+      try ScriptHelperMessage.validateHello(.hello(version: ScriptProtocol.version)))
+    XCTAssertNoThrow(try ScriptAppMessage.validateHello(.hello(version: ScriptProtocol.version)))
   }
 
   /// Catches a form spec that is cut to fit, which would hand the app a different form than the
@@ -362,16 +365,30 @@ final class ScriptCodecTests: XCTestCase {
     trailing.put(UInt16(1))
     trailing.put(UInt8(0xFF))
 
-    XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 1, body: trailing.bytes)) { error in
-      XCTAssertEqual(error as? WireError, .trailingBytes)
+    XCTAssertEqual(
+      try ScriptHelperMessage.decode(type: 1, body: trailing.bytes), .hello(version: 1),
+      "a hello of another version is read for its version alone")
+
+    var current = ByteWriter()
+    current.put(ScriptProtocol.version)
+    current.put(UInt8(0xFF))
+
+    XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 1, body: current.bytes)) { error in
+      guard case WireError.notRecognized(let text) = error else { return XCTFail("\(error)") }
+
+      XCTAssertTrue(text.contains("hello"), text)
     }
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 99, body: Data())) { error in
-      XCTAssertEqual(error as? WireError, .unknownType(99))
+      guard case WireError.notRecognized(let text) = error else { return XCTFail("\(error)") }
+
+      XCTAssertTrue(text.contains("tag 99"), text)
     }
 
     XCTAssertThrowsError(try ScriptAppMessage.decode(type: 99, body: Data())) { error in
-      XCTAssertEqual(error as? WireError, .unknownType(99))
+      guard case WireError.notRecognized(let text) = error else { return XCTFail("\(error)") }
+
+      XCTAssertTrue(text.contains("tag 99"), text)
     }
   }
 }
@@ -464,7 +481,9 @@ extension ScriptCodecTests {
     axis.put(UInt8(0))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: axis.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("an unknown split axis"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("split axis 3"), text)
     }
 
     var flag = ByteWriter()
@@ -477,7 +496,9 @@ extension ScriptCodecTests {
     flag.put(UInt8(0))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: flag.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("a reference has an unknown tab flag"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("tab flag 2"), text)
     }
 
     var form = ByteWriter()
@@ -487,7 +508,9 @@ extension ScriptCodecTests {
     form.put(UInt8(0))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: form.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("a target has an unknown form"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("target form 2"), text)
     }
 
     var access = ByteWriter()
@@ -500,7 +523,9 @@ extension ScriptCodecTests {
     access.put(UInt8(2))
 
     XCTAssertThrowsError(try ScriptHelperMessage.decode(type: 3, body: access.bytes)) {
-      XCTAssertEqual($0 as? WireError, .badValue("an unknown pane access"))
+      guard case WireError.notRecognized(let text) = $0 else { return XCTFail("\($0)") }
+
+      XCTAssertTrue(text.contains("pane access 2"), text)
     }
   }
 

@@ -64,7 +64,7 @@ final class BrowserRemoteTests: XCTestCase {
 
     dispatcher.submit(
       AppletCommandSubmission(
-        appletType: BrowserApplet.descriptionTypeID, schemaVersion: AppletSchemaVersion(1, 0),
+        appletType: BrowserApplet.descriptionTypeID, schemaVersion: AppletSchemaVersion(0, 0),
         name: name, arguments: .object(arguments)),
       to: harness.applet, authority: { nil },
       caller: { CommandCaller(identity: identity, permissions: powers) },

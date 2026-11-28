@@ -284,8 +284,13 @@ public enum ScriptHelperMain {
   /// The message and exit status for a connection that did not open, or a run the app refused.
   static func connectionFailure(_ error: any Error, address: Address) -> Int32 {
     switch error {
-    case WireError.versionMismatch:
-      return fail(ScriptProtocol.mismatchText, status: Exit.protocolMismatch)
+    case WireError.versionMismatch(let found, let expected):
+      return fail(
+        ScriptProtocol.versionMismatchText(program: expected, uniterm: found),
+        status: Exit.protocolMismatch)
+
+    case WireError.notRecognized(let text):
+      return fail(text, status: Exit.protocolMismatch)
 
     case WireError.io(let code) where Address.meansNobodyListens(code):
       return fail(Address.unreachableText(address), status: Exit.unavailable)
@@ -307,7 +312,9 @@ public enum ScriptHelperMain {
       return fail("the socket at \(path) belongs to another user", status: Exit.unavailable)
 
     default:
-      return fail("cannot talk to uniterm at \(address.path): \(error)", status: Exit.unavailable)
+      return fail(
+        "cannot talk to uniterm at \(address.path): \(scriptWireText(error))",
+        status: Exit.unavailable)
     }
   }
 

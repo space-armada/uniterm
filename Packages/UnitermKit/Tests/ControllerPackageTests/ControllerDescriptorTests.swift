@@ -162,9 +162,9 @@ final class ControllerDescriptorTests: XCTestCase {
     for extra in ["true", "null", "-1", "0.5", "1e2"] {
       let descriptors = [
         #"{"format": \#(extra), "id": "dev.uniterm.fixture.x", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": "sha256:\#(hash)"}, "permissions": []}"#,
-        #"{"format": 1, "id": "dev.uniterm.fixture.x", "name": \#(extra), "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": "sha256:\#(hash)"}, "permissions": []}"#,
-        #"{"format": 1, "id": "dev.uniterm.fixture.x", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": "sha256:\#(hash)"}, "permissions": [], "flag": \#(extra)}"#,
-        #"{"format": 1, "id": "dev.uniterm.fixture.x", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": \#(extra)}, "permissions": []}"#,
+        #"{"format": 0, "id": "dev.uniterm.fixture.x", "name": \#(extra), "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": "sha256:\#(hash)"}, "permissions": []}"#,
+        #"{"format": 0, "id": "dev.uniterm.fixture.x", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": "sha256:\#(hash)"}, "permissions": [], "flag": \#(extra)}"#,
+        #"{"format": 0, "id": "dev.uniterm.fixture.x", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": {"main.janet": \#(extra)}, "permissions": []}"#,
       ]
 
       for text in descriptors {
@@ -178,30 +178,43 @@ final class ControllerDescriptorTests: XCTestCase {
     }
   }
 
-  /// Catches a format 2 reader that drops a permission's version, reads a kind format 1 lacks in
-  /// format 1, or reads the new kinds without their scope. Format 1 stays readable with its two
-  /// kinds at version 1, so its approvals carry over.
-  func testFormatTwoVersionsEveryPermissionAndFormatOneReadsAsVersionOne() throws {
+  /// Catches a reader that needs a permission's version, drops a kind, or reads a kind at an
+  /// edition other than this build's. A descriptor names each kind alone, and every kind reads at
+  /// edition 0.
+  func testEveryPermissionKindReadsFromItsKindAloneAtEditionZero() throws {
     let files = #"{"main.janet": "sha256:\#(String(repeating: "a", count: 64))"}"#
-    let one = try ControllerDescriptor.parse(
+    let descriptor = try ControllerDescriptor.parse(
       Data(
-        #"{"format": 1, "id": "dev.uniterm.fixture.two", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "pane-control"}, {"kind": "capability", "name": "fs-read"}]}"#
-          .utf8))
-    let two = try ControllerDescriptor.parse(
-      Data(
-        #"{"format": 2, "id": "dev.uniterm.fixture.two", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "pane-control", "version": 1}, {"kind": "capability", "name": "fs-read", "version": 1}, {"kind": "clipboard-read", "version": 1}, {"kind": "clipboard-write", "version": 1}, {"kind": "host-launch", "version": 1, "executable": "/usr/bin/true", "directory": "/tmp", "environment": ["TOKEN", "A_KEY"]}]}"#
+        #"{"format": 0, "id": "dev.uniterm.fixture.two", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "pane-control"}, {"kind": "capability", "name": "fs-read"}, {"kind": "clipboard-read"}, {"kind": "clipboard-write"}, {"kind": "host-launch", "executable": "/usr/bin/true", "directory": "/tmp", "environment": ["TOKEN", "A_KEY"]}]}"#
           .utf8))
 
-    XCTAssertEqual(one.permissions, [.paneControl, .capability("fs-read")])
-    XCTAssertTrue(one.permissions.allSatisfy { $0.version == 1 })
+    XCTAssertTrue(descriptor.permissions.allSatisfy { $0.edition == 0 })
     XCTAssertEqual(
-      two.permissions,
+      descriptor.permissions,
       [
         .paneControl, .capability("fs-read"), .clipboardRead, .clipboardWrite,
         .hostLaunch(
           try HostLaunchScope(
             executable: "/usr/bin/true", directory: "/tmp", environmentKeys: ["A_KEY", "TOKEN"])),
       ])
+  }
+
+  /// Catches a reader that takes a permission's version after the reset, whatever the number. A
+  /// permission always means what the running uniterm says, so a version in a descriptor is an
+  /// author's mistake that the reader names.
+  func testAPermissionThatNamesAVersionIsRefusedByName() {
+    let files = #"{"main.janet": "sha256:\#(String(repeating: "a", count: 64))"}"#
+
+    for version in ["0", "1", "2"] {
+      XCTAssertThrowsError(
+        try ControllerDescriptor.parse(
+          Data(
+            #"{"format": 0, "id": "dev.uniterm.fixture.two", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "ask-user", "version": \#(version)}]}"#
+              .utf8)), version
+      ) { error in
+        XCTAssertTrue("\(error)".contains("ask-user permission names a version"), "\(error)")
+      }
+    }
   }
 
   /// Catches a path-read permission read without its scope, with a scope that is not plain, listed
@@ -213,28 +226,28 @@ final class ControllerDescriptorTests: XCTestCase {
     func parse(_ permission: String) throws -> ControllerDescriptor {
       try ControllerDescriptor.parse(
         Data(
-          #"{"format": 2, "id": "dev.uniterm.fixture.read", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [\#(permission)]}"#
+          #"{"format": 0, "id": "dev.uniterm.fixture.read", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [\#(permission)]}"#
             .utf8))
     }
 
     let good = try parse(
-      #"{"kind": "path-read", "version": 1, "directories": ["/work/b", "/work/a"]}"#)
+      #"{"kind": "path-read", "directories": ["/work/b", "/work/a"]}"#)
 
     XCTAssertEqual(
       good.permissions, [.pathRead(try ReadScope(directories: ["/work/a", "/work/b"]))])
 
     for (bad, expected) in [
-      (#"{"kind": "path-read", "version": 1}"#, "needs a list of directories"),
-      (#"{"kind": "path-read", "version": 1, "directories": []}"#, "1 to"),
-      (#"{"kind": "path-read", "version": 1, "directories": ["rel"]}"#, "absolute paths"),
-      (#"{"kind": "path-read", "version": 1, "directories": ["/a/../b"]}"#, "absolute paths"),
-      (#"{"kind": "path-read", "version": 1, "directories": ["/a", "/a"]}"#, "twice"),
-      (#"{"kind": "path-read", "version": 1, "directories": [3]}"#, "string"),
-      (#"{"kind": "path-read", "version": 1, "directory": "/a"}"#, "only host-launch"),
-      (#"{"kind": "path-read", "version": 2, "directories": ["/a"]}"#, "version 2"),
-      (#"{"kind": "pane-control", "version": 1, "directories": ["/a"]}"#, "only path-read"),
+      (#"{"kind": "path-read"}"#, "needs a list of directories"),
+      (#"{"kind": "path-read", "directories": []}"#, "1 to"),
+      (#"{"kind": "path-read", "directories": ["rel"]}"#, "absolute paths"),
+      (#"{"kind": "path-read", "directories": ["/a/../b"]}"#, "absolute paths"),
+      (#"{"kind": "path-read", "directories": ["/a", "/a"]}"#, "twice"),
+      (#"{"kind": "path-read", "directories": [3]}"#, "string"),
+      (#"{"kind": "path-read", "directory": "/a"}"#, "only host-launch"),
+      (#"{"kind": "path-read", "version": 2, "directories": ["/a"]}"#, "names a version"),
+      (#"{"kind": "pane-control", "directories": ["/a"]}"#, "only path-read"),
       (
-        #"{"kind": "path-read", "version": 1, "directories": ["/a"]}, {"kind": "path-read", "version": 1, "directories": ["/b"]}"#,
+        #"{"kind": "path-read", "directories": ["/a"]}, {"kind": "path-read", "directories": ["/b"]}"#,
         "listed twice"
       ),
     ] {
@@ -244,109 +257,104 @@ final class ControllerDescriptorTests: XCTestCase {
     }
   }
 
-  /// Catches a path-read permission that a format 1 descriptor reads. Format 1 knows two kinds.
-  func testFormatOneRefusesPathRead() {
+  /// Catches an older descriptor format that still reads. Format 1 and format 2 descriptors are
+  /// refused by their format, whatever they hold.
+  func testAnOlderDescriptorFormatIsRefusedByItsFormat() {
     let files = #"{"main.janet": "sha256:\#(String(repeating: "a", count: 64))"}"#
 
-    XCTAssertThrowsError(
-      try ControllerDescriptor.parse(
-        Data(
-          #"{"format": 1, "id": "dev.uniterm.fixture.read", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "path-read"}]}"#
-            .utf8)))
+    for format in [1, 2] {
+      XCTAssertThrowsError(
+        try ControllerDescriptor.parse(
+          Data(
+            #"{"format": \#(format), "id": "dev.uniterm.fixture.read", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "path-read", "directories": ["/a"]}]}"#
+              .utf8)), "\(format)"
+      ) { error in
+        XCTAssertTrue(
+          "\(error)".contains("format \(format) is not one this uniterm reads"), "\(error)")
+      }
+    }
   }
 
-  /// Catches the descriptor format being bumped for a kind that needs no bump, which would make
-  /// every older build refuse descriptors that hold none of it. An older build refuses a kind it
-  /// does not know at any format, and it knew exactly these kinds, so a descriptor holding
-  /// path-read reads as an unknown kind there. This build's reader is the stand-in for that
-  /// refusal: it must word a kind it lacks the way the older build words this one.
-  func testPathReadJoinsFormatTwoWithoutANewFormat() throws {
-    XCTAssertEqual(ControllerDescriptor.format, 2)
-
-    let olderKinds: Set<String> = [
-      "pane-control", "capability", "clipboard-read", "clipboard-write", "host-launch",
-    ]
-    let known = Set(ControllerPermission.meanings.map(\.kind))
-
+  /// Catches an edition table that drops a kind or starts a kind past 0. Every kind this build
+  /// knows is at edition 0, and a kind it lacks reads as unknown.
+  func testEveryKindIsAtEditionZeroAndAnUnknownKindIsRefused() throws {
+    XCTAssertEqual(ControllerDescriptor.format, 0)
     XCTAssertEqual(
-      known.subtracting(olderKinds),
-      ["path-read", "browser-navigation", "browser-read", "ask-user"])
-    XCTAssertEqual(ControllerPermission.meaning(kind: "path-read", version: 1)?.format, 2)
+      ControllerPermissionEditions.current.kinds,
+      [
+        "pane-control", "capability", "clipboard-read", "clipboard-write", "host-launch",
+        "path-read", "browser-navigation", "browser-read", "ask-user",
+      ])
 
-    let files = #"{"main.janet": "sha256:\#(String(repeating: "a", count: 64))"}"#
-
-    XCTAssertThrowsError(
-      try ControllerDescriptor.parse(
-        Data(
-          #"{"format": 2, "id": "dev.uniterm.fixture.read", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "path-reading", "version": 1, "directories": ["/a"]}]}"#
-            .utf8))
-    ) { error in
-      XCTAssertTrue(
-        "\(error)".contains("is not one descriptor format 2 knows"), "\(error)")
-    }
-  }
-
-  /// Catches a browser kind that joins format 2 as a format bump, or one a format 2 reader reads
-  /// without its version. Both kinds take no field, so each is listed once, whole.
-  func testBrowserKindsJoinFormatTwoAtVersionOne() throws {
-    XCTAssertEqual(ControllerDescriptor.format, 2)
-
-    for kind in ["browser-navigation", "browser-read"] {
-      let meaning = try XCTUnwrap(ControllerPermission.meaning(kind: kind, version: 1))
-
-      XCTAssertEqual(meaning.format, 2, kind)
-      XCTAssertEqual(meaning.covers, [1], kind)
-      XCTAssertNil(ControllerPermission.meaning(kind: kind, version: 2), kind)
+    for kind in ControllerPermissionEditions.current.kinds {
+      XCTAssertEqual(ControllerPermissionEditions.current.edition(of: kind), 0, kind)
     }
 
-    let descriptor = try ControllerDescriptor.parse(
-      try ControllerFixtures.descriptor(ControllerFixtures.formatTwoBrowser))
-
-    XCTAssertEqual(descriptor.permissions, [.paneControl, .browserNavigation, .browserRead])
-  }
-
-  /// Catches the ask power joining format 2 as a format bump, and a scope or a name that it
-  /// silently accepts. It has no scope field, so a field on it is a mistake the reader names. A
-  /// format 1 descriptor never reads it, since an older build did not know the kind.
-  func testAskUserJoinsFormatTwoAtVersionOneWithNoScope() throws {
-    let meaning = try XCTUnwrap(ControllerPermission.meaning(kind: "ask-user", version: 1))
-
-    XCTAssertEqual(meaning.format, 2)
-    XCTAssertEqual(meaning.covers, [1])
-    XCTAssertNil(ControllerPermission.meaning(kind: "ask-user", version: 2))
+    XCTAssertNil(ControllerPermissionEditions.current.edition(of: "path-reading"))
+    XCTAssertEqual(ControllerPermission.askUser.edition, 0)
     XCTAssertEqual(ControllerPermission.askUser.kindName, "ask-user")
 
     let files = #"{"main.janet": "sha256:\#(String(repeating: "a", count: 64))"}"#
 
-    func descriptor(format: Int, permission: String) -> Data {
-      let version = format >= 2 ? #", "version": 1"# : ""
+    XCTAssertThrowsError(
+      try ControllerDescriptor.parse(
+        Data(
+          #"{"format": 0, "id": "dev.uniterm.fixture.read", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "path-reading", "directories": ["/a"]}]}"#
+            .utf8))
+    ) { error in
+      XCTAssertTrue("\(error)".contains("is not one this uniterm knows"), "\(error)")
+    }
+  }
 
-      return Data(
-        #"{"format": \#(format), "id": "dev.uniterm.fixture.ask", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "ask-user"\#(version)\#(permission)}]}"#
+  /// Catches a reader that grows a kind's edition without the descriptor changing. A reader given
+  /// a grown table reads the same descriptor at the new edition.
+  func testAnInjectedEditionTableMovesTheEditionOfWhatTheReaderReturns() throws {
+    let grown = ControllerPermissionEditions(["pane-control": 1, "ask-user": 0])
+    let value = try StrictJSONReader.parse(
+      Data(#"[{"kind": "pane-control"}, {"kind": "ask-user"}]"#.utf8), maxBytes: 1024)
+    let read = try ControllerPermissionReader.read(
+      value, allowsCapabilities: false, editions: grown)
+
+    XCTAssertEqual(
+      read,
+      [ControllerPermission(.paneControl, edition: 1), ControllerPermission(.askUser, edition: 0)])
+  }
+
+  /// Catches the browser kinds failing to read from their kind alone.
+  func testBrowserKindsReadFromTheirKindAlone() throws {
+    let descriptor = try ControllerDescriptor.parse(
+      try ControllerFixtures.descriptor(ControllerFixtures.formatZeroBrowser))
+
+    XCTAssertEqual(descriptor.permissions, [.paneControl, .browserNavigation, .browserRead])
+  }
+
+  /// Catches the ask power reading a scope or a name that it silently accepts. It has no scope
+  /// field, so a field on it is a mistake the reader names.
+  func testAskUserTakesNoScope() throws {
+    let files = #"{"main.janet": "sha256:\#(String(repeating: "a", count: 64))"}"#
+
+    func descriptor(permission: String) -> Data {
+      Data(
+        #"{"format": 0, "id": "dev.uniterm.fixture.ask", "name": "X", "entry": {"kind": "janet", "path": "main.janet"}, "files": \#(files), "permissions": [{"kind": "ask-user"\#(permission)}]}"#
           .utf8)
     }
 
     XCTAssertEqual(
-      try ControllerDescriptor.parse(descriptor(format: 2, permission: "")).permissions,
-      [.askUser])
+      try ControllerDescriptor.parse(descriptor(permission: "")).permissions, [.askUser])
 
     for extra in [#", "name": "x""#, #", "directories": ["/a"]"#, #", "executable": "/bin/ls""#] {
-      XCTAssertThrowsError(
-        try ControllerDescriptor.parse(descriptor(format: 2, permission: extra)), extra)
+      XCTAssertThrowsError(try ControllerDescriptor.parse(descriptor(permission: extra)), extra)
     }
-
-    XCTAssertThrowsError(try ControllerDescriptor.parse(descriptor(format: 1, permission: "")))
   }
 
-  /// Catches a format 1 descriptor and a format 2 descriptor sharing one reader state: each loads
-  /// with its own kinds, and format 1 never reads a browser kind.
-  func testFormatOneAndTwoDescriptorsBothLoadEachWithItsOwnKinds() throws {
-    let one = try ControllerDescriptor.parse(
-      try ControllerFixtures.descriptor("format-one-pane-control"))
-    let two = try ControllerDescriptor.parse(
-      try ControllerFixtures.descriptor(ControllerFixtures.formatTwoBrowser))
+  /// Catches the shared valid descriptors failing to load.
+  func testTheSharedValidDescriptorsLoad() throws {
+    let all = try ControllerDescriptor.parse(
+      try ControllerFixtures.descriptor(ControllerFixtures.formatZero))
+    let browser = try ControllerDescriptor.parse(
+      try ControllerFixtures.descriptor(ControllerFixtures.formatZeroBrowser))
 
-    XCTAssertEqual(one.permissions, [.paneControl])
-    XCTAssertEqual(two.permissions, [.paneControl, .browserNavigation, .browserRead])
+    XCTAssertEqual(all.permissions.count, 5)
+    XCTAssertEqual(browser.permissions, [.paneControl, .browserNavigation, .browserRead])
   }
 }
