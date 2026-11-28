@@ -587,7 +587,7 @@ public final class PendingRequestsWindowController: NSWindowController {
   private func askForPane(for request: ScriptHost.PendingRequest) {
     guard let window else { return }
 
-    let program = request.executablePath ?? request.name
+    let program = request.programLabel
     let panes = grantablePanes()
     let alert = NSAlert()
 
@@ -677,7 +677,7 @@ extension PendingRequestsWindowController: NSTableViewDataSource, NSTableViewDel
     guard rows.indices.contains(row) else { return nil }
 
     switch (rows[row], tableColumn?.identifier.rawValue) {
-    case (.request(let request), "program"): return request.executablePath ?? request.name
+    case (.request(let request), "program"): return request.programLabel
     case (.request(let request), "pid"): return String(request.pid)
     case (.request, "status"): return "Waiting"
     case (.grant(let grant), "program"): return grant.executablePath ?? "unknown"

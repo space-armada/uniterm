@@ -7,6 +7,7 @@ import ScriptWire
 import StatusKit
 import XCTest
 
+@testable import ScriptHost
 @testable import WindowKit
 
 @MainActor
@@ -55,6 +56,23 @@ final class PendingRequestsTests: XCTestCase {
       .init(requester: .terminal(window: 1, pane: 1), power: power), subject: subject,
       title: "Read the clipboard", detail: "", sessionTitle: "Allow for This Run",
       answer: { _ in })
+  }
+
+  /// Catches a request line that puts a program's self-reported name under uniterm's own label with
+  /// no marker, when the system cannot say which executable the program is. It cannot prove that the
+  /// panel's column and the pane alert mark the name too.
+  func testARequestWithNoExecutablePathMarksItsSelfReportedNameUnverified() {
+    let unknown = ScriptHost.PendingRequest(
+      id: 1, pid: 77, executablePath: nil, name: "Trusted Backup", timestamp: Date())
+    let known = ScriptHost.PendingRequest(
+      id: 2, pid: 78, executablePath: "/usr/local/bin/tool", name: "Trusted Backup",
+      timestamp: Date())
+
+    XCTAssertEqual(
+      PendingRequestsIndicator.sentence(for: unknown),
+      "Trusted Backup (unverified script), PID 77, asks for a pane.")
+    XCTAssertEqual(
+      PendingRequestsIndicator.sentence(for: known), "tool, PID 78, asks for a pane.")
   }
 
   /// Catches a slot without a count, a count that includes a row's repeated operations, an arrival

@@ -270,6 +270,21 @@ public final class ScriptHost {
     public let executablePath: String?
     public let name: String
     public let timestamp: Date
+
+    /// How the user sees the program. The verified path wins. Without one, the name is whatever the
+    /// program reported for itself, so it is marked the way the questions header marks it.
+    public var programLabel: String {
+      executablePath ?? Self.unverified(name)
+    }
+
+    /// The same as `programLabel`, with a verified path cut to its file name for a one-line view.
+    public var shortProgramLabel: String {
+      executablePath.map { ($0 as NSString).lastPathComponent } ?? Self.unverified(name)
+    }
+
+    private static func unverified(_ name: String) -> String {
+      "\(name) (unverified script)"
+    }
   }
 
   /// One connection's grant: the pane the user chose, and the session it was running when the
