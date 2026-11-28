@@ -11,7 +11,7 @@ set -euo pipefail
 # UI tests drive the one screen and keyboard. Two runs at once, from two sessions or worktrees, steal
 # each other's focus and keys, so a run waits for the screen. The lock is per user, outside every
 # checkout, so every worktree shares it.
-lock="/tmp/uniterm-ui-tests-$(id -u).lock"
+lock="${UNITERM_UI_LOCK_FILE:-/tmp/uniterm-ui-tests-$(id -u).lock}"
 holder="$lock.holder"
 
 if [[ -z "${UNITERM_UI_LOCK_HELD:-}" ]]; then
@@ -37,7 +37,9 @@ start_time=$(date +%s)
 
 # Write the start time to a file for CI to pick up if the test step times out.
 if [[ -n "${UNITERM_UI_KEPT_LOG:-}" ]]; then
-  start_time_file="$(dirname "$UNITERM_UI_KEPT_LOG")/ui-test-start-time.txt"
+  kept_dir="$(dirname "$UNITERM_UI_KEPT_LOG")"
+  start_time_file="$kept_dir/ui-test-start-time.txt"
+  mkdir -p "$kept_dir"
   echo "$start_time" >"$start_time_file"
 fi
 

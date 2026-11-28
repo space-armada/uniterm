@@ -832,3 +832,25 @@ if ! grep -qF -- "QUARANTINED" "$scratch/collector-predicate"; then
   exit 1
 fi
 echo "PASS: the kept log's predicate selects the log's quarantine line"
+
+# A fresh checkout has no test build folder yet. The runner must create the kept log's folder before it
+# writes the start time there. A stub `swift` stands in for the GUI session check, and a held lock skips
+# the screen lock, so only the setup runs.
+runner_bin="$scratch/runner-bin"
+mkdir -p "$runner_bin"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$runner_bin/swift"
+chmod +x "$runner_bin/swift"
+
+runner_kept_log="$scratch/fresh-checkout/DerivedData-test/ui-test-kept-log.txt.gz"
+if ! PATH="$runner_bin:$PATH" UNITERM_UI_LOCK_HELD=1 UNITERM_UI_LOCK_FILE="$scratch/runner.lock" \
+  UNITERM_UI_KEPT_LOG="$runner_kept_log" \
+  bash "$root/scripts/run-ui-tests.sh" true >"$scratch/runner-out" 2>&1; then
+  echo "FAIL: the UI test runner stops in a checkout with no test build folder" >&2
+  cat "$scratch/runner-out" >&2
+  exit 1
+fi
+if [[ ! -s "$(dirname "$runner_kept_log")/ui-test-start-time.txt" ]]; then
+  echo "FAIL: the UI test runner did not record its start time in a checkout with no test build folder" >&2
+  exit 1
+fi
+echo "PASS: the UI test runner creates the kept log's folder before it records the start time"
