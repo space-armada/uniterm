@@ -151,11 +151,15 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   /// is dropped. The focus report waits until input is on again.
   var acceptsInput = true {
     didSet {
-      guard acceptsInput, !oldValue, let surface else { return }
+      guard acceptsInput, !oldValue, focusReportHeld, let surface else { return }
 
+      focusReportHeld = false
       ghostty_surface_set_focus(surface, focused)
     }
   }
+
+  /// True when a focus change came while input was off, so the child has not heard it yet.
+  private var focusReportHeld = false
 
   /// True when a mouse event may go to libghostty. A child that has asked to hear the mouse would
   /// get a report, which is input.
@@ -202,7 +206,11 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
 
     self.focused = focused
 
-    if acceptsInput { ghostty_surface_set_focus(surface, focused) }
+    if acceptsInput {
+      ghostty_surface_set_focus(surface, focused)
+    } else {
+      focusReportHeld = true
+    }
   }
 
   func setVisible(_ visible: Bool) {

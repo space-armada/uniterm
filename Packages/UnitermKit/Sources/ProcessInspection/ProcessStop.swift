@@ -125,7 +125,10 @@ public struct SuspensionState: Equatable, Sendable {
 
     if !stopped && isStopped { madeByUniterm = false }
 
-    if !stopped { continuePending = false }
+    // Any settled reading answers the continue. A stop and a continue that were never seen leave no
+    // change for the watcher to report, so a later stop from outside is the first reading, and
+    // it must find Resume offered.
+    continuePending = false
 
     isStopped = stopped
 

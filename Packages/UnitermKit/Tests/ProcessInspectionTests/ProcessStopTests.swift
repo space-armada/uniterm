@@ -399,6 +399,23 @@ final class ProcessStopTests: XCTestCase {
 
     XCTAssertFalse(state.canResume)
   }
+
+  /// Catches a pending continue that outlives the stop it answered. uniterm stops and continues a
+  /// process before either is seen, since the watcher reports only changes and sees none. A later
+  /// stop from outside must still offer Resume.
+  func testAnOutsideStopAfterAStopAndContinueNeverSeenStillOffersResume() {
+    var state = SuspensionState()
+
+    state.stopSent()
+    state.continueSent()
+
+    XCTAssertFalse(state.canResume)
+
+    XCTAssertTrue(state.observe(stopped: true))
+
+    XCTAssertTrue(state.isSuspended)
+    XCTAssertTrue(state.canResume, "Resume was not offered for a stop from outside")
+  }
 }
 
 /// The watch that reports a stop or a continue. A process source's signal notice must fire for a

@@ -63,13 +63,15 @@ final class ReplProcessTreeTests: XCTestCase {
   private var pasteboard: NSPasteboard!
   private var window: NSWindow!
 
-  /// The process environment before the engine ran. The engine sets variables for its children, and
-  /// the terminal tests that run later in this process must see the environment they started with.
-  private var savedEnvironment: [String: String] = [:]
+  /// What the engine changes in the process environment. `GhosttyTerminalEngine` sets
+  /// `GHOSTTY_RESOURCES_DIR` for its children. The other production site, `InheritedEnvironment`'s
+  /// scrub, runs only when the app starts or in the one terminal test that calls it, never here. The
+  /// terminal tests that run later in this process must see the variable as it was.
+  private var savedResourcesDirectory: String?
 
   override func setUp() async throws {
     continueAfterFailure = false
-    savedEnvironment = ProcessInfo.processInfo.environment
+    savedResourcesDirectory = ProcessInfo.processInfo.environment["GHOSTTY_RESOURCES_DIR"]
     _ = NSApplication.shared
 
     directory = try Self.makeSocketDirectory()
@@ -101,11 +103,11 @@ final class ReplProcessTreeTests: XCTestCase {
     engine = nil
     pasteboard.releaseGlobally()
 
-    for name in ProcessInfo.processInfo.environment.keys where savedEnvironment[name] == nil {
-      unsetenv(name)
+    if let savedResourcesDirectory {
+      setenv("GHOSTTY_RESOURCES_DIR", savedResourcesDirectory, 1)
+    } else {
+      unsetenv("GHOSTTY_RESOURCES_DIR")
     }
-
-    for (name, value) in savedEnvironment { setenv(name, value, 1) }
 
     host.stop()
     try? FileManager.default.removeItem(at: directory)
@@ -169,13 +171,16 @@ final class ReplProcessTreeTests: XCTestCase {
     let helper = try XCTUnwrap(channel.helper)
 
     XCTAssertNotEqual(
-      root.pid, helper.pid, "the helper is the session's child, so no wrapper stands")
+      root.pid, helper.pid, "the session child and the helper are one process, so no wrapper stands"
+    )
     XCTAssertEqual(ProcessInspection.parent(of: helper.pid)?.pid, root.pid)
     XCTAssertEqual(ProcessInspection.processGroup(of: root.pid), root.pid)
     XCTAssertEqual(
-      ProcessInspection.processGroup(of: helper.pid), root.pid, "the helper is not in the group")
+      ProcessInspection.processGroup(of: helper.pid), root.pid,
+      "the helper is in another group than the session child's")
     XCTAssertNotEqual(root.pid, getpgrp())
-    XCTAssertFalse(ProcessInspection.leadsItsOwnGroup(helper.pid), "the helper leads a group")
+    XCTAssertFalse(
+      ProcessInspection.leadsItsOwnGroup(helper.pid), "the helper leads a group of its own")
 
     applet.suspendKeyPressed(isRepeat: false)
 

@@ -36,9 +36,11 @@ public struct ReplServices {
 
 /// Lays out the terminal above the strip that shows after the helper has gone.
 ///
-/// It also sees Ctrl-Z before the terminal does, and keeps it from the pty. The helper leads its own
-/// session, so the kernel would discard a terminal's Ctrl-Z for it anyway. The key suspends or
-/// resumes the helper.
+/// It also sees Ctrl-Z before the terminal does, and keeps it from the pty. Through the pty the key
+/// would be a stop request that the terminal's line discipline raises for the foreground group, and
+/// the kernel may discard it for a group like this one. It would also leave a stray byte for the
+/// helper to read on resume. So the key suspends or resumes the helper's group directly, the same
+/// way whatever the pty does, and the helper never reads it.
 ///
 /// It also sees Ctrl-C before the terminal does. The terminal still gets the key and sends it
 /// through the pty. The container tells the applet too, so the app can ask the helper to stop over
