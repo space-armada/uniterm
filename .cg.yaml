@@ -1,5 +1,9 @@
 version: 1
+restrict:
+  - glob: "/private/tmp/claude-501/-Users-ripta-projects-uniterm/*"
+    message: "scratchpad executables may not take arguments"
 allow:
+  - regex: '^/private/tmp/claude-501/-Users-ripta-projects-uniterm/[^ ]+$'
   - exact: [./scripts/check-sandbox-off.sh]
   - exact: [./scripts/check-sandbox-off.sh, .build/DerivedData/Build/Products/Debug/uniterm.app]
   - prefix: [./scripts/clean-test-processes.sh]

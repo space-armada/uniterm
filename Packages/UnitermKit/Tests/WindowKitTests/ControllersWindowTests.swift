@@ -251,7 +251,7 @@ final class ControllersWindowTests: XCTestCase {
   func testTheWindowListsFileApprovalsAsTheirOwnRowsAndRevokeRemovesThem() async throws {
     let trust = folder.appendingPathComponent("trust")
     let packages = ControllerTrustStore(directory: trust)
-    let files = ControllerTrustStore(directory: trust, artifact: .file)
+    let files = packages
     let packagePolicy = ControllerPolicy(
       selector: .version(
         controllerID: Self.identity.controllerID, version: Self.identity.version),
@@ -261,8 +261,7 @@ final class ControllersWindowTests: XCTestCase {
       selector: selector, name: "Tidy", scopes: [.paneControl, .clipboardRead],
       approved: "2026-11-11T10:00:00Z")
 
-    try packages.update { _ in [packagePolicy] }
-    try files.update { _ in [filePolicy] }
+    try packages.update { _ in [packagePolicy, filePolicy] }
 
     host.controllerRuns[9] = ControllerRun(
       identity: ControllerIdentity(
@@ -291,8 +290,7 @@ final class ControllersWindowTests: XCTestCase {
 
     try await bounded("the revoke is done") { await window.revoke(.policy(filePolicy)) }
 
-    XCTAssertEqual(files.read().policies, [])
-    XCTAssertEqual(packages.read().policies, [packagePolicy])
+    XCTAssertEqual(files.read().policies, [packagePolicy])
     XCTAssertTrue(host.isRevoked(9), "Revoke left the run the approval admitted")
     XCTAssertEqual(window.rows.filter { if case .policy = $0 { true } else { false } }.count, 1)
   }
@@ -389,5 +387,162 @@ final class ControllersWindowTests: XCTestCase {
     try await bounded("the window settles") { await window.settle() }
 
     XCTAssertFalse(host.isRevoked(10), "Revoke ended a run the user did not choose")
+  }
+
+  /// Catches a window that hides entries this build cannot read, or says who wrote them. A line
+  /// under the list gives the count, says this build cannot read them and they do not apply, and
+  /// says a newer uniterm may read them. A damaged entry reads the same as a newer one, so the line
+  /// never claims a newer version wrote them.
+  func testTheWindowCountsKeptEntriesWithoutSayingWhoWroteThem() async throws {
+    let store = ControllerTrustStore(directory: folder.appendingPathComponent("trust"))
+    let kept = ControllerKeptEntry(
+      bytes: Array(
+        #"{"approved": "2026-11-11T10:00:00Z", "artifact": "driver", "name": "Later", "scopes": [], "selector": {"kind": "version", "version": "x"}}"#
+          .utf8))
+    let readable = ControllerPolicy(
+      selector: .version(controllerID: Self.identity.controllerID, version: Self.identity.version),
+      name: "Synthetic", scopes: [.paneControl], approved: "2026-11-11T10:00:00Z")
+
+    try FileManager.default.createDirectory(
+      at: store.directory, withIntermediateDirectories: true)
+    try ControllerPolicyFile.encode([readable], kept: [kept, kept]).write(to: store.fileURL)
+
+    let window = ControllersWindowController(scriptHost: host)
+
+    addTeardownBlock { @MainActor in window.close() }
+
+    try await bounded("the window reads the policies") { await window.settle() }
+
+    let content = try XCTUnwrap(window.window?.contentView)
+    let line = try XCTUnwrap(
+      content.firstDescendant(identifier: "controllers-unreadable") as? NSTextField)
+
+    XCTAssertFalse(line.isHidden)
+    XCTAssertTrue(line.stringValue.contains("2 approvals"), line.stringValue)
+    XCTAssertTrue(line.stringValue.contains("cannot read"), line.stringValue)
+    XCTAssertTrue(line.stringValue.contains("do not apply here"), line.stringValue)
+    XCTAssertTrue(line.stringValue.contains("A newer uniterm may read them"), line.stringValue)
+    XCTAssertFalse(line.stringValue.lowercased().contains("wrote"), line.stringValue)
+    XCTAssertEqual(window.rows, [.policy(readable)], "a kept entry got a row")
+    XCTAssertEqual(ControllersWindowController.unreadableText(0), "")
+    XCTAssertTrue(ControllersWindowController.unreadableText(1).contains("1 approval"))
+    XCTAssertTrue(ControllersWindowController.unreadableText(1).contains("may read it"))
+  }
+
+  /// Catches the reapproval notice lost when a refresh overtakes the read that carried it. The
+  /// store shows that notice once, so the read that replaces the cancelled one finds none. It
+  /// cannot prove the order of the two reads, so it holds only where the first read wins the lock.
+  func testARefreshThatOvertakesTheReadWithTheReapprovalNoticeStillShowsIt() async throws {
+    let store = ControllerTrustStore(directory: folder.appendingPathComponent("trust"))
+
+    try FileManager.default.createDirectory(
+      at: store.directory, withIntermediateDirectories: true)
+    try Data("{}".utf8).write(to: store.directory.appendingPathComponent("files.json"))
+
+    let window = ControllersWindowController(scriptHost: host)
+
+    addTeardownBlock { @MainActor in window.close() }
+
+    await Task.yield()
+
+    window.refresh()
+
+    try await bounded("the window reads the policies") { await window.settle() }
+
+    let content = try XCTUnwrap(window.window?.contentView)
+    let line = try XCTUnwrap(
+      content.firstDescendant(identifier: "controllers-notice") as? NSTextField)
+
+    XCTAssertTrue(line.stringValue.contains("approved again once"), line.stringValue)
+  }
+
+  /// Catches two entries for one selector that fold into one row, or a selection that jumps from
+  /// one to the other. Both show, each keeps the selection when the list refreshes, the detail says
+  /// Revoke removes both, and Revoke does.
+  func testTwoEntriesForOneSelectorBothShowAndSelectionKeepsItsRow() async throws {
+    let store = ControllerTrustStore(directory: folder.appendingPathComponent("trust"))
+    let selector = ControllerSelector.version(
+      controllerID: Self.identity.controllerID, version: Self.identity.version)
+    let first = ControllerPolicy(
+      selector: selector, name: "Synthetic", scopes: [.paneControl],
+      approved: "2026-11-11T10:00:00Z")
+    let second = ControllerPolicy(
+      selector: selector, name: "Synthetic", scopes: [.clipboardRead],
+      approved: "2026-11-12T10:00:00Z")
+
+    try store.update { _ in [first, second] }
+
+    let window = ControllersWindowController(scriptHost: host)
+
+    addTeardownBlock { @MainActor in window.close() }
+
+    try await bounded("the window reads the policies") { await window.settle() }
+
+    XCTAssertEqual(window.rows, [.policy(first), .policy(second)])
+
+    let content = try XCTUnwrap(window.window?.contentView)
+    let table = try XCTUnwrap(
+      content.firstDescendant(identifier: "controllers-table") as? NSTableView)
+
+    table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+    window.refresh()
+    try await bounded("the window reads the policies") { await window.settle() }
+
+    XCTAssertEqual(table.selectedRow, 1, "the selection moved off the row the user chose")
+
+    let detail = ControllersWindowController.describe(.policy(second), sharing: 2)
+
+    XCTAssertTrue(detail.contains("2 approvals in the list name this selector"), detail)
+    XCTAssertTrue(detail.contains("Revoke removes all 2"), detail)
+
+    try await bounded("the revoke is done") { await window.revoke(.policy(second)) }
+
+    XCTAssertEqual(window.rows, [])
+    XCTAssertEqual(store.read().policies, [])
+  }
+
+  /// Catches a prompt that offers no replacement, or one that hides what it replaces. It names each
+  /// older approval, says a live run of a replaced version ends, and offers to keep both.
+  func testTheReviewNamesWhatTrustingAVersionReplaces() throws {
+    let older = (1...2).map { index in
+      ControllerPolicy(
+        selector: .version(
+          controllerID: Self.identity.controllerID,
+          version: String(repeating: String(index), count: 64)),
+        name: "Older\(index)", scopes: [.paneControl], approved: "2026-11-0\(index)T10:00:00Z",
+        versionOf: Self.identity.controllerID)
+    }
+    let review = ControllerReview(
+      id: 5, name: "Synthetic", identity: Self.identity, requested: [.paneControl],
+      added: [.paneControl], revises: nil, canRemember: true, notice: nil, waiting: [(1, 100)],
+      versionOf: Self.identity.controllerID, older: older)
+    let text = ControllerReviewText.summary(review)
+
+    XCTAssertTrue(text.contains("replaces 2 older approvals of dev.uniterm.fixture.window"), text)
+    XCTAssertTrue(text.contains("Older1, version 111111111111, approved 2026-11-01"), text)
+    XCTAssertTrue(text.contains("Older2, version 222222222222, approved 2026-11-02"), text)
+    XCTAssertTrue(text.contains("A live run of a replaced version ends"), text)
+    XCTAssertTrue(text.contains("keep them"), text)
+    XCTAssertEqual(
+      ControllerReviewText.offered(for: review),
+      [
+        .allowOnce, .allowForSession, .trustVersion, .trustVersionKeepingOlder, .trustIdentity,
+        .deny,
+      ])
+    XCTAssertTrue(ControllerReviewText.choices(for: review).contains("a live run of one ends"))
+
+    let alone = ControllerReview(
+      id: 6, name: "Synthetic", identity: Self.identity, requested: [.paneControl],
+      added: [.paneControl], revises: nil, canRemember: true, notice: nil, waiting: [(1, 100)])
+
+    XCTAssertFalse(ControllerReviewText.summary(alone).contains("replaces"))
+    XCTAssertFalse(ControllerReviewText.offered(for: alone).contains(.trustVersionKeepingOlder))
+
+    let locked = ControllerReview(
+      id: 7, name: "Synthetic", identity: Self.identity, requested: [.paneControl],
+      added: [.paneControl], revises: nil, canRemember: false, notice: nil, waiting: [(1, 100)],
+      versionOf: Self.identity.controllerID, older: older)
+
+    XCTAssertFalse(ControllerReviewText.summary(locked).contains("replaces"))
   }
 }

@@ -68,10 +68,13 @@
 | [UTERM-064](UTERM-064-programs-name-what-they-act-on.md) | Every program command names its target, and opens answer with the identity of what they made | accepted |
 | [UTERM-065](UTERM-065-exec-drivers-read-paths-in-a-scope.md) | An exec driver asks for a read scope, approved for its run, and names paths in it | accepted |
 | [UTERM-066](UTERM-066-verified-identity-for-exec-drivers.md) | An exec driver can be a verified package, and keep remembered approvals for its powers | accepted |
-| [UTERM-067](UTERM-067-stores-keep-what-they-cannot-read.md) | Every store keeps entries it cannot read, starting with the controller trust stores | accepted |
+| [UTERM-067](UTERM-067-stores-keep-what-they-cannot-read.md) | Every store keeps entries it cannot read, starting with the controller trust stores | implemented |
 | [UTERM-068](UTERM-068-browser-content-blocking.md) | Native browser ad blocking with custom rules, a starter list, and subscriptions | accepted |
 | [UTERM-069](UTERM-069-external-programs-run-as-controllers.md) | A program uniterm cannot trace to a tab runs as a controller with an external source, replacing Grant Access | accepted |
 | [UTERM-070](UTERM-070-a-viewer-keeps-its-file-when-the-new-one-fails-to-load.md) | A viewer pane keeps its old file when the new one passes the open check and fails its load | draft |
+| [UTERM-071](UTERM-071-the-layout-file-keeps-windows-and-nodes-it-cannot-read.md) | The layout file keeps the windows and nodes it cannot read, and a part a build does not hold survives a save | draft |
+| [UTERM-072](UTERM-072-the-hsts-store-keeps-entries-it-cannot-read.md) | The browser's HSTS file keeps the entries it cannot read, and one bad entry no longer empties the list | draft |
+| [UTERM-073](UTERM-073-open-with-shows-the-choices-it-cannot-read.md) | The Open With chooser shows a saved choice it cannot read, and offers to clear it | draft |
 
 ## Dependency Graph
 
@@ -138,6 +141,9 @@ UTERM-067 ← UTERM-004
 UTERM-068 ← UTERM-005, UTERM-053
 UTERM-069 ← UTERM-004, UTERM-015, UTERM-021, UTERM-054, UTERM-063, UTERM-067
 UTERM-070 ← UTERM-015, UTERM-062
+UTERM-071 ← UTERM-067
+UTERM-072 ← UTERM-005, UTERM-067
+UTERM-073 ← UTERM-015, UTERM-067
 ```
 
 ## Not Yet Filed

@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-15
-**Updated:** 2026-11-21
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -273,7 +273,8 @@ the app. (autonomous)
 
 - A newer example on an older app is refused at load, since an older build refuses a declaration kind it does not
   know, per UTERM-024 and UTERM-032.
-- An older example on a newer app works, since a Janet name and a schema version never change meaning.
+- An older example on a newer app works, since a Janet name never changes meaning, and a changed meaning takes a new name. Amended 2026-11-27; see Decision
+  Log.
 - A viewer without the slide style refuses the first slide, which ends the run with the cause named.
 
 ## Design Decisions (Open)
@@ -500,6 +501,9 @@ Amended 2026-11-20; see Decision Log.
   UTERM-042 "Palette commands: wording and target". It is the same command, with the same ID. The title changes once
   UTERM-042 M1 lands.
 - 2026-11-21: Scheduled as UTERM-025 M1 in queue.md.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. "Version skew" said an older example works "since a
+  Janet name and a schema version never change meaning". Schemas stay at 0.0 and do not bump, so it now says a Janet
+  name never changes meaning and a changed meaning takes a new name.
 
 ## References
 

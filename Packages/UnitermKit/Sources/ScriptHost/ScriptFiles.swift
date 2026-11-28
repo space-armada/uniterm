@@ -23,6 +23,10 @@ struct FileRunArtifact: Sendable {
 
   /// The name the review shows: the declared name, else the file's name.
   let name: String
+
+  /// What the file is a version of: its declared ID, or else its absolute path. A version
+  /// approval stores it to find the file's older versions. It decides no coverage.
+  let versionOf: String
 }
 
 /// What an admitted run was verified from. A package is the descriptor and its files. A script
@@ -42,6 +46,14 @@ enum RunArtifact: Sendable {
     switch self {
     case .package(let snapshot): return snapshot.controller.descriptor.name
     case .file(let file): return file.name
+    }
+  }
+
+  /// What the artifact is a version of: a package's ID, or a file's declared ID or path.
+  var versionOf: String {
+    switch self {
+    case .package(let snapshot): return snapshot.controller.identity.controllerID
+    case .file(let file): return file.versionOf
     }
   }
 
@@ -304,15 +316,16 @@ extension ScriptHost {
       keyFingerprint: snapshot.signature?.keyFingerprint, artifact: .file)
     let artifact = FileRunArtifact(
       snapshot: snapshot, declaration: declaration, identity: identity,
-      name: declaration.name ?? title)
+      name: declaration.name ?? title, versionOf: declaration.id ?? pending.request.path)
     let requested = Self.requested(
       declaration.permissions, capabilities: pending.request.capabilities)
     let revision = trustRemovals
-    let store = settings.trust(for: .file)
+    let store = settings.trust
+    let versionOf = artifact.versionOf
 
     Task { @MainActor [weak self] in
       let trust = await Task.detached {
-        Self.lookUp(requested, for: identity, in: store)
+        Self.lookUp(requested, for: identity, versionOf: versionOf, in: store)
       }.value
 
       self?.fileDeclared(

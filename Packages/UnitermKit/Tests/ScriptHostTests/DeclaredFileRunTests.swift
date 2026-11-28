@@ -307,19 +307,30 @@ final class DeclaredFileRunTests: XCTestCase {
     XCTAssertEqual(seenReviews.count, 2, "an edited file ran without a fresh review")
   }
 
-  /// Catches a file approval that lives in the controller policy file, which an older build would
-  /// move aside.
-  func testAFileApprovalIsWrittenToItsOwnPolicyFile() async throws {
+  /// Catches a file approval that lives in a file of its own, or one that forgets what it is a
+  /// version of. Every approval lives in the one policy file, naming its artifact kind, and an
+  /// unsigned script with no declared ID is a version of its absolute path.
+  func testAFileApprovalIsWrittenToThePolicyFileAndNamesItsPath() async throws {
     reviewAnswer = .trustVersion
 
-    let result = try await run(try declared(#"(print "x")"#))
+    let file = try declared(#"(print "x")"#)
+    let result = try await run(file)
 
     XCTAssertEqual(result.status, 0, result.standardError)
 
     let names = (try? FileManager.default.contentsOfDirectory(atPath: trust.path)) ?? []
 
-    XCTAssertTrue(names.contains("files.json"), "\(names)")
-    XCTAssertFalse(names.contains("policy.json"), "\(names)")
+    XCTAssertTrue(names.contains("policy.json"), "\(names)")
+    XCTAssertFalse(names.contains("files.json"), "\(names)")
+
+    let policies = ControllerTrustStore(directory: trust).read().policies
+
+    XCTAssertEqual(policies.count, 1)
+    XCTAssertEqual(policies.first?.selector.artifact, .file)
+    XCTAssertTrue(
+      policies.first?.versionOf?.hasSuffix("/" + file.lastPathComponent) == true,
+      "\(policies.first?.versionOf ?? "nil")")
+    XCTAssertTrue(policies.first?.versionOf?.hasPrefix("/") == true)
   }
 
   // MARK: Refusals
@@ -551,7 +562,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     let names = (try? FileManager.default.contentsOfDirectory(atPath: trust.path)) ?? []
 
-    XCTAssertTrue(names.contains("files.json"), "\(names)")
+    XCTAssertTrue(names.contains("policy.json"), "\(names)")
 
     reviewAnswer = .deny
 
@@ -591,7 +602,7 @@ final class DeclaredFileRunTests: XCTestCase {
   /// Catches an identity approval of a package that covers a signed file with the same ID and key.
   /// The approval is written as the controller store writes it, and the file is still reviewed.
   func testAPackageIdentityApprovalDoesNotCoverASignedFile() async throws {
-    let store = ControllerTrustStore(directory: trust, artifact: .package)
+    let store = ControllerTrustStore(directory: trust)
 
     try store.update { _ in
       [

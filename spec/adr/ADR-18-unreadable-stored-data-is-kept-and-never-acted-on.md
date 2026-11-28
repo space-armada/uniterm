@@ -13,10 +13,10 @@ Builds of different ages read the same stores. A user may run a newer build, the
 again. Two builds may also run at once. A newer build writes entries an older build has never seen: a new kind of
 approval, a new selector, a new node in the pane tree.
 
-Today an older build fails a whole store over one such entry. The trust store grants nothing at all when it meets a
-permission kind it does not know, and moves the whole file aside when it meets a selector it does not know. The layout
-file is kept aside whole when its envelope is newer. Every readable entry is lost along with the unreadable one.
-Splitting stores into more files works around that, but only until the next new kind.
+When this ADR was written, an older build failed a whole store over one such entry. The trust store granted nothing at
+all when it met a permission kind it did not know, and moved the whole file aside when it met a selector it did not
+know. The layout file is kept aside whole when its envelope is newer. Every readable entry is lost along with the
+unreadable one. Splitting stores into more files works around that, but only until the next new kind.
 
 ADR-06 already keeps an applet payload it cannot read as exact bytes, and writes it back unchanged. This ADR states that
 rule for every store a build keeps for itself.
@@ -53,8 +53,8 @@ where one is needed.
 ## Consequences
 
 - A store must let a reader tell where one entry ends and the next begins, so it can skip an entry it cannot read.
-- The trust stores do not meet P1 today. The layout file meets P1 for applet payloads. Its envelope keeps the whole
-  file aside on any newer version, which meets P1 only where C1 applies.
+- The trust store now reads each approval on its own, and meets P1 through P5 for them. The layout file meets P1 for
+  applet payloads. Its envelope keeps the whole file aside on any newer version, which meets P1 only where C1 applies.
 - Entries a build cannot read stay until a build that reads them rewrites or removes them. A user who wants one gone
   removes it in a build that understands it.
 - Adding a new kind of entry no longer needs a new file or a new store version. A change to what an existing kind

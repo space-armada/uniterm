@@ -26,7 +26,8 @@
   UTERM-066" markers when this proposal is accepted.
 - UTERM-004 — "Verified artifact and run binding": a packaged path component may start with `_`, a descriptor may list
   folder names to skip, and a descriptor names one role, per "Python's own file names can be packaged" and "A
-  descriptor names one role". The policy file gains format 2, per "Version skew".
+  descriptor names one role". The policy file moves to format 3, with every approval in `policy.json`, per
+  UTERM-067 and "Version skew". Amended 2026-11-27; see Decision Log.
 - UTERM-028 — "How a driver gets the power": "Nothing is remembered across runs, since a driver has no verified
   identity" holds only for a driver with no verified identity.
 - UTERM-055 — "Which grant and targets an exec driver captures under": a verified driver may keep a remembered
@@ -318,12 +319,9 @@ nothing, since a driver can fork a child that execs anything with the inherited 
 
 Decision: uniterm is pre-v1, so each contract may break, and the behavior is stated rather than made tolerant.
 
-- The policy store: format 1 means every entry is a controller package entry, and no entry carries a kind. Format 2
-  requires a kind on every entry. A newer build writes format 2 whenever any entry is not a controller package entry,
-  and format 1 otherwise. A build in use today then leaves a format 2 file untouched and trusts nothing from it, so a
-  run of new, old, and new builds loses no approval. A newer build reads today's format 1 file unchanged. Once
-  UTERM-067 lands, the store moves to a format above 2, every entry names its kind, and UTERM-067's "Version skew" and
-  "Old trust files are set aside" govern it. Amended 2026-11-26; see Decision Log.
+- The policy store: one file, `policy.json`, holds every approval at UTERM-067's format 3, and every entry names its
+  kind. A build in use today reads it as newer, or moves it aside when it cannot parse it whole, and UTERM-067's
+  "Version skew" and "Old trust files are set aside" govern the loss. Amended 2026-11-27; see Decision Log.
 - The layout file: an older build keeps a version 4 file aside, per ADR-06.
 - The descriptor, which gains a role, driver kinds, an interpreter entry kind, an interpreter command, skipped folder
   names, a list of environment keys, a starting-folder read scope, and a fixed command line: an older build refuses a new package by name, through
@@ -376,10 +374,9 @@ None.
 - **A verified script driver imports unverified code** — likelihood: high, impact: medium. An interpreter loads modules
   from its own search paths. Mitigation: the review text says imports are not verified, and "Trust this version" binds
   only the packaged files. Accepted under ADR-14 C2.
-- **An older build trusts no controller** — likelihood: medium, impact: low. A driver approval in `policy.json` puts
-  the file at format 2, so a build in use today trusts no controller from it. The file stays untouched, and the newer
-  build finds every approval again, per "Version skew". Accepted: uniterm is pre-v1, and the user accepts breaking
-  changes until then.
+- **An older build trusts no controller** — likelihood: medium, impact: low. The policy file is at UTERM-067's format
+  3, so a build in use today trusts no controller from it, per "Version skew". Accepted: uniterm is pre-v1, and the
+  user accepts breaking changes until then. Amended 2026-11-27; see Decision Log.
 - **The interpreter binding is stored data** — likelihood: medium, impact: low. Every later build reads the binding
   store. A wrong binding runs the wrong interpreter under the package's remembered powers. Mitigation: only the user
   sets a binding, every launch shows it, and the binding grants no power. A store a build cannot read asks for a new
@@ -393,8 +390,8 @@ None.
   are not immutable against a malicious process of the same user. Accepted: the same holds for controllers today.
 - **The design depends on proposals still in flight** — likelihood: medium, impact: medium. UTERM-028, UTERM-055, and
   UTERM-065 are accepted and not started, and UTERM-063 changes permission editions underneath. ADR-18 is proposed, and
-  UTERM-067 is accepted and not built. The second reason for one policy entry per role rests on ADR-18 P4. Mitigation: M2's parts wait
-  on each power, per Dependencies. The first reason for one entry per role, that the roles carry different powers,
+  UTERM-067's policy file is built. The second reason for one policy entry per role rests on ADR-18 P4. Mitigation:
+  M2's parts wait on each power, per Dependencies. Amended 2026-11-27; see Decision Log. The first reason for one entry per role, that the roles carry different powers,
   holds without ADR-18.
 - **The descriptor's new fields are a signed contract** — likelihood: medium, impact: medium. Authors sign descriptors
   that name a role, an interpreter command, skipped folders, environment keys, and a starting-folder scope, and every
@@ -469,9 +466,9 @@ None.
 - An approval whose read scope holds more than 32 folders reads back, and the policy file is not moved aside
 - A remembered starting-folder scope does not cover a run started in a protected location it leaves out, such as one
   under `~/Documents` when the scope holds `~`. That run asks
-- A policy file holding any entry that is not a controller package entry is written at format 2, with a kind on every
-  entry. One holding only controller package entries is written at format 1. A build in use today leaves a format 2
-  file untouched, and a run of new, old, and new builds keeps every approval
+- A driver approval is an entry in `policy.json` that names its artifact kind, beside every other approval. The file is
+  always in UTERM-067's format 3, and a build in use today never reads it, per "Version skew". Amended 2026-11-27; see
+  Decision Log
 - Revoking a remembered approval removes it from the store, ends a live run's use of it, and stops its queued work
 - Each use of a remembered power is checked at the effect, against the live policy
 
@@ -661,6 +658,20 @@ None.
   at a format above 2, with a kind on every entry. It ended before with: "UTERM-067 changes this under ADR-18." The
   in-flight risk said UTERM-067 is a draft. It is now accepted.
 - 2026-11-26: Scheduled as UTERM-066 M1 and UTERM-066 M2-M3 in queue.md.
+- 2026-11-27: Amended four places for UTERM-067 M2, which makes the policy file format 3 with every approval in
+  `policy.json`. The UTERM-004 impact said: "The policy file gains format 2, per "Version skew"." M2's check said: "A
+  policy file holding any entry that is not a controller package entry is written at format 2, with a kind on every
+  entry. One holding only controller package entries is written at format 1. A build in use today leaves a format 2
+  file untouched, and a run of new, old, and new builds keeps every approval." The older-build risk said a driver
+  approval puts the file at format 2. The format 2 now belongs to UTERM-063, and no entry is written without a kind.
+  The "Version skew" bullet on the policy store said before: "format 1 means every entry is a controller package entry, and no entry carries a kind.
+  Format 2 requires a kind on every entry. A newer build writes format 2 whenever any entry is not a controller
+  package entry, and format 1 otherwise. A build in use today then leaves a format 2 file untouched and trusts nothing
+  from it, so a run of new, old, and new builds loses no approval. A newer build reads today's format 1 file unchanged.
+  Once UTERM-067 lands, the store moves to a format above 2." (run best guess)
+- 2026-11-27: Amended the in-flight risk for UTERM-067's built policy file. It said before: "ADR-18 is proposed, and
+  UTERM-067 is accepted and not built." The policy file is now built, so only ADR-18 is still proposed. (run best
+  guess)
 
 ## References
 

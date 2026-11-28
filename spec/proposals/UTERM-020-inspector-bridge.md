@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-11
-**Updated:** 2026-11-22
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -339,9 +339,11 @@ cannot authorize a meaning they did not approve. Result references are opaque, e
 own run and session; they are not persisted data formats.
 
 The app and its command/helper can skew during an in-place bundle update. An old helper against a new app, or a new
-helper against an old app, refuses an unsupported wire/API/schema or permission version before effects. No new frame
-kind or larger frame is introduced here. A wire change found necessary during integration takes the existing version
-handshake and rejection rule in both directions; it cannot silently reinterpret a message.
+helper against an old app, is refused by name before effects, since a wire, API, or schema this build does not know is
+an unknown name. The wire, the API, and the schemas are at version 0 under UTERM-063, so nothing bumps. No new frame
+kind or larger frame is introduced here. A wire change found necessary during integration lands in place, takes a new
+name for a changed meaning, and is refused by name in both directions. It cannot silently reinterpret a message.
+Amended 2026-11-27; see Decision Log.
 
 WebKit and the app also update independently. Old adapter/new WebKit and new adapter/old WebKit are both eligible only
 for a passing exact tuple and successful connection validation. Otherwise private support is unavailable. Public
@@ -618,6 +620,10 @@ whether to drop it. No drop is authorized by this review.
   pane, so that clause is gone. The raw-command safeguards no longer name focus. They name the scheme and handoff
   rules every tab follows. (work-queue best guess)
 - 2026-11-22: Scheduled as UTERM-020 M1-M9 in queue.md.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. The skew paragraph said an old helper or app
+  "refuses an unsupported wire/API/schema or permission version before effects", and that a wire change "takes the
+  existing version handshake and rejection rule in both directions". External versions stay at 0 and carry no
+  handshake offer, so it now says an unknown name is refused by name and a changed meaning takes a new name.
 
 ## References
 

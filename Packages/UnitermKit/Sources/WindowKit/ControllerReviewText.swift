@@ -38,6 +38,10 @@ enum ControllerReviewText {
       lines.append(browserReadShowsAddresses)
     }
 
+    if offered(for: review).contains(.trustVersionKeepingOlder) {
+      lines += replacementLines(for: review)
+    }
+
     if review.waiting.count > 1 {
       lines.append(
         "\(review.waiting.count) runs wait. Allow Once and Allow for This Run start the "
@@ -47,6 +51,30 @@ enum ControllerReviewText {
     if let notice = review.notice { lines.append(notice) }
 
     return lines.joined(separator: "\n")
+  }
+
+  /// What Trust This Version replaces. It names every older approval it removes, and says that a
+  /// run a replaced approval admitted ends, as Revoke ends it. The user may keep both instead.
+  static func replacementLines(for review: ControllerReview) -> [String] {
+    let count = review.older.count
+    var lines = [
+      "Trust This Version replaces \(count == 1 ? "1 older approval" : "\(count) older approvals") "
+        + "of \(LaunchApprovalText.escaped(review.versionOf)):"
+    ]
+
+    for policy in review.older.sorted(by: { $0.approved < $1.approved }).prefix(5) {
+      lines.append(
+        "  \(LaunchApprovalText.escaped(policy.name)), version "
+          + "\(policy.selector.value.prefix(12)), approved \(policy.approved)")
+    }
+
+    if count > 5 { lines.append("  and \(count - 5) more") }
+
+    lines.append(
+      "A live run of a replaced version ends, as Revoke ends it. Clear the box below to keep "
+        + "them and add this version beside them.")
+
+    return lines
   }
 
   /// The lines that show one permission. A path-reading power adds a line for every protected
@@ -100,6 +128,8 @@ enum ControllerReviewText {
     if review.canRemember {
       offered.append(.trustVersion)
 
+      if !review.older.isEmpty { offered.append(.trustVersionKeepingOlder) }
+
       if review.isSigned { offered.append(.trustIdentity) }
     }
 
@@ -117,6 +147,12 @@ enum ControllerReviewText {
 
     if shown.contains(.trustVersion) {
       sentences.append("Trust This Version remembers them for this exact verified version.")
+    }
+
+    if shown.contains(.trustVersionKeepingOlder) {
+      sentences.append(
+        "Trust This Version also replaces the older versions listed, and a live run of one ends. "
+          + "Clear the box to keep them.")
     }
 
     if shown.contains(.trustIdentity) {

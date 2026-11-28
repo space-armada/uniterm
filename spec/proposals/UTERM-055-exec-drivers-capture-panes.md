@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-22
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -177,7 +177,7 @@ capture has none of. Converged in 1 pass.
 
 Original question:
 
-M1 must not invent a permanent contract, as UTERM-028 settled its version 5 JSON for the same reason. The frames need
+M1 must not invent a permanent contract, as UTERM-028 settled its command frames' JSON for the same reason. The frames need
 these fields settled:
 
 - Capture: the target pane, which capture of content, pane, or full page, and which tab.
@@ -188,7 +188,8 @@ these fields settled:
 - Where the reason kind goes. The exec error frame carries only `code` and `message` today.
 
 Candidates: mirror the ScriptWire capture calls' fields one for one, so both transports name the same things, or give
-the exec frames their own field set in the version 5 style.
+the exec frames their own field set in the style of UTERM-028's command frames.
+Amended 2026-11-27; see Decision Log.
 
 Decision: the exec frames are settled here as concrete JSON, in the style of UTERM-028's command frames. Their chunk
 keys are the exec spelling of every byte chunk, so UTERM-019's browser read-result uses them on the exec wire too.
@@ -444,6 +445,10 @@ Waits for UTERM-063 M2, for UTERM-028 M1, and for UTERM-054 M2, M3, and M5. M5 b
 - 2026-11-26: UTERM-054 settled its read-scope question: a capture leaves out or refuses what the caller may not read.
   M1 no longer waits on an unsettled bug, only on UTERM-054 M5, which builds the rule. The risk that M1 waits on a bug
   no proposal schedules became a risk on that rule.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. "The frames' fields" said UTERM-028 "settled its
+  version 5 JSON" and offered "their own field set in the version 5 style". There is no exec version 5, since the exec
+  wire stays at 0 and UTERM-028's command frames land in place. Both phrases now name UTERM-028's command frames. The
+  rest of the proposal was read and already says the frames land in place at version 0.
 
 ## References
 

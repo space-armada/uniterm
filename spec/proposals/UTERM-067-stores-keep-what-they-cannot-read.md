@@ -1,8 +1,8 @@
 # UTERM-067: Stores Keep What They Cannot Read
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-26
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -301,23 +301,58 @@ None.
 
 ### M1: Every store checked against ADR-18
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Every store a build writes for itself and reads back is listed, found from the code
 - Each store's result against ADR-18 P1 to P5 and C1 is recorded in the As built block, with what it would take to
   meet the ADR
 - Each store that falls short and is not a trust store has a proposal filed, or is recorded as meeting C1
 
+**As built:**
+
+Found by searching `Sources/`, `App/`, and `Helpers/` for Application Support and Caches paths, `UserDefaults`,
+atomic writes, Keychain, bookmarks, and archivers. A store is a file or key a build writes for itself and reads in a
+later launch. Results are P1 to P5, then the fix.
+
+| Store | Result | To meet ADR-18 |
+|---|---|---|
+| Controller trust: `controllers/policy.json`, `files.json` | P1 falls short, since one entry fails the file. P2 falls short, since an unreadable file moves aside and the aside copies stop at a number. P3 and P4 meet, since the reader is strict. P5 meets only for a moved-aside file | M2 of this proposal |
+| Layout: `uniterm/layout.json`, with `layout.lock`, `launch.marker`, `layout.aside-N.json` | Applet payloads meet P1 to P5 through the verbatim path. A newer schema version moves the whole file aside. ADR-06 bumps the version for an additive change, such as a new node kind, so only the panes nested in a new node depend on it. That falls short of P1 for the other windows, except where C1 applies, and UTERM-071 holds the question open. An unknown node kind, or any node that fails a check, moves the whole file aside, which falls short of P1. Aside copies stop at five, which falls short of P2. A pane control, an exec field, or a window member this build does not hold is dropped on the next save, which falls short of P2 and P4, with no sign, which falls short of P5. P3 meets | UTERM-071 |
+| Applet payloads inside the layout: terminal tabs, REPL history, browser tabs, viewer records, map documents | Meet P1 to P5. An unknown type, a newer version, or an unreadable description becomes a placeholder pane that keeps its exact bytes and says so | None |
+| Browser HSTS list: `uniterm/Browser/hsts.json` | P1 falls short, since one bad entry empties the list. P2 falls short, since the next change overwrites the file. A version other than 1 leaves the file untouched, which meets P2. P4 falls short, since `Codable` drops unknown keys. P5 falls short. P3 meets | UTERM-072 |
+| Settings in `UserDefaults`: appearance, search engine, script-file mode, status bar, palette | Meets. Each key is one entry. An invalid value falls back in memory and the stored value stays. The Settings window and a status notice show an invalid value | None |
+| Open With choices: the `openWithChoices` key | P1 to P4 meet. Each entry reads alone, and a save writes back every other entry as stored. P5 falls short: `choices()` drops a value that is not a string, so the chooser can neither show nor clear it | UTERM-073 |
+| Terminal scrollback: `uniterm/terminal/scrollback/<id>.txt` | Meets. Each file stands alone and holds plain text, and a restore reads it once and deletes it by design, so P2 does not apply to the file. The sweep of files older than 30 days leaves a layout kept aside past 30 days naming a file that is gone. That is a gap in how long a kept-aside layout stays usable, not in this store, and UTERM-071's question on kept-aside copies holds it | None, see UTERM-071 |
+| Signing keys in the login Keychain | Meets. Each key is one item. A bad item errors for that key alone, and uniterm never replaces one | None |
+| Terminal config `uniterm/terminal/ghostty-<pid>.conf`, sent content `uniterm/sent/`, socket folder `uniterm/run/`, controller runs under `Caches/dev.uniterm.app/controller-runs` | Not stores. Each is written by a running instance for itself, regenerated or deleted when its instance ends, and never read by a later build | None |
+| WebKit website data | Owned by WebKit, not by uniterm | None |
+| Map command pins, held in the closed-pane undo stack | Not a store. `LayoutCodec` never writes the undo-only part of a description, so it lives in memory | None |
+| Signature files `controller.json.sig` and `<script>.sig`, and files a viewer saves | Not stores. A user's command or save makes each one, and it is a document with its own format | None |
+
+The trust stores, the layout file, the HSTS list, and Open With are the stores that fall short. UTERM-071, UTERM-072,
+and UTERM-073 are filed as drafts, one per store, since their fixes touch different readers.
+
+ADR-18's guarantee starts at version 1, so none of these stores breaks it today. The drafts bring the stores in line
+before then, as "Every store is checked" asks. None is required before version 1. UTERM-068 will add a rules
+store and a subscriptions store. Each follows ADR-18 from its first version.
+
+After M2: `files.json` is retired, and the trust store meets P1, P3, P4, and P5 for each entry. The whole-file aside copies
+of `policy.json` still stop at five, which is the open ADR-18 P2 question UTERM-071 holds for the layout file. The
+`retired` folder is written and never read back, so it is not a store.
+
+M2 has no dependency on either draft.
+
 ### M2: The trust stores keep what they cannot read
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - An approval with an unknown permission kind, an unknown selector kind, an unknown artifact kind, or an unknown edition
   grants nothing, and every other approval in the file still applies
 - An approval with one unreadable scope grants none of its scopes
 - A save from this build writes every kept entry back byte for byte, and a newer build reads it again
 - No file is moved aside or left unwritable because of one entry this build cannot read
-- A file this build cannot read as a whole, such as one that is not JSON, still grants nothing and is kept aside
+- A file this build cannot read as a whole, such as one that is not JSON or holds bytes that are not UTF-8 outside
+  every entry, still grants nothing and is kept aside. Amended 2026-11-27; see Decision Log.
 - The Controllers & Permissions window shows the count of kept entries
 - A `policy.json` at an older format and any `files.json` are set aside with a notice that says each controller and
   script is approved again once. The new file starts empty
@@ -329,14 +364,16 @@ None.
 - A key repeated inside one entry, at any depth within it, makes only that entry one this build cannot read. It is
   written back byte for byte, and the reader still finds where the next entry starts. A key repeated at the top of the
   file, or invalid JSON, sets the whole file aside
-- Nesting past the reader's depth bound, an escaped NUL, and an unpaired surrogate inside one entry each have one
-  pinned behavior, with a fixture. Each costs only that entry, unless the As built block records why it covers the
-  whole file
+- Nesting past the reader's depth bound, an escaped NUL, an unpaired surrogate, a raw control byte, an unknown escape
+  letter, a short `\u` escape, and a byte that is not UTF-8 inside one entry each have one pinned behavior, with a
+  fixture. Each costs only that entry, unless the As built block records why it covers the whole file. Amended
+  2026-11-27; see Decision Log.
 - The new format number is above every number an earlier build wrote, UTERM-066's included, so no earlier build with
   a strict reader moves the new file aside for an unknown member
 - Setting an old `policy.json` or a `files.json` aside never prunes an earlier copy of an old file set aside, and
   writes an empty new-format file at once, so two builds never keep setting aside each other's files
-- A UTERM-032 input-folder store, when one exists, is set aside like `files.json`
+- The store retires any earlier store it is given the name of, and `files` is the only one any build wrote. Amended
+  2026-11-27; see Decision Log.
 - The notice that every approval is given again once is shown once, not each time an older build's `files.json` is
   set aside
 - Trust folding several readable entries for one unsigned script's digest keeps one defined path
@@ -362,6 +399,59 @@ None.
   either row
 - The file's sort order breaks ties between entries that share a selector, so one set of entries has one spelling
 - An entry this build cannot read is never offered as the nearest match for a run, even when its selector parses
+
+**As built:**
+
+The format is 3, above UTERM-063's 2 and the 2 UTERM-066 planned. The format 3 file holds every approval. Each entry
+names its artifact kind, and a version approval names what it is a version of. `files.json` is gone as a store.
+
+The reader has two layers. A scanner checks the grammar of the whole file and returns the byte range of each member and
+each entry. The strict JSON reader then reads one entry's own bytes. Anything the strict reader refuses costs that one
+entry. The scanner refuses only what hides where entries begin and end. Those cases set the whole file aside. A string
+ends at its quote, and a backslash hides the byte after it, so the scanner takes a raw control byte, an unknown escape
+letter, a short `\u` escape, and a byte that is not UTF-8 inside a string. Nesting past the depth bound, an escaped NUL,
+an unpaired surrogate, a leading zero, a key repeated at any depth, and each of those string faults cost only their
+entry. Each has a fixture, and a nesting of 20,000 levels is one of them. The scan walks containers with its own stack,
+so that depth cannot exhaust the call stack.
+
+The scanner works on bytes. The strict reader checks that each entry's own bytes are UTF-8. The reader checks the bytes
+outside every entry, such as a top-level key or member, and a file that opens with a byte order mark still fails the
+scan. Either sets the whole file aside. A kept entry that is not UTF-8 is written back exactly, since the write path
+holds bytes. A differential test in the fuzz suite generates valid files and checks that each range the scanner reports
+is exactly the value written, that the strict reader parses it whole, and that only commas and white space separate the
+ranges. It guards the two tokenizers against drifting apart. They are not merged, since a tolerant mode inside the
+strict reader would loosen the strict half of the trust boundary.
+
+Choices the checks did not fix:
+
+- A file's top-level members that this build does not know are written back as read, after `policies`, as well as being
+  allowed. ADR-18 P2 asks for it.
+- Kept entries sort beside the approvals that share their selector. The sort reads the selector's strings from an entry
+  when it has them, grants nothing from them, and breaks ties by the entry's own bytes.
+- An earlier store's files, and an older `policy.json`, move into a `retired` folder under the store's folder. Nothing
+  there is ever pruned or replaced, and `policy.json`'s kept-aside copies stay at five. The cap stays because the
+  bullets of M2 presuppose that copies of a whole-file fault continue. It is an open ADR-18 P2 question that the layout
+  file shares, and UTERM-071 holds it for both. A marker file there keeps the notice that every approval is given
+  again once to a single showing.
+- The store retires any earlier store it is told the name of. `files` is the only earlier store any build wrote, so
+  it is the default. UTERM-032 now keeps input-folder approvals in `policy.json`, so no build should create a store
+  of its own for them. A build that ever writes another store must add its name.
+- Trust folds every readable entry for the selector into one. The folded entry takes the trusted run's path, so
+  several entries for one unsigned digest end with one defined path.
+- The prompt's replace choice is a box under the detail, on by default. Clearing it sends the keep-both answer. The
+  buttons stayed as they were, since a signed controller's row has no room for another.
+- Trust replaces only the approvals the prompt named. A review that named none removes nothing, and a named approval
+  that is already gone is absent. An approval added after the prompt was built stays.
+- A path or ID that the reader would refuse as a `versionOf`, such as one with a control character or past 4096 bytes,
+  is not stored. The approval is saved without it and still reads and covers. One function holds the rule for the
+  writer and the reader.
+- "No per-entry setup" is proved by a test that counts date-parser setups, which stay at one however many entries a
+  read holds, and none for the plain spelling. The wall-clock test is a coarse guard.
+- Reading 8,500 approvals, 3.8 MiB, takes about 110 ms in a one-off release measurement and about a second in a debug build. The timed
+  test allows 3 s so a debug run passes. A parse of the approval time costs 25 microseconds with the date formatter, so
+  the plain spelling uniterm writes is checked by hand, and any other spelling still goes to the formatter.
+
+The Decision Log has the amendments to UTERM-066 and the guesses above.
 
 ## Decision Log
 
@@ -456,6 +546,48 @@ None.
   UTERM-063, and UTERM-066 are amended to match, and UTERM-004 and UTERM-021 carry "Superseded in part by UTERM-067"
   markers. Not scheduled.
 - 2026-11-26: Scheduled as UTERM-067 M1-M2 in queue.md.
+- 2026-11-27: M1 done. UTERM-071 for the layout file, UTERM-072 for the HSTS list, and UTERM-073 for Open With are
+  filed as drafts, one per store, since each has its own reader. (run best guess)
+- 2026-11-27: A newer layout schema version is recorded as falling short of P1 except where C1 applies, since ADR-06
+  bumps the version for additive changes. UTERM-071 holds the question. The first draft of this entry said it met C1,
+  which contradicted ADR-06. (run best guess)
+- 2026-11-27: The settings keys are recorded as meeting ADR-18, since each key is one entry, an invalid value falls back
+  in memory, and the Settings window shows it. (run best guess)
+- 2026-11-27: Scrollback is recorded as meeting ADR-18, since a file is read once and deleted by design. The effect on
+  a layout kept aside past 30 days goes to UTERM-071. (run best guess)
+- 2026-11-27: M2 done. Guesses the run made: the format is 3. An entry's fields are `artifact` and an optional
+  `versionOf`, which only a version approval may carry. A `retired` folder takes every earlier store, with a marker for
+  the one-time notice. The store retires `files` only, since UTERM-032's store has no name. Unknown top-level members
+  are kept as written. Non-UTF-8 bytes set the whole file aside. The replace choice is a box in Pending Requests. The
+  window's line reads "This uniterm cannot read N approvals in its policy file, so they do not apply here. A newer
+  uniterm may read them." (run best guess)
+- 2026-11-27: The M2 bullet "A UTERM-032 input-folder store, when one exists, is set aside like `files.json`" is met by
+  the mechanism only. The store retires any name it is given. `files` is the only earlier store any build wrote, and
+  UTERM-032 keeps folder approvals in `policy.json`, so a build that ever writes another store must add its name.
+  (run best guess)
+- 2026-11-27: Row review. A raw control byte, an unknown escape letter, and a short `\u` escape inside a string no
+  longer set the whole file aside, since none hides where the string ends. The scanner now judges boundaries only, and
+  the strict reader refuses each one in the entry's own bytes, so the entry is kept. This follows "Every entry this
+  build cannot read is kept alike" and ADR-18 P1. (run best guess)
+- 2026-11-27: Row review. Bytes that are not UTF-8 inside one entry cost only that entry. Such a byte is at least 0x80,
+  so it is never a quote, brace, bracket, or comma, and cannot hide a boundary. The up-front whole-file check is gone.
+  The strict reader checks each entry, and the bytes outside every entry are checked, so a top-level key or member that
+  is not UTF-8 still sets the file aside. The M2 As built text said before: "Those cases, and non-UTF-8 bytes
+  anywhere, set the whole file aside." (run best guess)
+- 2026-11-27: Row review. M2's bullet "Nesting past the reader's depth bound, an escaped NUL, and an unpaired surrogate
+  inside one entry each have one pinned behavior, with a fixture" gained the control byte, the unknown escape, the short
+  `\u` escape, and the non-UTF-8 byte. Its bullet "A file this build cannot read as a whole, such as one that is not
+  JSON, still grants nothing and is kept aside" gained the non-UTF-8 bytes outside every entry. (run best guess)
+- 2026-11-27: Row review. M2 bullet "A UTERM-032 input-folder store, when one exists, is set aside like `files.json`"
+  was narrowed to what was built: the store retires any earlier store it is given the name of, and `files` is the only
+  one any build wrote. UTERM-032 keeps folder approvals in `policy.json`, so no input-folder store exists to retire.
+  The earlier entry on this bullet says the same. (run best guess)
+- 2026-11-27: Row review. The whole-file aside copies of `policy.json` stay capped at five. M1 said the trust stores
+  fall short of P2 because the copies stop at a number, and named M2 as the fix. M2's bullets presuppose that the
+  copies continue, so the cap stays. It is an open ADR-18 P2 question, shared with the layout file, and UTERM-071's
+  question on kept-aside copies now covers both. M1's As built row has an "After M2" note. (run best guess)
+- 2026-11-27: UTERM-066's four mentions of format 2 for the policy store were amended to UTERM-067's format 3, since
+  format 2 belongs to UTERM-063 and every entry now names its kind. (run best guess)
 
 ## References
 

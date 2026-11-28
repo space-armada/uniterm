@@ -220,8 +220,8 @@ every layout.
 
 ### Version skew
 
-Decision: every contract this proposal changes ships in one app bundle with its peers, or is refused by version.
-(autonomous)
+Decision: every contract this proposal changes ships in one app bundle with its peers, or is refused by name.
+(autonomous) Amended 2026-11-27; see Decision Log.
 
 - ScriptWire, between the `uniterm` command and the app, gains the descriptor message in place, since ScriptWire is at
   0 under UTERM-063. A mismatched command is refused by name, and a swapped bundle is caught by its identity check.
@@ -425,6 +425,9 @@ None.
     and the M2 and M3 checks that named a minor, a version 1 presenter, or a new protocol version.
   - Open: UTERM-063 gives a changed permission no way to say which edition a script needs, so a script that wants
     PDF inputs cannot declare it. UTERM-063's "Permissions carry no version" records that as undone.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. "Version skew" opened with "every contract this
+  proposal changes ships in one app bundle with its peers, or is refused by version". Nothing is refused by version at
+  0, so it now says "refused by name". The rest of the proposal was read and already lands its changes in place.
 
 ## References
 

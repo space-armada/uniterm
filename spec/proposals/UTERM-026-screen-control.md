@@ -291,8 +291,8 @@ window. And each new kind's skew in both directions.
 Decision: noun-first kinds and verb-noun calls, as clipboard reads and writes pair them today. Packages cannot declare
 either kind. (autonomous)
 
-- The kinds are `:window-open` and `:window-placement`, each named by kind alone and at edition 0. "Pane zoom" adds `:pane-zoom` under the same
-  rules, and every skew line below covers all three kinds.
+- The kinds are `:window-open` and `:window-placement`, each named by kind alone. "Pane zoom" adds `:pane-zoom` under
+  the same rules, and every skew line below covers all three kinds. Amended 2026-11-27; see Decision Log.
 - `(uniterm/open-window layout)` opens a window holding only new panes, on a display that is not the audience's. It
   returns the window and pane references.
 - `(uniterm/place-window)` moves the caller's source window to the audience display. It takes no options. The host
@@ -311,10 +311,9 @@ either kind. (autonomous)
 
 Version skew:
 
-- The helper and the app run no call when their versions differ: at ScriptWire's hello, or at the helper's begin once
-  UTERM-056 has landed. ScriptWire is at 0 under UTERM-063, so the added `:window` field lands in place after UTERM-063
-  M2, with no new version. An older program's message is read with its old meaning or refused by name. Amended
-  2026-11-27; see Decision Log.
+- ScriptWire is at 0 under UTERM-063, so the added `:window` field lands in place after UTERM-063 M2, with no new
+  version. An older program's message is read with its old meaning or refused by name, and a replaced helper is refused
+  by the identity check. Amended 2026-11-27; see Decision Log.
 - An older build refuses a declared file that names either kind, before any effect.
 - An approval of either kind is kept unread by a build that does not know it, and every other approval keeps working,
   as UTERM-024 "Stores that older builds read" states under UTERM-067. Amended 2026-11-26; see Decision Log.
@@ -676,6 +675,11 @@ Amended 2026-11-20; see Decision Log.
   - Amended "Names and version skew". Its skew line said "The added `:window` field is a new ScriptWire version, per
     ADR-13 P1, and a connection on an older version does not get it." Its kinds were "each at version 1".
   - Amended "Pane zoom". It said "The kind is `:pane-zoom`, version 1".
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. "Names and version skew" said the new kinds are
+  "each named by kind alone and at edition 0", and that "the helper and the app run no call when their versions differ:
+  at ScriptWire's hello, or at the helper's begin once UTERM-056 has landed". The kinds carry no version, and the hello
+  cannot tell builds apart at 0. The text now says the kinds are named by kind alone, and that an older program is
+  refused by name at its first changed message.
 
 ## References
 
