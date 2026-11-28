@@ -1,7 +1,7 @@
 # The reaper's log test reads no log entries in some full package runs
 
 **Status:** open
-**Validation:** not confirmed; the failure came only in subagent runs, and no run of the coordinator's reproduced it
+**Validation:** confirmed in one run; the unified log quarantined the test process 30 seconds into a failing run
 
 ## Observed
 
@@ -26,16 +26,27 @@ Sightings, all on 2026-11-27, local Pacific time, during one `/work-queue` run:
 | About 14:00, twice | A subagent | Passed |
 | 14:14 and 14:34 | The coordinator | Passed |
 | About 15:05 | A subagent, through a shell with the sandbox off | Failed |
+| About 18:10 | A subagent | Failed |
+| 18:14 | The coordinator | Failed |
 
 Four earlier full runs by the first subagent passed. The test's code did not change that day. The changes under test
 were wire versions and the controller trust store, which the test does not touch.
 
 ## Cause
 
-Unknown. The test reads the unified log store for its own process, through `OwnLog.entries`, and waits until the
+The unified log quarantines the test process for high logging volume, and drops its records. In the 18:14 run,
+`log show` for the run's window has this line from the `xctest` process at 18:15:46: "QUARANTINED DUE TO HIGH LOGGING
+VOLUME". The reaper test ran after that and read no entries. This is the first failure in a run the coordinator
+started, so who starts the run does not matter. The earlier sightings were not checked this way.
+
+The 18:10 and 18:14 runs came after suspend and resume for controllers was built, which adds tests and log lines. That
+may have pushed the volume over the limit more often. Two runs earlier the same evening, at 17:21 and 17:55, passed
+with most of that work in place.
+
+The test reads the unified log store for its own process, through `OwnLog.entries`, and waits until the
 entry for helper 4405 shows. An empty read means the store gave back nothing for the process in time.
 
-Leads, none checked:
+Earlier leads:
 
 - The unified log can quarantine a process for high logging volume, and drop its records. That happened to the app in
   a UI test the same day. See `20261127-input-records-lost-to-log-quarantine.md`. A full package run logs a lot before
@@ -48,13 +59,17 @@ Leads, none checked:
 ## Repro
 
 No reliable one. Run `caffeinate -dimsu make test-package` several times. Expected: the test passes. Actual: in
-5 of about 14 full runs that day, it failed as above.
+7 of about 19 full runs that day, it failed as above.
 
 To check the quarantine lead, run `log show --info --debug` for the failing run's window, with a predicate for
 `QUARANTINED` and the test process.
 
 ## Fix
 
-Not known until the cause is. If the log store drops the entries, the test's doc already says the log line is the
-contract and that it needs a readable store. The fix would then need a design call: read the entries another way, or
-have the test say the store was unreadable and skip.
+The log store drops the entries. The test's doc already says the log line is the contract and that it needs a readable
+store. The fix needs a design call. The options:
+
+- Find what logs so much in a full package run, and cut it. This fixes the cause, and it also protects the app's own
+  records in UI tests.
+- Read the entries another way.
+- Have the test say the store was unreadable and skip.
