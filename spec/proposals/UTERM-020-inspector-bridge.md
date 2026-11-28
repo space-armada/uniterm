@@ -333,10 +333,10 @@ medium likelihood and high impact; the user approved replacing the earlier guara
 
 ### Versioned contracts
 
-Decision: the new commands, event kinds, result references, and six permission meanings use UTERM-019's versioned
-browser schema, descriptor, and API contracts. Unknown permissions never inherit an older approval. Stored policies
-cannot authorize a meaning they did not approve. Result references are opaque, ephemeral, and valid only in their
-own run and session; they are not persisted data formats.
+Decision: the new commands, event kinds, result references, and six permission meanings use UTERM-019's browser schema,
+descriptor, and API contracts, which stay at version 0. Unknown permissions never inherit an older approval. Stored
+policies cannot authorize a meaning they did not approve. Result references are opaque, ephemeral, and valid only in
+their own run and session; they are not persisted data formats.
 
 The app and its command/helper can skew during an in-place bundle update. An old helper against a new app, or a new
 helper against an old app, is refused by name before effects, since a wire, API, or schema this build does not know is
@@ -623,7 +623,9 @@ whether to drop it. No drop is authorized by this review.
 - 2026-11-27: Brought in line with UTERM-063 at the user's direction. The skew paragraph said an old helper or app
   "refuses an unsupported wire/API/schema or permission version before effects", and that a wire change "takes the
   existing version handshake and rejection rule in both directions". External versions stay at 0 and carry no
-  handshake offer, so it now says an unknown name is refused by name and a changed meaning takes a new name.
+  handshake offer, so it now says an unknown name is refused by name and a changed meaning takes a new name. The
+  "Versioned contracts" decision said the new contracts "use UTERM-019's versioned browser schema, descriptor, and API
+  contracts". It now says UTERM-019's contracts, which stay at version 0.
 
 ## References
 

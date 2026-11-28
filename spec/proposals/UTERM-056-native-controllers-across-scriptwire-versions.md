@@ -3,8 +3,9 @@
 **Status:** deferred
 **Created:** 2026-11-23
 **Updated:** 2026-11-27
-**Revisit:** when uniterm's maintainers declare ScriptWire stable, redesign the version agreement, the per-version
-replies, and the floor for version 1, and decide whether a refused native controller is named
+**Revisit:** when uniterm's maintainers declare ScriptWire stable. The floor is version 1, the first declared version.
+Redesign the version agreement and the per-version replies then, and decide whether a refused native controller is
+named
 
 ## Dependencies
 
@@ -47,7 +48,8 @@ None. ADR-13's ScriptWire line needs an amendment instead, per "What a native co
 Decide what happens to a native controller when ScriptWire's version changes after uniterm's maintainers declare it
 version 1. ScriptWire is at 0 now, and every change lands in place. A native controller built before a change is refused
 by name and must be rebuilt, per UTERM-063. That is acceptable while only the user's own controllers exist. It is not
-acceptable once ScriptWire is declared stable. This proposal waits for that declaration. Amended 2026-11-27; see Decision Log.
+acceptable once ScriptWire is declared stable. This proposal waits for that declaration. Amended 2026-11-27; see
+Decision Log.
 
 ## Motivation
 
@@ -85,7 +87,7 @@ at all.
 
 Decision: an outside wire under ADR-13, on a subset of ScriptWire, from the declaration on. After ScriptWire is declared
 version 1, the app accepts older declared versions of the messages a program that is not uniterm's own command uses, and
-the bundled command keeps exact match. (addition)
+the bundled command keeps exact match. Amended 2026-11-27; see Decision Log. (addition)
 
 - The subset is what such a program sends and receives: the hello, `begin`, requests with their values, and replies.
 - The command's own messages keep exact match: the controller, file, undeclared, open, and question begins, the REPL
@@ -108,8 +110,8 @@ offered, and the user kept the rule.
 ### The version floor
 
 Original question: which ScriptWire version is the oldest the app accepts from a program that is not its own command.
-The first draft named a pre-reset number. UTERM-063 removed those numbers, so the floor is redesigned at the
-declaration.
+Candidates were version 8, where native entries began; version 12, accepted when ADR-13 was adopted; version 14; and
+the version this proposal lands as. UTERM-063 has since reset every version to 0, so those numbers no longer exist.
 
 Decision: the floor is version 1, the first declared version. Amended 2026-11-27; see Decision Log. (autonomous)
 
@@ -127,7 +129,7 @@ Original question: how the two sides agree on a version. The client speaks first
 and checks the app's hello for its own version.
 
 Decision: after the declaration, the app answers with the lower of the two versions, and both sides then use it.
-(autonomous)
+Amended 2026-11-27; see Decision Log. (autonomous)
 
 - The hello's shape is unchanged. A client at or below the app's version sees its own number back.
 - A newer client reads the app's number. It continues if it speaks that version, and closes otherwise.
@@ -142,11 +144,11 @@ would serve only programs it starts, and goes stale if the app is replaced. Conv
 
 ### A value an older version cannot express
 
-Original question: what the app does when a reply, a failure kind, or an event for an older declared version holds
-something that version has no form for.
+Original question: what the app does when a reply, a failure kind, or an event for an older version holds something that
+version has no form for.
 
 Decision: after the declaration, the encoder refuses to write it, and the caller gets the failure the host already
-gives for a reply it cannot send. (autonomous)
+gives for a reply it cannot send. Amended 2026-11-27; see Decision Log. (autonomous)
 
 - The failure is `replyLost` after a command ran and `failed` for a plain answer. Its text names the version needed and
   says a retry at this version cannot succeed.
@@ -162,8 +164,8 @@ already in flight. Converged in 2 passes.
 
 ### What the user sees on a refused native controller
 
-Original question: after the declaration the app still refuses some programs: one below the floor, an old command that
-sends its own messages, and a newer program that cannot speak the app's version and closes. What the error names, what it tells the user to do,
+Original question: the app still refuses some programs: one below the floor, an old command that sends its own messages,
+and a newer program that cannot speak the app's version and closes. What the error names, what it tells the user to do,
 and whether the app reports the program that closes.
 
 Decision: the app gives each refused program the remedy that can work for it, and reports a newer program that closes
@@ -192,8 +194,8 @@ None.
 
 - **A ScriptWire change lands after the declaration and before this ships** — likelihood: low, impact: medium. Once
   ScriptWire is declared, a change needs a new version, and a native controller at the old one is refused until this
-  ships. Mitigation: the declaration waits on this proposal's design, so the cost is in front of the user when they
-  declare.
+  ships. Mitigation: per UTERM-063, each wire's negotiation is designed at its declaration, so the cost is in front of
+  the user when they declare.
 - **The floor and each accepted version are a published contract** — likelihood: high, impact: medium. This is a one-way
   door, since dropping a version breaks programs and needs its own proposal. Mitigation: the floor is a fixed number, 1,
   with no older form to carry, and each version's subset is fixed by recorded fixtures.
@@ -231,6 +233,8 @@ None.
 - A form spec key first accepted at a later version is refused at version 1, as a version 1 app refuses it
 - Nothing lands that lets an old connection in before replies are written for its version, so M1 and M2 ship together
 
+Amended 2026-11-27; see Decision Log.
+
 ### M2: Write replies for the connection's version
 
 **Status:** NOT STARTED
@@ -246,6 +250,8 @@ None.
 - A reply that gains a field at a later version is still written at version 1, without that field
 - The version 1 replies are recorded from version 1 behavior, and any older form that a change landing first needs is
   carried here
+
+Amended 2026-11-27; see Decision Log.
 
 ### M3: Say the right thing on a refusal
 
@@ -266,6 +272,8 @@ rebuild text, whatever else is built here.
 - The bundle's command is recognized after it is replaced on disk, by the full check and not the cached one
 - A program that closes after the hello for a reason other than its version gets text worded as possible, not certain
 
+Amended 2026-11-27; see Decision Log.
+
 ### M4: Document the subset and record its fixtures
 
 **Status:** NOT STARTED
@@ -278,6 +286,8 @@ rebuild text, whatever else is built here.
 - ADR-13's amendment is approved by the user, and covers reply contents and added fields, the ScriptWire line, and the
   floor named for each wire
 - The code agrees with the amended text
+
+Amended 2026-11-27; see Decision Log.
 
 ## Decision Log
 
@@ -334,7 +344,12 @@ rebuild text, whatever else is built here.
   versions 8 to 13 refused. It now names version 1 as the floor. The Impacts lines for UTERM-019 and UTERM-050 said a
   changed `:directory` "is a new ScriptWire version, and a version 14 connection keeps today's rule". They now say it
   lands in place at 0. The risks, M1, M2, and M4 name version 1 where they named 14. M3 says a program built at 0 is
-  refused by name.
+  refused by name. The first risk said "Accepted: the floor stays 14 whatever lands first". It now says each wire's
+  negotiation is designed at its declaration, per UTERM-063. The decisions "What a native controller's wire is", "How
+  the hello agrees on a version", and "A value an older version cannot express" now start at the declaration. Their
+  text said they applied now. The floor is stated once: version 1, the first declared version. The Revisit line said
+  the floor for version 1 is redesigned at the declaration. It now says the floor is fixed, and the version agreement
+  and the per-version replies are what the declaration revisits.
 
 ## References
 

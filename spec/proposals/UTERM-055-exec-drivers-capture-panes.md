@@ -177,8 +177,8 @@ capture has none of. Converged in 1 pass.
 
 Original question:
 
-M1 must not invent a permanent contract, as UTERM-028 settled its command frames' JSON for the same reason. The frames need
-these fields settled:
+M1 must not invent a permanent contract, as UTERM-028 settled its command frames' JSON for the same reason. The frames
+need these fields settled:
 
 - Capture: the target pane, which capture of content, pane, or full page, and which tab.
 - The capture reply: the handle, the byte size, whether the image was clamped, and its density.

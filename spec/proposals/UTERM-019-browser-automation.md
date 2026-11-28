@@ -324,8 +324,8 @@ capability returns a new applet code, `unsupported-capability`, carried on the e
   `:browser/events`, `:browser/run-script`, `:browser/inject-script`, `:browser/frames`, `:browser/dialogs`,
   `:browser/snapshot`, `:browser/pdf`, `:browser/find`, `:browser/page-settings`, `:browser/cookie-store`,
   `:browser/pointer-input`, and `:browser/key-input`.
-- A name never changes meaning. A dropped feature leaves the set. A rename adds one name and drops the other.
-  None of this bumps the browser command schema, which stays at 0.0. Together with UTERM-020, the set stays within 64 names, the
+- A name never changes meaning. A dropped feature leaves the set. A rename adds one name and drops the other. None of
+  this bumps the browser command schema, which stays at 0.0. Together with UTERM-020, the set stays within 64 names, the
   most fields a script record holds.
 - `unsupported-capability` comes back only for a capability missing from the set, and only when nothing ran. A listed
   capability that cannot run now returns `failed`, which also means nothing ran. A failure after an effect is
@@ -339,12 +339,12 @@ capability returns a new applet code, `unsupported-capability`, carried on the e
   that as an empty set. After uniterm's maintainers declare the schema stable at 1.0, new commands and new reply keys
   bump the minor, never the major, per UTERM-007 M5. Amended 2026-11-27; see Decision Log.
 
-Rationale: an unknown command already maps to `:bad-argument`, so the open question's premise, that a script cannot
-tell "this build cannot" from "no such command", does not hold. A new wire kind would buy a distinction no current
-caller needs, at the cost of a change to ScriptWire. A rename that changed a schema's major version would break every
-browser script, including scripts that never check capabilities. UTERM-020 can fail a capability the startup set lists, so the error kind follows membership in the set. Judge after 3 passes, on budget. The critic moved
-from bare error reuse, to a symbol set with schema bumps, to this record. Each move rested on code facts the judge
-re-checked.
+Rationale: an unknown command already maps to `:bad-argument`, so the open question's premise, that a script cannot tell
+"this build cannot" from "no such command", does not hold. A new wire kind would buy a distinction no current caller
+needs, at the cost of a change to ScriptWire. A rename that changed a schema's major version would break every browser
+script, including scripts that never check capabilities. UTERM-020 can fail a capability the startup set lists, so the
+error kind follows membership in the set. Judge after 3 passes, on budget. The critic moved from bare error reuse, to a
+symbol set with schema bumps, to this record. Each move rested on code facts the judge re-checked.
 
 ### Permission descriptor format
 
@@ -370,7 +370,8 @@ it, and the user is asked again. Amended 2026-11-27; see Decision Log.
   made before that does not cover them, and the user is asked again.
 - Skew: the descriptor format is 0 and does not bump. A build that lacks a permission name refuses the descriptor at
   load, by name. A newer app asks again for a permission that grew since the approval. An older app reading a newer
-  policy file authorizes nothing, per UTERM-004. No deploy order is needed.
+  policy file grants nothing from an entry it cannot read, keeps that entry byte for byte, and counts it. Every other
+  approval keeps working, per UTERM-004 and UTERM-067. No deploy order is needed.
 - Skew for exec drivers: a deferred reply reaches a driver matched by request ID, as layout replies already do. An old
   driver never sends the new commands. A new driver on an old app gets `unknown-command`, and nothing runs. The
   `unsupported-capability` code reaches a driver as a new code string. A driver that does not know it treats it as a
@@ -573,9 +574,10 @@ Which helpers ship, and whether they live in `uniterm` or a separate built-in mo
 Decision: a built-in module, `uniterm/browser`, that follows `uniterm/api-version`. Its helpers read through an
 explicit reader value the script holds. (autonomous)
 
-- `(browser/events pane tab schema-version)` returns a reader. It records the buffer's head cursor when it is made, so
-  a script makes it before it navigates or runs a script, and no event between the action and the first read is
-  missed. The reader carries the caller's browser schema version, and every helper call sends it.
+- `(browser/events pane tab)` returns a reader. It records the buffer's head cursor when it is made, so a script makes
+  it before it navigates or runs a script, and no event between the action and the first read is missed. The reader
+  takes no version argument and carries none. A changed event shape takes a new event name. The old name is retired and
+  refused by name, so an old script never gets a new shape under an old name.
 - `wait-for` takes a reader, an event kind, and a deadline. `each-event` takes a reader, a handler, and a stop rule.
   `await-result` takes a reader, a handle, and a deadline. It waits for the handle's completion event, reads every
   chunk, and returns the whole value. `capabilities` returns the available set, and reads `:bad-argument` as empty.
@@ -592,12 +594,13 @@ explicit reader value the script holds. (autonomous)
 Rationale: helpers that skip a dialog would stall on the exact `confirm()` that "Commands that wait" was settled to
 handle. A start point taken when the helper is called misses a load that finishes before the first read. A start
 point at the oldest event returns an earlier load's events. A hidden cursor shared per tab would let one helper eat
-another's events, and would be hidden state the script cannot see. Pinning the build's schema version inside the
-helpers would bypass the version check, so a changed event shape would reach an old script with no refusal. A
+another's events, and would be hidden state the script cannot see. The schema is frozen at 0.0, so a
+version carried by the helpers could refuse nothing. Retiring and refusing the old event name by name keeps an old
+script from reading a changed shape. A
 separate module keeps UTERM-020's console and network helpers, and later applets' helpers, out of `uniterm`. A second
 version number would guard no skew, since the helpers and the C functions ship in one binary. Blocking wrappers for
 each handle command would hide the handle, and an interrupted wrapper would leave a slot nobody can free. Converged
-in 1 pass.
+in 1 pass. Amended 2026-11-27; see Decision Log.
 
 ### Reach of the run-end cleanup
 
@@ -770,7 +773,7 @@ None.
   and renaming one breaks them. Mitigation: names are append-only and never change meaning, per "Capability names and
   the unavailable error". A dropped feature leaves the set, and a script that checks membership falls back.
 - **The descriptor rules ship from text no accepted document holds** — likelihood: medium, impact: medium. The
-  descriptor format is 0, so a later change lands in place and a signed package may need signing again. Mitigation:
+  descriptor format is 0, so a later change lands in place. Mitigation:
   UTERM-004 holds the rules, per "Who builds the permission descriptor rules". An unknown permission name refuses the
   whole descriptor by name, so an older package never reads under a new meaning.
 - **A controller's code can outlive its run through site storage** — likelihood: low, impact: high. The rebuild ends
@@ -1245,9 +1248,9 @@ Amended 2026-11-27; see Decision Log.
     "each (kind, version) has one meaning". All are rewritten around a descriptor that names each kind alone, at format
     0, with an internal edition per kind.
   - "Who builds descriptor format 2" is now "Who builds the permission descriptor rules". It said "format 2 is defined
-    in its owner, UTERM-004 ... UTERM-004 M6 builds it ... UTERM-005 M8 adds its two kinds at version 1", with "a version
-    on every permission, the (kind, version) table, the refusal rules, and reading format 1". It now says UTERM-004 holds
-    the rules at format 0 and each kind is added by name.
+    in its owner, UTERM-004 ... UTERM-004 M6 builds it ... UTERM-005 M8 adds its two kinds at version 1", with "a
+    version on every permission, the (kind, version) table, the refusal rules, and reading format 1". It now says
+    UTERM-004 holds the rules at format 0 and each kind is added by name.
   - "Capability names and the unavailable error": "None of this bumps the browser command schema's major version" now
     says the schema stays at 0.0. The line on bumping the minor now starts after the maintainers declare 1.0.
   - "How the app bounds browser reads in flight": it said "a member command at version 4" and "No meaning a version 4
@@ -1255,9 +1258,17 @@ Amended 2026-11-27; see Decision Log.
   - Risks: "Descriptor format 2 is a one-way door" became a risk on rules held by no accepted document. The result
     chunk risk said chunks "follow the browser command schema's append-only rule", and now says the schema's rules at
     0.0.
-  - M1: it said "A controller holding only browser read and browser navigation at version 1", "join format 2 as UTERM-004
-    M6 builds it. An unknown version of them refuses the whole descriptor at load", and "Browser script with browser
-    read at version 1 still runs run-script". M2's list-frames check said "browser read at its widened edition".
+  - "Helper names": `(browser/events pane tab schema-version)` took the caller's browser schema version, and every
+    helper call sent it. Its Rationale said that pinning the build's schema version inside the helpers "would bypass the
+    version check". The schema is frozen at 0.0, so that check can refuse nothing. The helper now takes no version. A
+    changed event shape takes a new event name, and the old name is retired and refused by name.
+  - "Permissions", skew bullet: "An older app reading a newer policy file authorizes nothing". It now says the older
+    app grants nothing from an entry it cannot read and every other approval keeps working, per UTERM-067.
+  - The risk on descriptor rules said "a signed package may need signing again". UTERM-063 does not say so, and the
+    sentence is removed.
+  - M1: it said "A controller holding only browser read and browser navigation at version 1", "join format 2 as
+    UTERM-004 M6 builds it. An unknown version of them refuses the whole descriptor at load", and "Browser script with
+    browser read at version 1 still runs run-script". M2's list-frames check said "browser read at its widened edition".
 
 ## References
 

@@ -307,8 +307,8 @@ None.
 ## Risks
 
 - **An input file is a new approval contract** — likelihood: high, impact: medium. Users and tools would depend on how
-  it is declared and shown. Mitigation: the declaration is named by kind alone under UTERM-021, with no version, and the sheet shows the folder.
-  Amended 2026-11-27; see Decision Log.
+  it is declared and shown. Mitigation: the declaration is named by kind alone under UTERM-021, with no version, and the
+  sheet shows the folder. Amended 2026-11-27; see Decision Log.
 - **A user names a deck in too broad a folder, such as `~`** — likelihood: medium, impact: medium. Mitigation: the sheet
   shows the folder, UTERM-015's protected-location rule still applies, and the grant covers slide images only.
 - **A program-started run reuses a remembered folder** — likelihood: medium, impact: high. Any process can run

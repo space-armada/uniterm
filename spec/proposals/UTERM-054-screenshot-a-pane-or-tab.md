@@ -140,13 +140,15 @@ two are not skewed. A newer user script on an older app gets an unbound-symbol e
 
 - Exec drivers: this proposal changes no exec frame, and the exec wire stays at 0, so a driver on either side sees no
   difference. UTERM-055 adds exec capture in place at version 0. Amended 2026-11-22; see Decision Log.
-- New descriptor, old app: a descriptor that names the capture power is refused at load, as the descriptor reader refuses
-  every unknown kind. Amended 2026-11-27; see Decision Log. A controller that needs capture states it, and runs only on an app that knows it.
+- New descriptor, old app: a descriptor that names the capture power is refused at load, as the descriptor reader
+  refuses every unknown kind. A controller that needs capture states it, and runs only on an app that knows it. Amended
+  2026-11-27; see Decision Log.
 - Old descriptor, new app: a descriptor without the capture power gets none. A grant stored before the power existed
   covers none of it, under ADR-14 P10.
 - New policy file, old app: once the user approves the capture power, the policy file holds a kind the older app lacks.
-  An older uniterm then loads no policies, marks the file read-only, and remembers no trust until the user upgrades.
-  This is UTERM-004's designed behavior for every new kind, and UTERM-019 states the same direction. Accepted.
+  An older uniterm grants nothing from the entry it cannot read, keeps that entry byte for byte, and counts it. Every
+  other approval keeps working, per UTERM-067. This is UTERM-004's behavior for every new kind, and UTERM-019 states
+  the same direction. Accepted. Amended 2026-11-27; see Decision Log.
 
 ### How the terminal captures
 
@@ -274,15 +276,15 @@ type, its event buffer is per tab, and its handle cap is per tab. A terminal pan
 - A capture that only reads holds a pending reply under ADR-11, and the reply carries the handle once the PNG is ready.
   No completion event is needed. A capture that also copies to the clipboard has an effect, so it keeps the
   handle-plus-event shape.
-- Per-applet commands, such as `:terminal/capture`, each added to that applet's command schema in place, since schemas stay at 0.0 under UTERM-063. Amended
-  2026-11-27; see Decision Log.
-  Each applet then needs its own handle slot and event delivery, which the terminal lacks.
+- Per-applet commands, such as `:terminal/capture`, each added to that applet's command schema in place, since schemas
+  stay at 0.0 under UTERM-063. Amended 2026-11-27; see Decision Log. Each applet then needs its own handle slot and
+  event delivery, which the terminal lacks.
 - The browser keeps UTERM-019's per-tab snapshot, and every other applet uses a host-level command. Two shapes for one
   operation.
 
-Every candidate rides the existing `command` or `paneCommand` frame, or lands a new frame or call in place at version 0. See
-"Version skew". Amended 2026-11-27; see Decision Log. The PNG bytes read back in chunks under a byte type. UTERM-019's "Result encoding" defines that type,
-and it has not been built.
+Every candidate rides the existing `command` or `paneCommand` frame, or lands a new frame or call in place at version 0.
+See "Version skew". The PNG bytes read back in chunks under a byte type. UTERM-019's "Result encoding" defines that
+type, and it has not been built. Amended 2026-11-27; see Decision Log.
 
 Decision: capture is a host-level operation. The host owns the steps "Capture never blocks the main thread" gives it:
 the pending state, the time bound, cancel, the one-capture-per-pane rule, and PNG encoding. It calls the applet's
@@ -571,12 +573,13 @@ None.
 - **A program reads a sibling terminal tab** — likelihood: medium, impact: high.
   Mitigation: the terminal records each tab's owner, and a capture follows the tab-scope rule. See "A program's tab
   scope in a terminal pane".
-- **An older uniterm stops remembering trust after the user approves capture** — likelihood: low, impact: medium.
-  Accepted: an older app loads no policies from a file that holds a kind it lacks, and keeps the file read-only until the
-  user upgrades. This is UTERM-004's designed behavior for every new kind. See "Version skew".
+- **An older uniterm does not honor the capture approval** — likelihood: low, impact: low.
+  Accepted: an older app grants nothing from the entry for a kind it lacks, keeps that entry byte for byte, and counts
+  it. Every other approval keeps working, per UTERM-067. This is UTERM-004's behavior for every new kind. See "Version
+  skew". Amended 2026-11-27; see Decision Log.
 - **A native controller stops connecting after the capture calls ship** — likelihood: medium, impact: medium.
   Accepted: ScriptWire is at 0, so a native controller built against the earlier calls is refused by name and rebuilt.
-  Amended 2026-11-27; see Decision Log. See "Version skew".
+  See "Version skew". Amended 2026-11-27; see Decision Log.
 - **The capture error's reason kinds become published names** — likelihood: high, impact: low.
   Mitigation: programs switch on them, so they are append-only, and a test pins every existing name. A renamed reason
   is a new name beside the old one.
@@ -859,7 +862,10 @@ Lands before UTERM-019 M1 ships, and does not wait for M1 to M5 here.
   kind", per-applet capture commands are "added to that applet's command schema with a schema minor bump", and every
   candidate "waits for UTERM-028's version negotiation". There is no format 2, no schema bump, and no negotiation at 0.
   The text now says the descriptor reader refuses an unknown kind, a schema change lands in place at 0.0, and a new
-  frame or call lands in place at version 0.
+  frame or call lands in place at version 0. "Version skew" said an older uniterm "loads no policies, marks the file
+  read-only, and remembers no trust until the user upgrades". It now says the older app grants nothing from the entry
+  it cannot read, keeps it byte for byte, and counts it, and every other approval keeps working, per UTERM-067. The
+  risk on remembered trust said the same and is reworded, with its impact lowered from medium to low.
 
 ## References
 
