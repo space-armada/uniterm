@@ -1,6 +1,6 @@
 # UTERM-041: A Uniform Marker Slot for Every Tab
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-21
 **Updated:** 2026-11-27
 
@@ -345,12 +345,9 @@ granted owners. The chip is per tab, and the window knows the tab once it record
 same call carry it? Amended 2026-11-27; see Decision Log.
 
 Decision: the same call carries, beside the owner set, the tabs that hold a controller, with each controller's name as
-the host supplies it. The applet publishes a chip on those tabs. Chosen by the user on 2026-11-21, converged in 1
-pass. (addition)
-
-**Pending override:** the same call also carries the names of the exec drivers attached to the pane, so a driver's
-pane-level chip arrives in the same update. The user's 2026-11-26 choice puts a driver's chip at the pane level, and
-one update per control change keeps the markers from disagreeing. Recommended by the M2 run (autonomous).
+the host supplies it, and the names of the exec drivers attached to the pane. The applet publishes a chip on those
+tabs, and a driver's chip shows at the pane level. Chosen by the user on 2026-11-21, converged in 1 pass. The drivers'
+names were added by the user on 2026-11-27; see Decision Log. (addition)
 
 Rationale: one update per control change keeps the two markers from disagreeing for a frame.
 
@@ -864,6 +861,11 @@ None.
   2026-11-26 choice puts a driver's chip at the pane level, and a separate update would let the two chips disagree
   for a frame. The decision's text is the user's and stands. A `**Pending override:**` line records the call as
   built, for the user's answer. (autonomous, override pending)
+- 2026-11-27: The user chose to add the drivers' names to "How the host hands the chip down", as the more robust
+  option. The decision said: "the same call carries, beside the owner set, the tabs that hold a controller, with each
+  controller's name as the host supplies it. The applet publishes a chip on those tabs." It now also carries the names
+  of the exec drivers attached to the pane, so every marker changes in one update. The pending override is resolved
+  and removed.
 
 ## References
 

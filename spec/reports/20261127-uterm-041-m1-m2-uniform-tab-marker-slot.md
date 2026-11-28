@@ -249,3 +249,14 @@ The alternative was making the bar's geometry public.
   - 21:20: the same test passed with `UNITERM_WHEEL_TRACE=1`, including the reselect step.
   - The 21:08 failure stays unresolved. Its cause is not known, and the passing run does not prove a fix. It passed
     in the 20:17 and 21:02 runs and in the full suite.
+
+### Finishing the row
+
+- On 2026-11-27 the user answered the pending override on "How the host hands the chip down". They chose the more
+  robust option: the same call also carries the names of the exec drivers attached to the pane. The decision is
+  amended with the user's attribution. A Decision Log entry quotes the old text, and the override line is gone.
+- The first time, the run asked this as an even choice. The ranking had already settled it, since the decision's own
+  rationale is one update per control change. The user had to ask why the robust option was not the plain
+  recommendation.
+- UTERM-041 is `implemented` in the proposal and in the index. Its row moved from `queue.md` to the end of
+  `history.md`. `proposals.py check` printed `[]`.
