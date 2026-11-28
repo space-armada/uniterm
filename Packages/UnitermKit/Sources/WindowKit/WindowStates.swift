@@ -13,6 +13,9 @@ public enum WindowStateKind: Int, CaseIterable, Comparable, Sendable {
   /// A program asked for permissions that the user has not answered.
   case pendingPermissions
 
+  /// uniterm has suspended at least one controller. A click lists them, each with Resume.
+  case suspendedControllers
+
   /// Work that outlives a closed pane is still running, as the applet lifecycle requires to be
   /// visible.
   case survivingWork
@@ -26,6 +29,7 @@ public enum WindowStateKind: Int, CaseIterable, Comparable, Sendable {
     switch self {
     case .layoutNotSaved: return "externaldrive.badge.xmark"
     case .pendingPermissions: return "lock.shield"
+    case .suspendedControllers: return "pause.circle"
     case .survivingWork: return "hourglass"
     }
   }
@@ -35,6 +39,7 @@ public enum WindowStateKind: Int, CaseIterable, Comparable, Sendable {
     switch self {
     case .layoutNotSaved: return "layout-not-saved"
     case .pendingPermissions: return "pending-permissions"
+    case .suspendedControllers: return "suspended-controllers"
     case .survivingWork: return "surviving-work"
     }
   }
@@ -44,6 +49,7 @@ public enum WindowStateKind: Int, CaseIterable, Comparable, Sendable {
   var command: CommandID? {
     switch self {
     case .pendingPermissions: return .showPendingRequests
+    case .suspendedControllers: return .showSuspendedControllers
     case .layoutNotSaved, .survivingWork: return nil
     }
   }

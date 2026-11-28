@@ -1366,6 +1366,81 @@ final class TerminalSessionIntegrationTests: XCTestCase {
       .flatMap { $0.value as? UnsafeMutableRawPointer }
   }
 
+  /// A program the terminal starts must lead a process group of its own. A REPL's helper is such a
+  /// program, and a group stop sent to a group it shared with this process would stop the app.
+  /// The program is stopped and continued through the guarded group call, so the test also proves
+  /// the group holds what it started.
+  func testAProgramStartedInATerminalLeadsItsOwnGroupAndStopsAsOne() async throws {
+    let session = try startProgram(["/bin/sh", "-c", "/bin/sleep 30 & wait"])
+    var reported: TerminalProcessIdentity?
+
+    session.onEvent = { event in
+      if case .processStarted(let identity) = event { reported = identity }
+    }
+
+    try await waitUntil("the processStarted event") { reported != nil }
+
+    let leader = try XCTUnwrap(reported).pid
+    let started = try XCTUnwrap(ProcessInspection.startTimeMicroseconds(of: leader))
+
+    defer {
+      _ = ProcessInspection.signalGroup(SIGCONT, leader: leader, startedMicroseconds: started)
+      _ = ProcessInspection.signalGroup(SIGKILL, leader: leader, startedMicroseconds: started)
+    }
+
+    XCTAssertEqual(ProcessInspection.processGroup(of: leader), leader)
+    XCTAssertNotEqual(leader, getpgrp())
+    XCTAssertTrue(ProcessInspection.leadsItsOwnGroup(leader))
+
+    try await waitUntil("the shell's sleep") { !children(of: leader).isEmpty }
+
+    XCTAssertEqual(
+      ProcessInspection.signalGroup(SIGSTOP, leader: leader, startedMicroseconds: started), .byPid)
+
+    try await waitUntil("the group to read as stopped") {
+      ProcessInspection.isStopped(pid: leader) == true
+        && children(of: leader).allSatisfy { ProcessInspection.isStopped(pid: $0) == true }
+    }
+
+    XCTAssertEqual(
+      ProcessInspection.signalGroup(SIGCONT, leader: leader, startedMicroseconds: started), .byPid)
+
+    try await waitUntil("the group to read as running") {
+      ProcessInspection.isStopped(pid: leader) == false
+    }
+  }
+
+  /// Catches a pane that sends text to the child while it takes no input, and one that stays deaf
+  /// afterwards. The program is `cat`, which shows what it reads. Text sent while input is off never
+  /// reaches it. The same text sent once input is on does. Key events, paste, and composed text
+  /// share the same gate in the view, which a unit test cannot drive without a keyboard.
+  func testASessionThatTakesNoInputSendsNothingToTheChild() async throws {
+    let session = try startProgram(["/bin/cat"])
+    var started = false
+
+    session.onEvent = { event in
+      if case .processStarted = event { started = true }
+    }
+
+    try await waitUntil("the program to start") { started }
+
+    session.acceptsInput = false
+    session.send(text: "SILENTWORD\n")
+
+    // Cost: this 500 ms wait proves a negative. A child that was sent nothing shows nothing, and no
+    // event marks the output that never came.
+    try await Task.sleep(for: .milliseconds(500))
+
+    XCTAssertFalse(
+      screen(session).contains("SILENTWORD"), "text reached a pane that takes no input")
+
+    session.acceptsInput = true
+    session.send(text: "HEARDWORD\n")
+
+    try await waitUntil("the child to echo the text") { screen(session).contains("HEARDWORD") }
+    XCTAssertFalse(screen(session).contains("SILENTWORD"))
+  }
+
   /// Waits for the session's identity event, then checks the PID it names: a direct child of
   /// this process, running `login`, and started at the second the event reports.
   private func assertReportsLogin(

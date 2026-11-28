@@ -183,6 +183,10 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// or an applet's description.
   var onLayoutChange: (() -> Void)?
 
+  /// Runs when a controller of this window may have started, stopped, or ended being suspended.
+  /// The window set shows the slot from every window's controllers.
+  var onSuspensionChange: (() -> Void)?
+
   /// Runs when a terminal or REPL session starts in a pane. Reports to the session registry for
   /// authority checking.
   var onSessionStarted:
@@ -561,7 +565,14 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
       self?.controlMark(for: pane)
     }
     paneArea.paneView(for: pane)?.onExecAction = { [weak self] in
-      self?.runExecDriver(pane)
+      guard let self else { return }
+
+      // The strip's button is Resume while the driver is suspended, and Run or Restart otherwise.
+      if execAttachments[pane]?.channel?.suspension.isSuspended == true {
+        resume(.driver(pane))
+      } else {
+        runExecDriver(pane)
+      }
     }
     paneArea.paneView(for: pane)?.execStatus = execStatus(of: pane)
   }
@@ -1451,6 +1462,8 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// the bar's business until that pane takes focus.
   public func appletDidChange(_ applet: any Applet) {
     notifyLayoutIfDescriptionChanged(applet)
+
+    if applet is any ControllerSuspending { refreshControlMarks() }
 
     guard applet === paneArea.applet(for: paneArea.focusedPane) else { return }
 

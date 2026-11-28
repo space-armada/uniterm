@@ -28,6 +28,18 @@ enum StandardCommands {
         menu: MenuPlacement(.app, section: 0, title: "Install Command Line Tool\u{2026}")
       ) { _ in app.installCommandLineTool() },
       Command(
+        .suspendAllControllers, "Suspend All Controllers", scope: .app,
+        menu: MenuPlacement(.file, section: 3)
+      ) { _ in app.suspendAllControllers() },
+      Command(
+        .resumeAllControllers, "Resume All Controllers", scope: .app,
+        menu: MenuPlacement(.file, section: 3)
+      ) { _ in app.resumeAllControllers() },
+      Command(
+        .showSuspendedControllers, "Show Suspended Controllers", scope: .app,
+        listedInPalette: false
+      ) { _ in app.showSuspendedControllers() },
+      Command(
         .hideApp, "Hide uniterm", scope: .app, key: KeyChord("h"),
         menu: MenuPlacement(.app, section: 1)
       ) { _ in NSApp.hide(nil) },
@@ -97,6 +109,14 @@ enum StandardCommands {
         .revokeController, "Revoke Controller",
         isAvailable: { $0.controller?.canRevokeController($0.pane) == true },
         run: { $0.controller?.revokeController($0.pane) }),
+      control(
+        .suspendControllers, "Suspend Controller",
+        isAvailable: { $0.controller?.canSuspendControllers(of: $0.pane) == true },
+        run: { $0.controller?.suspendControllers(of: $0.pane) }),
+      control(
+        .resumeControllers, "Resume Controller",
+        isAvailable: { $0.controller?.canResumeControllers(of: $0.pane) == true },
+        run: { $0.controller?.resumeControllers(of: $0.pane) }),
       focus(.focusNextPane, "Focus Next Pane", KeyChord("]"), .next, 2),
       focus(.focusPreviousPane, "Focus Previous Pane", KeyChord("["), .previous, 2),
       focus(.focusPaneLeft, "Focus Pane Left", arrow(NSLeftArrowFunctionKey), .toward(.left), 3),

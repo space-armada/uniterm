@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ProcessInspection
 import ScriptTestSupport
 import ScriptWire
 import XCTest
@@ -32,7 +33,8 @@ final class ReplProcess: @unchecked Sendable {
   /// through the pty's line discipline, and not through a signal the test sends.
   init(
     address: String, environment: [String: String], arguments: [String] = [], shell: Bool = false,
-    session: Bool = false, login: Bool = false, direct: Bool = false, prelude: String = ""
+    session: Bool = false, login: Bool = false, direct: Bool = false, prelude: String = "",
+    wrapped: Bool = false
   ) throws {
     let words = ["repl", "--socket", address] + arguments
     let helper = ScriptFixtures.helper().path
@@ -62,6 +64,14 @@ final class ReplProcess: @unchecked Sendable {
         "stty cols 80 rows 24; exec " + ([helper] + words).map { "'\($0)'" }.joined(separator: " ")
 
       launchArguments = ["-q", "/dev/null", "/bin/sh", "-c", command]
+    } else if wrapped {
+      // The app's terminal runs the helper under a wrapper that stays its parent, and the wrapper
+      // leads the process group. The shell here does the same: it runs the helper as a child, and
+      // the trailing exit keeps it from replacing itself with the helper.
+      executable = URL(fileURLWithPath: "/bin/sh")
+      launchArguments = [
+        "-c", ([helper] + words).map { Self.quote($0) }.joined(separator: " ") + "; exit $?",
+      ]
     } else if shell {
       executable = URL(fileURLWithPath: "/bin/sh")
       launchArguments = ["-c", ([helper] + words).map { "'\($0)'" }.joined(separator: " ")]
@@ -75,7 +85,7 @@ final class ReplProcess: @unchecked Sendable {
 
     process = try HelperHandle.spawn(
       executable: executable, arguments: launchArguments, environment: environment,
-      standardInput: .file(input.fileHandleForReading),
+      ownProcessGroup: wrapped, standardInput: .file(input.fileHandleForReading),
       standardOutput: .file(output.fileHandleForWriting),
       standardError: .file(error.fileHandleForWriting),
       deadlines: [HelperDeadline(after: .seconds(90), signal: SIGKILL)])
@@ -156,6 +166,14 @@ final class ReplProcess: @unchecked Sendable {
   }
 
   var pid: pid_t { process.pid }
+
+  /// The helper's own process. Under a wrapper it is the wrapper's child. Without one it is the
+  /// process itself.
+  var helperPid: pid_t { ProcessInspection.children(of: process.pid).first ?? process.pid }
+
+  var helperStartedMicroseconds: Int {
+    ProcessInspection.startTimeMicroseconds(of: helperPid) ?? 0
+  }
 
   func write(_ line: String) {
     try? input.fileHandleForWriting.write(contentsOf: Data(line.utf8))

@@ -26,6 +26,28 @@ struct PaneControlMark: Equatable {
   var enableAvailable: Bool
   var revokeAvailable: Bool
 
+  /// One controller with authority over the pane, with what its process is doing. Only a REPL
+  /// helper or a driver that uniterm started has a target. A controller started from a shell has
+  /// none, and shows only that its shell stopped it.
+  struct ControllerLine: Equatable {
+    enum State: Equatable {
+      case running
+      case suspended
+      case stoppedByShell
+    }
+
+    var name: String
+    var target: SuspendTarget?
+    var state: State
+
+    /// True when Resume has a stop to continue.
+    var canResume: Bool
+  }
+
+  /// What each controller that has authority over the pane is doing, for the suspend items and the
+  /// lines under the summary.
+  var controllerLines: [ControllerLine] = []
+
   /// A live controller the user may give the pane's group to, when the pane is a member of a group
   /// with no owner.
   struct Adoption: Equatable {
@@ -66,6 +88,14 @@ struct PaneControlMark: Equatable {
 
     lines.append(driver == .none ? "Driver: none" : "Driver: \(driver.rawValue)")
 
+    for line in controllerLines {
+      switch line.state {
+      case .running: break
+      case .suspended: lines.append(SuspensionWording.suspended(line.name))
+      case .stoppedByShell: lines.append(SuspensionWording.stoppedByShell(line.name))
+      }
+    }
+
     if let savedIntent, access == .disconnected {
       lines.append("Saved as \(savedIntent.rawValue). Enable it again to resume.")
     }
@@ -84,8 +114,11 @@ struct PaneControlMark: Equatable {
 struct PaneExecStatus: Equatable {
   var text: String
 
-  /// Run or Restart, or nil while nothing can be started.
+  /// Run, Restart, or Resume, or nil while nothing can be started.
   var action: String?
+
+  /// True while the driver is suspended. The strip is the banner then, and its action is Resume.
+  var isSuspended = false
 }
 
 /// The control actions the badge's menu offers. The window runs each one for this pane.
@@ -93,6 +126,12 @@ enum PaneControlAction: Equatable {
   case enable
   case disconnect
   case revoke
+
+  /// Stops one controller uniterm started.
+  case suspend(SuspendTarget)
+
+  /// Continues one controller that is stopped.
+  case resume(SuspendTarget)
 
   /// Gives the unowned group the pane is a member of to a live controller.
   case adopt(GroupOwner)
@@ -323,7 +362,8 @@ final class PaneFrameView: NSView {
     execLabel.toolTip = status.text
     execButton.isHidden = status.action == nil
     execButton.title = status.action ?? ""
-    execStrip.layer?.backgroundColor = palette[.mantle].cgColor
+    execStrip.layer?.backgroundColor =
+      (status.isSuspended ? palette[.surface0] : palette[.mantle]).cgColor
     applet.view.frame = innerFrame
     layoutExecStrip()
   }
@@ -414,6 +454,24 @@ final class PaneFrameView: NSView {
       item.target = self
       item.representedObject = action
       item.isEnabled = enabled
+      menu.addItem(item)
+    }
+
+    let suspendable = (mark?.controllerLines ?? []).filter { $0.target != nil }
+
+    if !suspendable.isEmpty { menu.addItem(.separator()) }
+
+    for (index, line) in suspendable.enumerated() {
+      guard let target = line.target else { continue }
+
+      let resuming = line.state == .suspended || line.canResume
+      let item = NSMenuItem(
+        title: "\(resuming ? "Resume" : "Suspend") \(line.name)",
+        action: #selector(runControlAction(_:)), keyEquivalent: "")
+
+      item.setAccessibilityIdentifier("pane-control-\(resuming ? "resume" : "suspend")-\(index)")
+      item.target = self
+      item.representedObject = resuming ? PaneControlAction.resume(target) : .suspend(target)
       menu.addItem(item)
     }
 

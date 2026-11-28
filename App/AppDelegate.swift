@@ -389,6 +389,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showSettings: { [weak self] in self?.presentSettings() },
         showPendingRequests: { [weak self] in self?.presentPendingRequests() },
         showControllers: { [weak self] in self?.presentControllers() },
+        suspendAllControllers: { [weak self] in self?.windowSet?.suspendAllControllers() },
+        resumeAllControllers: { [weak self] in self?.windowSet?.resumeAllControllers() },
+        showSuspendedControllers: { [weak self] in
+          self?.windowSet?.presentSuspendedControllersMenu()
+        },
         installCommandLineTool: { [weak self] in self?.installCommandLineTool() },
         openFile: { [weak self] anchor in
           Task { await self?.fileOpens?.open(from: anchor) }

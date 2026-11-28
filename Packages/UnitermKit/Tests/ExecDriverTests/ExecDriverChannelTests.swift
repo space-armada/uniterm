@@ -543,6 +543,149 @@ final class ExecDriverChannelTests: XCTestCase {
     XCTAssertEqual(channel.phase, .connected)
   }
 
+  // MARK: Suspend and resume
+
+  /// Catches a suspend that stops only the driver and leaves a program it started running, one that
+  /// leaves the group frozen after a resume, and a state that follows uniterm's record instead of
+  /// the process. The driver's background child shares its group, so one stop freezes both.
+  func testSuspendStopsTheWholeGroupAndResumeContinuesIt() async throws {
+    let file = scratch.appendingPathComponent("grandchild")
+    let channel = try start("grandchild", [file.path])
+
+    await waitUntil("the driver connects and names its child") {
+      channel.isConnected && FileManager.default.fileExists(atPath: file.path)
+    }
+
+    let text = try String(contentsOf: file, encoding: .utf8)
+    let child = try XCTUnwrap(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
+    let pid = try XCTUnwrap(channel.pid)
+
+    var reports: [SuspensionState] = []
+
+    channel.onSuspensionChange = { reports.append($0) }
+
+    channel.suspend()
+
+    await waitUntil("the driver and its child read as stopped") {
+      channel.suspension.isSuspendedByUniterm && ProcessSender.isStopped(pid)
+        && ProcessSender.isStopped(child)
+    }
+
+    XCTAssertEqual(channel.phase, .connected, "the suspension ended the driver")
+    XCTAssertEqual(ended, [])
+
+    channel.resume()
+
+    await waitUntil("the driver and its child run again") {
+      !channel.suspension.isSuspended && !ProcessSender.isStopped(pid)
+        && !ProcessSender.isStopped(child)
+    }
+
+    XCTAssertFalse(channel.suspension.canResume)
+    XCTAssertEqual(reports.last?.isSuspended, false)
+    XCTAssertEqual(reports.contains { $0.isSuspendedByUniterm }, true)
+  }
+
+  /// Catches a stop from outside that is not shown, one that Resume All would continue, and an
+  /// outside continue that leaves uniterm's record behind. The driver is stopped and continued by
+  /// another process, as a `kill -STOP` would.
+  func testAStopFromOutsideShowsAsSuspendedButNotAsUnitermsAndResumeContinuesIt() async throws {
+    let channel = try start("drain")
+
+    await waitUntil("the driver connects") { channel.isConnected }
+
+    let pid = try XCTUnwrap(channel.pid)
+
+    XCTAssertEqual(kill(pid, SIGSTOP), 0)
+
+    await waitUntil("the stop shows") { channel.suspension.isSuspended }
+
+    XCTAssertFalse(channel.suspension.isSuspendedByUniterm)
+    XCTAssertTrue(channel.suspension.canResume)
+
+    channel.resume()
+
+    await waitUntil("the driver runs again") { !channel.suspension.isSuspended }
+
+    channel.suspend()
+
+    await waitUntil("uniterm's stop shows") { channel.suspension.isSuspendedByUniterm }
+
+    XCTAssertEqual(kill(pid, SIGCONT), 0)
+
+    await waitUntil("the outside continue shows") { !channel.suspension.isSuspended }
+
+    XCTAssertFalse(channel.suspension.madeByUniterm, "an outside continue left uniterm's record")
+  }
+
+  /// Catches a call that is lost, or a reply that is dropped, by a suspension. The driver sent a call
+  /// that waits before it was stopped. The call still runs while the driver is stopped, and the
+  /// driver reads its reply once it continues.
+  func testACallSentBeforeTheSuspendStillRunsAndItsReplyArrivesOnResume() async throws {
+    let notes = NotesFixture()
+    let channel = try start("wait-reply", type: NotesFixture.typeID, hosting: notes)
+
+    await waitUntil("the driver's call waits") { notes.waitingCount == 1 }
+
+    channel.suspend()
+
+    await waitUntil("the driver reads as stopped") { channel.suspension.isSuspendedByUniterm }
+
+    dispatcher.submit(
+      AppletCommandSubmission(
+        appletType: NotesFixture.typeID, schemaVersion: NotesFixture.schema.version,
+        name: "set-notes", arguments: .object(["text": .string("go")])),
+      to: notes, authority: { nil }, reply: { _ in })
+
+    await waitUntil("the waiting call runs") { notes.waitingCount == 0 }
+
+    // Cost: this 200 ms wait proves a negative. A stopped driver reads nothing, and no event marks the
+    // reply it never read. Only a real stopped process shows that, so no cheaper layer can.
+    try await Task.sleep(for: .milliseconds(200))
+
+    XCTAssertFalse(
+      historyTexts.contains("waited reply"), "a stopped driver read its reply")
+
+    channel.resume()
+
+    await waitUntil("the driver reads its reply") { historyTexts.contains("waited reply") }
+  }
+
+  /// Catches a close that leaves a stopped driver frozen. A stopped process ignores SIGTERM until
+  /// it is continued, and the kill grace here is long, so only the SIGCONT that follows the SIGTERM
+  /// can end it in time.
+  func testClosingAStoppedDriverContinuesItSoItCanShutDown() async throws {
+    let channel = try start("silent", killGrace: .seconds(60))
+
+    await waitUntil("the driver is running") { channel.pid != nil }
+
+    let pid = try XCTUnwrap(channel.pid)
+
+    XCTAssertEqual(kill(pid, SIGSTOP), 0)
+
+    await waitUntil("the driver reads as stopped") { ProcessSender.isStopped(pid) }
+
+    channel.close()
+
+    await waitUntil("the stopped driver ends on SIGTERM", timeout: 5) { kill(pid, 0) != 0 }
+  }
+
+  /// Catches a suspend of a driver that has not finished its hellos. A driver still inside its
+  /// declaration is left running, so it is never held past its limit.
+  func testSuspendLeavesADriverThatHasNotDeclaredItself() async throws {
+    let channel = try start("silent")
+
+    XCTAssertFalse(channel.isConnected)
+
+    channel.suspend()
+
+    XCTAssertFalse(channel.suspension.canResume)
+
+    let pid = try XCTUnwrap(channel.pid)
+
+    XCTAssertFalse(ProcessSender.isStopped(pid))
+  }
+
   /// Catches a channel whose applet closed before it started, and that spawns a child anyway or
   /// never reports its end, so the pane would show a driver running that nothing reaps.
   func testAChannelForAClosedAppletSpawnsNothingAndEnds() throws {

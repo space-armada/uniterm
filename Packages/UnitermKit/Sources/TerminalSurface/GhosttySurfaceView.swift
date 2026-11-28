@@ -145,14 +145,36 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
     return ghostty_surface_needs_confirm_quit(surface)
   }
 
+  /// While false, nothing reaches the child. Keys, paste, and composed text are dropped where they
+  /// enter. A mouse event goes to libghostty only when the child has not asked to hear the mouse,
+  /// so selection and scrollback still work and no report is written. A middle click, which pastes,
+  /// is dropped. The focus report waits until input is on again.
+  var acceptsInput = true {
+    didSet {
+      guard acceptsInput, !oldValue, let surface else { return }
+
+      ghostty_surface_set_focus(surface, focused)
+    }
+  }
+
+  /// True when a mouse event may go to libghostty. A child that has asked to hear the mouse would
+  /// get a report, which is input.
+  private var mouseMayReach: Bool {
+    guard let surface else { return false }
+
+    return acceptsInput || !ghostty_surface_mouse_captured(surface)
+  }
+
   func send(text: String) {
-    guard let surface else { return }
+    guard acceptsInput, let surface else { return }
 
     let length = text.utf8.count
     text.withCString { ghostty_surface_text(surface, $0, UInt(length)) }
   }
 
   func perform(_ action: TerminalAction) {
+    if action == .paste, !acceptsInput { return }
+
     let name: String
 
     switch action {
@@ -179,7 +201,8 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
     guard let surface, self.focused != focused else { return }
 
     self.focused = focused
-    ghostty_surface_set_focus(surface, focused)
+
+    if acceptsInput { ghostty_surface_set_focus(surface, focused) }
   }
 
   func setVisible(_ visible: Bool) {
@@ -652,19 +675,19 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   override func mouseDown(with event: NSEvent) {
     guard let surface else { return }
 
+    if window?.firstResponder !== self { window?.makeFirstResponder(self) }
+
+    guard mouseMayReach else { return }
+
     Self.linkLog.debug(
       "press mods=\(Self.mods(event.modifierFlags).rawValue, privacy: .public)")
-
-    if window?.firstResponder !== self {
-      window?.makeFirstResponder(self)
-    }
 
     ghostty_surface_mouse_button(
       surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, Self.mods(event.modifierFlags))
   }
 
   override func mouseUp(with event: NSEvent) {
-    guard let surface else { return }
+    guard let surface, mouseMayReach else { return }
 
     Self.linkLog.debug(
       "release mods=\(Self.mods(event.modifierFlags).rawValue, privacy: .public)")
@@ -675,7 +698,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   override func rightMouseDown(with event: NSEvent) {
-    guard let surface else { return super.rightMouseDown(with: event) }
+    guard let surface, mouseMayReach else { return super.rightMouseDown(with: event) }
 
     let consumed = ghostty_surface_mouse_button(
       surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, Self.mods(event.modifierFlags))
@@ -683,7 +706,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   override func rightMouseUp(with event: NSEvent) {
-    guard let surface else { return super.rightMouseUp(with: event) }
+    guard let surface, mouseMayReach else { return super.rightMouseUp(with: event) }
 
     let consumed = ghostty_surface_mouse_button(
       surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, Self.mods(event.modifierFlags))
@@ -691,7 +714,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   override func otherMouseDown(with event: NSEvent) {
-    guard let surface else { return }
+    guard let surface, acceptsInput else { return }
 
     ghostty_surface_mouse_button(
       surface, GHOSTTY_MOUSE_PRESS, Self.button(event.buttonNumber),
@@ -699,7 +722,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   override func otherMouseUp(with event: NSEvent) {
-    guard let surface else { return }
+    guard let surface, acceptsInput else { return }
 
     ghostty_surface_mouse_button(
       surface, GHOSTTY_MOUSE_RELEASE, Self.button(event.buttonNumber),
@@ -723,7 +746,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   override func otherMouseDragged(with event: NSEvent) { reportMouse(event) }
 
   private func reportMouse(_ event: NSEvent) {
-    guard let surface else { return }
+    guard let surface, mouseMayReach else { return }
 
     let position = convert(event.locationInWindow, from: nil)
     let mods = Self.mods(event.modifierFlags)
@@ -738,7 +761,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   private static let linkLog = Logger(subsystem: "dev.uniterm.app", category: "terminal-link")
 
   override func scrollWheel(with event: NSEvent) {
-    guard let surface else { return }
+    guard let surface, mouseMayReach else { return }
 
     var x = event.scrollingDeltaX
     var y = event.scrollingDeltaY
@@ -778,7 +801,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   /// plain key down still reaches the program, with the super modifier set. A program on the kitty
   /// keyboard protocol reads it, and a legacy program reads nothing.
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    guard event.type == .keyDown, focused else { return false }
+    guard event.type == .keyDown, focused, acceptsInput else { return false }
 
     let equivalent: String
 
@@ -812,6 +835,8 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   override func keyDown(with event: NSEvent) {
+    guard acceptsInput else { return }
+
     guard let surface else {
       interpretKeyEvents([event])
       return
@@ -872,10 +897,14 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   override func keyUp(with event: NSEvent) {
+    guard acceptsInput else { return }
+
     _ = sendKey(GHOSTTY_ACTION_RELEASE, event: event)
   }
 
   override func flagsChanged(with event: NSEvent) {
+    guard acceptsInput else { return }
+
     Self.linkLog.debug(
       "flags mods=\(Self.mods(event.modifierFlags).rawValue, privacy: .public) key=\(event.keyCode, privacy: .public)"
     )
@@ -1058,6 +1087,8 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    guard acceptsInput else { return }
+
     switch string {
     case let value as NSAttributedString:
       markedText = NSMutableAttributedString(attributedString: value)
@@ -1106,7 +1137,7 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   }
 
   func insertText(_ string: Any, replacementRange: NSRange) {
-    guard NSApp.currentEvent != nil else { return }
+    guard NSApp.currentEvent != nil, acceptsInput else { return }
 
     let text: String
     switch string {

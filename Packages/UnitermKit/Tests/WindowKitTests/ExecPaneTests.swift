@@ -37,6 +37,9 @@ final class ExecPaneFixture {
   var nextIsNotes = false
   var nextIsMap = false
 
+  /// Makes the next pane's applet, once. It wins over the flags above.
+  var nextApplet: (() -> any Applet)?
+
   /// What the values sheet answers, and the keys it was asked for.
   var values: [String: String]? = [:]
   private(set) var askedKeys: [[String]] = []
@@ -89,6 +92,12 @@ final class ExecPaneFixture {
       }
 
       if case .textViewer = choice { return TextViewerApplet(startDirectory: directory) }
+
+      if let make = nextApplet {
+        nextApplet = nil
+
+        return make()
+      }
 
       if nextIsNotes { return NotesFixture() }
 

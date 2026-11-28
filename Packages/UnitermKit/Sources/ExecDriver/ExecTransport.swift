@@ -1,6 +1,7 @@
 import AppletKit
 import Darwin
 import Foundation
+import ProcessInspection
 import StatusKit
 
 /// Why a driver's transport failed. The channel closes on the first one.
@@ -424,6 +425,10 @@ final class ExecTransport: @unchecked Sendable {
 
     signalGroup(SIGTERM)
 
+    // A stopped driver ignores SIGTERM until it is continued. The continue follows at once, so the
+    // driver can shut down cleanly, and nothing it started stays frozen.
+    signalGroup(SIGCONT)
+
     DispatchQueue.global().asyncAfter(deadline: .now() + killGrace) { [self] in
       signalGroup(SIGKILL)
     }
@@ -445,15 +450,37 @@ final class ExecTransport: @unchecked Sendable {
     signalGroup(SIGKILL)
   }
 
+  /// Stops the driver's whole group, as Ctrl-Z stops a program in a shell. Returns whether the
+  /// signal went out.
+  @discardableResult
+  func suspendGroup() -> Bool {
+    signalGroup(SIGSTOP, requiringLeader: true)
+  }
+
+  /// Continues the driver's whole group.
+  @discardableResult
+  func resumeGroup() -> Bool {
+    signalGroup(SIGCONT, requiringLeader: true)
+  }
+
   /// Signals the child's group only while the child is not reaped. The wait thread sets the flag
   /// under the same lock, so a signal never reaches a group ID the system has handed on.
-  private func signalGroup(_ number: Int32) {
+  ///
+  /// The group is never the caller's own. A stop or a kill sent to it would end the app. A stop
+  /// also needs the child to lead its group, which the spawn guarantees until the child moves
+  /// itself out of it.
+  @discardableResult
+  private func signalGroup(_ number: Int32, requiringLeader: Bool = false) -> Bool {
     state.lock()
     defer { state.unlock() }
 
-    guard !reaped else { return }
+    guard !reaped, pid > 1, pid != getpgrp() else { return false }
 
-    killpg(pid, number)
+    if requiringLeader {
+      guard ProcessInspection.leadsItsOwnGroup(pid) else { return false }
+    }
+
+    return killpg(pid, number) == 0
   }
 
   /// The leader stays an unreaped zombie until the rest of its group has had SIGKILL. A zombie

@@ -135,6 +135,13 @@ public final class ScriptHost {
   /// once, and not only at its next call.
   private var peerWatches: [UInt64: any DispatchSourceProcess] = [:]
 
+  /// A watch on each connection's peer for a stop or a continue, by connection. A shell's Ctrl-Z
+  /// on a `uniterm run`, or a `kill -STOP` from anywhere, shows through it.
+  private var peerStopWatches: [UInt64: ProcessStopWatcher] = [:]
+
+  /// The connections whose peer reads as stopped now.
+  var stoppedPeers: Set<UInt64> = []
+
   /// Where controller snapshots live and how the bundle's command is known. Without it, every
   /// controller run is refused.
   let controllerSettings: ControllerSettings?
@@ -368,8 +375,11 @@ public final class ScriptHost {
     forms.removeAll()
 
     for watch in peerWatches.values { watch.cancel() }
+    for watcher in peerStopWatches.values { watcher.cancel() }
 
     peerWatches = [:]
+    peerStopWatches = [:]
+    stoppedPeers = []
     pendingRepls = [:]
     boundRepls = [:]
     awaitingRoot = [:]
@@ -478,6 +488,8 @@ public final class ScriptHost {
 
     case .closed(let connection):
       peerWatches.removeValue(forKey: connection.id)?.cancel()
+      peerStopWatches.removeValue(forKey: connection.id)?.cancel()
+      stoppedPeers.remove(connection.id)
       clipboardGrants[connection.id] = nil
       controllerConnectionClosed(connection.id)
       dropUndeclared(connection.id)
@@ -726,9 +738,39 @@ public final class ScriptHost {
     peerWatches[connection.id] = watch
     watch.activate()
 
+    watchStops(of: connection)
+
     // An exec that came before the watch started raised no event, so the generation is read once
     // the watch is in place.
     if peerWasReplaced(connection) { peerReplaced(connection) }
+  }
+
+  /// Watches the peer for a stop or a continue, and reads its state until it settles. The peer's
+  /// start time is read again in microseconds, and a peer that is no longer the admitted process
+  /// is not watched.
+  private func watchStops(of connection: ScriptConnection) {
+    guard peerStopWatches[connection.id] == nil,
+      let started = ProcessInspection.startTimeMicroseconds(of: connection.peer.pid),
+      started / 1_000_000 == connection.peerStartTime
+    else { return }
+
+    let id = connection.id
+
+    let watcher = ProcessStopWatcher(pid: connection.peer.pid, startedMicroseconds: started) {
+      [weak self] stopped in
+      guard let self else { return }
+
+      if stopped {
+        stoppedPeers.insert(id)
+      } else {
+        stoppedPeers.remove(id)
+      }
+
+      controllersChanged()
+    }
+
+    peerStopWatches[id] = watcher
+    watcher.start()
   }
 
   /// True when the process the connection admitted still runs but is no longer what speaks on it:

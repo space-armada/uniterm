@@ -237,6 +237,10 @@ public protocol TerminalSession: AnyObject {
   /// newline. Real key presses reach the child through the hosted view.
   func send(text: String)
 
+  /// False while the pane takes no input for the child: a typed key, a paste, dragged text, and
+  /// composed text are all dropped. Scrolling, selection, and copy still work.
+  var acceptsInput: Bool { get set }
+
   func perform(_ action: TerminalAction)
 
   /// Sets the view's size in points. The child sees the new grid size.

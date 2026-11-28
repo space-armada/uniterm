@@ -29,6 +29,14 @@ public enum ScriptReplEvent: Sendable, Equatable {
   /// The helper's connection closed, so the helper is gone or about to be.
   case ended
 
+  /// The helper was stopped or continued, as the process reads, or uniterm sent a stop or a
+  /// continue. The state says which stops are uniterm's own.
+  case suspensionChanged(SuspensionState)
+
+  /// uniterm could not stop or continue the helper's group. The text says why, for the pane to
+  /// show. Nothing was sent.
+  case suspendFailed(String)
+
   /// The helper was ended for a reason the pane can say. It comes before `ended`, and the app has
   /// already killed the helper when it comes from the app.
   case terminated(ScriptReplEnd)
@@ -149,10 +157,20 @@ public final class ScriptReplChannel {
   /// spawned. Only a descendant of it may spend the token.
   private(set) var sessionRoot: ProcessIdentity?
 
+  /// The session root's start time in microseconds, read when the terminal reported it. A root whose
+  /// start the system will not report, or reports differently, is never signalled.
+  private var sessionRootMicroseconds: Int?
+
   /// The generation the terminal reported with the session root.
   private(set) var sessionGeneration: UInt64?
 
   public var onEvent: (@MainActor (ScriptReplEvent) -> Void)?
+
+  /// Whether the helper's process is stopped, and whether uniterm stopped it. The process's
+  /// observed state is the truth, and the record marks only the stops uniterm made.
+  public private(set) var suspension = SuspensionState()
+
+  private var stopWatcher: ProcessStopWatcher?
 
   let tokenData: Data
   let history: [String]
@@ -199,6 +217,10 @@ public final class ScriptReplChannel {
     sessionRoot = root
     sessionGeneration = generation
 
+    let started = ProcessInspection.startTimeMicroseconds(of: root.pid)
+
+    sessionRootMicroseconds = started.flatMap { $0 / 1_000_000 == root.started ? $0 : nil }
+
     host?.sessionRootArrived(for: self)
   }
 
@@ -209,14 +231,134 @@ public final class ScriptReplChannel {
 
     helperTarget = target
     liveness.markBusy(now: probes.now())
+    watchStops(of: target)
     onEvent?(.attached(target.identity))
   }
 
   func connectionClosed() {
     guard !ended else { return }
 
+    stopWatcher?.cancel()
+    stopWatcher = nil
     connection = nil
     onEvent?(.ended)
+  }
+
+  private func watchStops(of target: ProcessReaper.Target) {
+    let probe = probes.isStopped
+
+    let watcher = ProcessStopWatcher(
+      pid: target.pid, startedMicroseconds: target.startedMicroseconds,
+      read: { pid, started in
+        ProcessInspection.startTimeMicroseconds(of: pid) == started ? probe(pid) : nil
+      },
+      onChange: { [weak self] stopped in
+        self?.applyObserved(stopped: stopped, now: self?.probes.now())
+      })
+
+    stopWatcher = watcher
+    watcher.start()
+  }
+
+  /// Takes the process's observed state. A helper seen running again after a stop gets a fresh
+  /// ping clock, so a ping left unanswered while it was stopped never ends it.
+  func applyObserved(stopped: Bool, now: ContinuousClock.Instant?) {
+    let wasStopped = suspension.isStopped
+
+    guard suspension.observe(stopped: stopped) else { return }
+
+    if wasStopped && !stopped { liveness.markBusy(now: now ?? probes.now()) }
+
+    onEvent?(.suspensionChanged(suspension))
+  }
+
+  /// Stops the whole helper and what it started, by its process group, as Ctrl-Z does for a
+  /// program in a shell. The helper must be attached. One that is still inside its declaration
+  /// window is left alone, so the listener never drops it for a silence uniterm caused.
+  ///
+  /// A refusal is never silent. The pane is told, so a Ctrl-Z that does nothing says why.
+  public func suspend() {
+    guard isAttached, let helperTarget else { return }
+
+    guard signalGroup(SIGSTOP, helperTarget) == .sent else { return }
+
+    suspension.stopSent()
+    stopWatcher?.settle()
+    onEvent?(.suspensionChanged(suspension))
+  }
+
+  /// Continues the helper and its group. It works on a stop from outside too.
+  public func resume() {
+    guard isAttached, let helperTarget, suspension.canResume else { return }
+
+    guard signalGroup(SIGCONT, helperTarget) == .sent else { return }
+
+    suspension.continueSent()
+    stopWatcher?.settle()
+    onEvent?(.suspensionChanged(suspension))
+  }
+
+  private enum GroupSignal {
+    case sent
+    case gone
+    case failed
+  }
+
+  /// Signals the group the helper lives in. The terminal starts the helper through a wrapper that
+  /// stays its parent, so the helper is a member of the group and not its leader. The leader is the
+  /// session's child, the one process uniterm started for this pane, named by pid and start time.
+  /// The helper must belong to that group, and the group is never uniterm's own. Anything else is
+  /// refused, and `reports` says so to the pane.
+  private func signalGroup(
+    _ number: Int32, _ target: ProcessReaper.Target, reports: Bool = true
+  ) -> GroupSignal {
+    guard let root = sessionRoot, let started = sessionRootMicroseconds else {
+      return fail("uniterm does not know which process started this REPL", reports: reports)
+    }
+
+    switch ProcessInspection.signalGroup(
+      number, leader: root.pid, startedMicroseconds: started, member: target.pid)
+    {
+    case .byToken, .byPid:
+      return .sent
+
+    case .gone:
+      return .gone
+
+    case .refused:
+      Self.log.error("not signalling helper \(target.pid): its group is not its session's own")
+
+      return fail(
+        "uniterm cannot suspend this REPL, since its process group is not one uniterm started for "
+          + "it.", reports: reports)
+
+    case .unreached:
+      Self.log.error("could not signal helper \(target.pid)'s group")
+
+      return fail("uniterm could not stop this REPL's process group.", reports: reports)
+    }
+  }
+
+  private func fail(_ text: String, reports: Bool) -> GroupSignal {
+    if reports { onEvent?(.suspendFailed(text)) }
+
+    return .failed
+  }
+
+  private static let log = Logger(subsystem: "dev.uniterm.app", category: "repl")
+
+  /// Lets nothing the helper started stay frozen once the helper is on its way out. The continue
+  /// goes out whatever the record says. A stop from outside may not be seen yet, and a closing
+  /// terminal session waits for its child, so a stopped one would block the main thread.
+  ///
+  /// A helper whose leader is already gone is not reached. The guarded call needs the leader's
+  /// recorded start time, since only the leader's pid names the group safely. A stopped member left
+  /// behind is then ended by the terminal's hang-up.
+  private func releaseGroup() {
+    guard let helperTarget else { return }
+
+    _ = signalGroup(SIGCONT, helperTarget, reports: false)
+    suspension.continueSent()
   }
 
   func evaluationChanged(_ running: Bool) {
@@ -241,8 +383,15 @@ public final class ScriptReplChannel {
   /// Acts on one look at the helper. A footprint past the cap and its margin kills the helper. An
   /// unanswered ping past the grace kills it as hung. A helper that answers is never ended for how
   /// long it works.
-  func observe(footprint: Int?, now: ContinuousClock.Instant, limits: ReplLimits) {
+  ///
+  /// A helper that reads as stopped is never taken for hung. Its pings stay unanswered because it
+  /// cannot run. The check comes back with a fresh ping clock once the helper runs again.
+  func observe(
+    footprint: Int?, stopped: Bool? = nil, now: ContinuousClock.Instant, limits: ReplLimits
+  ) {
     guard isAttached else { return }
+
+    if let stopped { applyObserved(stopped: stopped, now: now) }
 
     if let footprint {
       lastFootprint = footprint
@@ -253,6 +402,8 @@ public final class ScriptReplChannel {
         return
       }
     }
+
+    guard !suspension.isStopped else { return }
 
     switch liveness.probe(footprint: nil, now: now) {
     case .healthy:
@@ -289,6 +440,18 @@ public final class ScriptReplChannel {
   public func interruptPressed() -> ReplInterruptAction {
     guard isAttached else { return .ignore }
 
+    // A press on a suspended helper continues it and, when a form runs, asks it to stop that form.
+    // It never counts toward the second press that ends the helper.
+    if suspension.canResume {
+      resume()
+
+      guard isEvaluating else { return .ignore }
+
+      requestStop()
+
+      return .stop
+    }
+
     let action = escalation.press(evaluating: isEvaluating, now: probes.now())
 
     switch action {
@@ -304,10 +467,21 @@ public final class ScriptReplChannel {
   func terminate(_ reason: ScriptReplEnd) {
     guard !ended, let helperTarget else { return }
 
+    releaseGroup()
     reaper.killNow(helperTarget)
     connection?.close()
     connection = nil
     onEvent?(.terminated(reason))
+  }
+
+  /// Ends a suspended helper and its whole group at once. The app is quitting, so no delayed kill
+  /// would run, and a frozen group has no one left to continue it.
+  public func endForQuit() {
+    if suspension.canResume, let helperTarget {
+      _ = signalGroup(SIGKILL, helperTarget, reports: false)
+    }
+
+    end()
   }
 
   /// Ends the helper. The token is withdrawn when no helper has used it yet. The connection
@@ -318,6 +492,10 @@ public final class ScriptReplChannel {
 
     ended = true
     onEvent = nil
+
+    stopWatcher?.cancel()
+    stopWatcher = nil
+    releaseGroup()
 
     host?.withdraw(self)
 

@@ -64,6 +64,62 @@ final class ReplUITests: UnitermUITestCase {
     }
   }
 
+  /// Catches a Ctrl-Z that does not suspend the helper, one that leaks into the pty, and a suspension
+  /// that takes the REPL's context or accepts input. The real key goes to the real pane. The REPL
+  /// holds a definition, then suspends. Its strip says it is suspended and that page code keeps
+  /// running, the window slot shows, and a typed line never appears. A second Ctrl-Z resumes it,
+  /// and a form that uses the definition still sees it.
+  ///
+  /// This test has not been run by the agent that wrote it.
+  func testCtrlZSuspendsTheReplKeepsItsContextAndTakesNoInputUntilResumed() {
+    let app = launchApp()
+    let (window, terminal) = openRepl(in: app)
+
+    terminal.click()
+    app.typeText("(def kept 41)\n")
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 20) { $0.contains("repl:2:> ") }, "the definition never ran")
+
+    app.typeKey("z", modifierFlags: .control)
+
+    let message = window.staticTexts["repl-suspended-message"]
+
+    XCTAssertTrue(message.appears(timeout: 20), "Ctrl-Z showed no suspended message")
+
+    let text = message.value as? String ?? ""
+
+    XCTAssertTrue(text.contains("suspended"), text)
+    XCTAssertTrue(text.contains("Page code it loaded keeps running"), text)
+
+    let slot = window.descendants(matching: .any)["status-window-suspended-controllers"]
+
+    XCTAssertTrue(slot.appears(timeout: 10), "the window slot never showed the suspension")
+
+    keepElementScreenshot(window, named: "suspended-repl")
+
+    app.typeText("(def typedwhilesuspended 7)\n")
+
+    // Cost: this 1 s wait proves a negative. A pane that takes no input shows nothing, and no
+    // event marks the keys that never arrived.
+    Thread.sleep(forTimeInterval: 1)
+
+    XCTAssertFalse(
+      (terminal.value as? String ?? "").contains("typedwhilesuspended"),
+      "a suspended REPL took typed input")
+
+    app.typeKey("z", modifierFlags: .control)
+
+    XCTAssertTrue(
+      waitUntilGone(message, timeout: 20), "the second Ctrl-Z did not resume the REPL")
+    XCTAssertTrue(waitUntilGone(slot, timeout: 10), "the slot stayed after the resume")
+
+    app.typeText("(+ kept 1)\n")
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 20) { self.hasLine("42", in: $0) },
+      "the definition was lost across the suspension")
+    XCTAssertFalse((terminal.value as? String ?? "").contains("typedwhilesuspended"))
+  }
+
   /// Catches a REPL that does not evaluate what is typed, one whose host calls do not reach the
   /// app, and one whose results never reach the screen. A sum prints, a status post reaches the
   /// status bar, and a listing through the host API counts the one pane the REPL may control: its

@@ -4,6 +4,7 @@ import AppletTestSupport
 import Darwin
 import DefaultsTestSupport
 import Preferences
+import ProcessInspection
 import ScriptTestSupport
 import ScriptWire
 import StatusKit
@@ -15,9 +16,21 @@ import XCTest
 @testable import TerminalSurface
 @testable import WindowKit
 
+/// A terminal view that takes the keyboard and counts the keys that reach it.
+@MainActor
+final class ReplKeyRecordingView: NSView {
+  private(set) var keyDowns = 0
+
+  override var acceptsFirstResponder: Bool { true }
+
+  override func keyDown(with event: NSEvent) {
+    keyDowns += 1
+  }
+}
+
 @MainActor
 final class ReplFakeSession: TerminalSession {
-  let view = NSView()
+  let view: NSView = ReplKeyRecordingView()
   var onEvent: (@MainActor (TerminalEvent) -> Void)?
   var title = ""
   var workingDirectory: String?
@@ -33,6 +46,7 @@ final class ReplFakeSession: TerminalSession {
   init(launch: TerminalLaunch) { self.launch = launch }
 
   func send(text: String) {}
+  var acceptsInput = true
   func perform(_ action: TerminalAction) {}
   func resize(to size: CGSize) {}
   func setFocused(_ focused: Bool) {}
@@ -240,6 +254,101 @@ final class ReplAppletTests: XCTestCase {
     }
 
     return condition()
+  }
+
+  // MARK: Suspension
+
+  private func controlKey(_ letter: String, repeating: Bool = false) throws -> NSEvent {
+    try XCTUnwrap(
+      NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 0,
+        windowNumber: 0, context: nil,
+        characters: letter == "z" ? "\u{1a}" : "\u{03}", charactersIgnoringModifiers: letter,
+        isARepeat: repeating, keyCode: letter == "z" ? 6 : 8))
+  }
+
+  /// Catches a Ctrl-Z that reaches the terminal, which would send the helper a stray byte on
+  /// resume, and a held key's repeat that does. The pane takes the key and the repeat before the
+  /// terminal sees either, and a Ctrl-C still goes through to the terminal as it does today.
+  func testCtrlZNeverReachesTheTerminalNeitherDoesItsRepeat() async throws {
+    let applet = makeApplet()
+    let session = try XCTUnwrap(engine.sessions.first)
+    let terminal = try XCTUnwrap(session.view as? ReplKeyRecordingView)
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled],
+      backing: .buffered, defer: false)
+
+    window.isReleasedWhenClosed = false
+    window.contentView = applet.view
+    addTeardownBlock { window.close() }
+
+    XCTAssertTrue(window.makeFirstResponder(terminal))
+
+    XCTAssertTrue(applet.view.performKeyEquivalent(with: try controlKey("z")))
+    XCTAssertTrue(applet.view.performKeyEquivalent(with: try controlKey("z", repeating: true)))
+    XCTAssertEqual(terminal.keyDowns, 0)
+
+    XCTAssertFalse(
+      applet.view.performKeyEquivalent(with: try controlKey("c")),
+      "Ctrl-C no longer reaches the terminal")
+  }
+
+  /// Catches a pane that keeps taking input while suspended, one that hides that page code runs,
+  /// and one that stays frozen after the helper runs again. The state the helper's channel reports
+  /// drives the pane.
+  func testASuspendedPaneTakesNoInputAndSaysPageCodeKeepsRunning() async throws {
+    let applet = makeApplet()
+    let session = try XCTUnwrap(engine.sessions.first)
+    var stopped = SuspensionState()
+
+    stopped.observe(stopped: true)
+
+    XCTAssertTrue(session.acceptsInput)
+
+    applet.suspensionChanged(stopped)
+
+    XCTAssertFalse(session.acceptsInput, "a suspended pane still sends keys to the helper")
+    XCTAssertEqual(applet.segments.map(\.text), ["Suspended"])
+
+    let strip = try XCTUnwrap(
+      applet.view.subviews.first { $0.accessibilityIdentifier() == "repl-suspended" })
+
+    XCTAssertFalse(strip.isHidden)
+
+    let message = try XCTUnwrap(
+      strip.subviews.compactMap { $0 as? NSTextField }.first?.stringValue)
+
+    XCTAssertTrue(message.contains(SuspensionWording.pageCodeNote), message)
+    XCTAssertTrue(message.contains("Ctrl-Z"), message)
+
+    stopped.observe(stopped: false)
+    applet.suspensionChanged(stopped)
+
+    XCTAssertTrue(session.acceptsInput)
+    XCTAssertTrue(strip.isHidden)
+    XCTAssertEqual(applet.segments.count, 0)
+  }
+
+  /// Catches a Ctrl-Z that signals a helper sharing the app's own process group, which would stop
+  /// the app with it. The attached peer here is the test process, so the guard must refuse, the pane
+  /// must say so, and it must neither claim a suspension nor stop taking input.
+  func testCtrlZOnAHelperThatSharesTheAppsGroupStopsNothing() async throws {
+    let recording = RecordingHost()
+    let applet = makeApplet(host: recording)
+    let session = try XCTUnwrap(engine.sessions.first)
+
+    _ = try await attach(session)
+
+    let attached = await waitUntil { applet.controllerSuspension != nil }
+
+    XCTAssertTrue(attached)
+
+    applet.suspendKeyPressed(isRepeat: false)
+
+    XCTAssertEqual(applet.controllerSuspension?.canResume, false)
+    XCTAssertTrue(session.acceptsInput)
+    XCTAssertEqual(recording.posts.map(\.text).filter { $0.contains("cannot suspend") }.count, 1)
+    XCTAssertEqual(recording.posts.first?.level, .warning, "a refused suspend was silent")
   }
 
   // MARK: Launch

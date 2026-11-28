@@ -1,6 +1,7 @@
 import AppletKit
 import Darwin
 import Foundation
+import ProcessInspection
 import StatusKit
 
 /// One running exec driver attached to one applet.
@@ -126,6 +127,46 @@ public final class ExecDriverChannel: AppletEventSink {
   /// The child's process ID while it runs.
   public var pid: pid_t? { transport?.pid }
 
+  /// Whether the driver's process is stopped, and whether uniterm stopped it. The process's
+  /// observed state is the truth. The record marks only the stops uniterm made.
+  public private(set) var suspension = SuspensionState()
+
+  /// Runs when the driver's state changes, or when uniterm sends a stop or a continue.
+  public var onSuspensionChange: (@MainActor (SuspensionState) -> Void)?
+
+  private var stopWatcher: ProcessStopWatcher?
+
+  /// Stops the driver and everything it started, by its process group, as Ctrl-Z stops a program
+  /// in a shell. The driver keeps its grant, its groups, and its tabs. A call it sent before the
+  /// stop still runs, and its reply waits in the driver's input until it continues.
+  public func suspend() {
+    guard isConnected, let transport else { return }
+
+    // A driver is spawned into a group of its own, which it leads, so this refuses only when the
+    // driver has already gone or has left its group. The user is told, and nothing is sent.
+    guard transport.suspendGroup() else {
+      producer?.post(
+        failure: .contentUnavailable,
+        text:
+          "uniterm could not suspend the driver, since its process group is gone or not its own.")
+
+      return
+    }
+
+    suspension.stopSent()
+    stopWatcher?.settle()
+    onSuspensionChange?(suspension)
+  }
+
+  /// Continues the driver's group. It works on a stop that something outside uniterm made.
+  public func resume() {
+    guard !isEnded, let transport, suspension.canResume, transport.resumeGroup() else { return }
+
+    suspension.continueSent()
+    stopWatcher?.settle()
+    onSuspensionChange?(suspension)
+  }
+
   public var isConnected: Bool { phase == .connected }
 
   /// Connects to the applet's outlet, spawns the driver, and sends the app's hello. An applet
@@ -157,6 +198,18 @@ public final class ExecDriverChannel: AppletEventSink {
     }
 
     self.transport = transport
+
+    if let started = ProcessInspection.startTimeMicroseconds(of: transport.pid) {
+      let watcher = ProcessStopWatcher(pid: transport.pid, startedMicroseconds: started) {
+        [weak self] stopped in
+        guard let self, suspension.observe(stopped: stopped) else { return }
+
+        onSuspensionChange?(suspension)
+      }
+
+      stopWatcher = watcher
+      watcher.start()
+    }
 
     transport.start()
     transport.send(
@@ -436,6 +489,8 @@ public final class ExecDriverChannel: AppletEventSink {
     guard !isEnded else { return }
 
     phase = .ended(reason)
+    stopWatcher?.cancel()
+    stopWatcher = nil
     applet?.events.disconnect(self)
     transport?.close()
     transport?.stderr.finish()
