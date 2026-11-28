@@ -1,6 +1,8 @@
 # A failed CI shard collects its kept log twice, and the second copy replaces the first
 
-**Status:** open
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27
+**Estimate:** small; no open design decisions
 
 ## Observed
 
@@ -38,3 +40,10 @@ kept log whose window ends at the follow-up step rather than at the tests.
 
 Proving the fix needs a failed shard on CI after it lands. Run 46055769038's `app (1)` shows the same double
 collection, at 19:32:26.9 and again at 19:32:34.7.
+
+## Fix note
+
+The follow-up step in `.github/workflows/ci.yml` now exits at once when its shard's kept log already exists. A shard
+whose tests failed keeps the log its test step collected. A shard stopped by its timeout still gets a log from the
+follow-up step. `scripts/test-ci.sh` runs the step's own script against a fake collector for both cases. The first case
+failed before the fix. A failed shard on CI after this lands is the last proof.

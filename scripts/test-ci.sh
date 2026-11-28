@@ -632,6 +632,57 @@ expect_split_error "zero tests fails" 1 "A 0" "test count must be a positive int
 # Invalid format fails.
 expect_split_error "invalid format fails" 1 "A" "invalid line format"
 
+# The follow-up step exists for a test step that its timeout stopped before it collected the kept
+# log. A shard whose tests failed already collected one, and collecting again would replace it with
+# a log whose window ends later. The step's script runs against a fake collector that records its
+# calls, so the test proves what the workflow's own script does, not GitHub's scheduling of it.
+followup_script() {
+  awk '
+    /- name: Collect kept log if test step did not complete/ { found = 1; next }
+    found && /^        run: \|$/ { body = 1; next }
+    body && /^$/ { print; next }
+    body && /^          / { sub(/^          /, ""); print; next }
+    body { exit }
+  ' "$root/.github/workflows/ci.yml" | sed 's/\${{ strategy.job-index }}/0/g'
+}
+
+expect_followup() {
+  local name="$1" kept_before="$2" expected_calls="$3" expected_log="$4" calls log
+  local dir="$scratch/followup-$RANDOM"
+  mkdir -p "$dir/scripts" "$dir/.build/DerivedData-test"
+  printf '1700000000\n' >"$dir/.build/DerivedData-test/ui-test-start-time.txt"
+  cat >"$dir/scripts/collect-ui-test-log.sh" <<'FAKE'
+#!/usr/bin/env bash
+echo "collected" >>"$(dirname "$0")/../calls"
+echo "second copy" >"$2"
+FAKE
+  chmod +x "$dir/scripts/collect-ui-test-log.sh"
+  if [[ -n "$kept_before" ]]; then
+    printf '%s\n' "$kept_before" >"$dir/.build/DerivedData-test/ui-test-kept-log-shard-0.txt.gz"
+  fi
+  followup_script >"$dir/followup.sh"
+  if [[ ! -s "$dir/followup.sh" ]]; then
+    echo "FAIL: $name: the follow-up step's script was not found in ci.yml" >&2
+    exit 1
+  fi
+  (cd "$dir" && bash followup.sh >"$dir/out" 2>&1) || {
+    echo "FAIL: $name: the follow-up script failed" >&2
+    cat "$dir/out" >&2
+    exit 1
+  }
+  calls=0
+  [[ -f "$dir/calls" ]] && calls="$(wc -l <"$dir/calls" | tr -d ' ')"
+  log="$(cat "$dir/.build/DerivedData-test/ui-test-kept-log-shard-0.txt.gz" 2>/dev/null || true)"
+  if [[ "$calls" != "$expected_calls" || "$log" != "$expected_log" ]]; then
+    echo "FAIL: $name: expected $expected_calls collection(s) and log \"$expected_log\", got $calls and \"$log\"" >&2
+    exit 1
+  fi
+  echo "PASS: $name"
+}
+
+expect_followup "a shard that failed its tests keeps the log its test step collected" "first copy" 0 "first copy"
+expect_followup "a shard stopped by its timeout gets a log from the follow-up step" "" 1 "second copy"
+
 # The waiting-evidence report reads only GitHub. The fake serves one file per endpoint and applies
 # the script's own --jq filter, so the filters are proved too. A log with no file is one GitHub no
 # longer serves.
