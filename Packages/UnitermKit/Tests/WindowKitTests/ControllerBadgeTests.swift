@@ -80,4 +80,73 @@ final class ControllerBadgeTests: XCTestCase {
     XCTAssertEqual(view.controlMark?.controllers, [])
     XCTAssertEqual(view.controlMark?.revokeAvailable, false)
   }
+
+  /// Catches an acting pane that no marker names. A connection binds to the first pane through
+  /// ancestry and group-less, so only the host's report of who acts from the pane can mark it. The
+  /// pane's applet takes sent content, so it carries the controller's grant on the turn it binds.
+  /// Disconnecting the pane clears it, though the connection stays open, and the closing
+  /// connection clears it too.
+  func testAControllerActingFromAPaneMarksItUntilTheUserDisconnectsIt() async throws {
+    let fixture = ScriptingFixture()
+    addTeardownBlock { @MainActor in fixture.cleanUp() }
+
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("wk-\(UUID().uuidString.prefix(8))", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+    let center = StatusCenter()
+    let host = ScriptHost(
+      listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
+      issueProducer: { center.issueProducer(kind: .script, name: $0) },
+      windows: fixture.scripting)
+
+    host.start()
+    addTeardownBlock { @MainActor in host.stop() }
+    fixture.windows.wireControllers(to: host)
+
+    let (controller, _) = try fixture.openWindow()
+    let pane = controller.focusedPane
+    let applet = try XCTUnwrap(controller.paneArea.applet(for: pane) as? FakeApplet)
+
+    TestSessionRoot.record(in: host, window: controller.scriptWindowID, pane: pane)
+
+    XCTAssertEqual(applet.authority.owners, [], "a pane no controller acts from was marked")
+
+    let peer = try UnixSocket.connect(path: host.instanceAddress)
+    defer { peer.shutdownAndClose() }
+
+    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
+    _ = try await Task.detached {
+      try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
+    }.value
+    try peer.send(ScriptHelperMessage.begin(name: "marker-test").frame())
+
+    await settle { !applet.authority.owners.isEmpty }
+
+    let ids = host.controllers(actingFrom: controller.scriptWindowID, pane: pane)
+
+    XCTAssertEqual(ids.count, 1)
+    XCTAssertEqual(
+      applet.authority.owners,
+      Set(ids.map { AppletCaller(grant: GroupOwner(connection: $0).description) }))
+    XCTAssertEqual(applet.publishedTabs.first.markers[.authority]?.owners, applet.authority.owners)
+    XCTAssertEqual(
+      controller.paneArea.paneView(for: pane)?.paneMarkers.map(\.kind), [.authority])
+
+    controller.disconnect(pane)
+
+    XCTAssertEqual(applet.authority.owners, [], "the disconnected pane stayed marked")
+    XCTAssertEqual(controller.paneArea.paneView(for: pane)?.paneMarkers, [])
+
+    controller.enableRemoteControl(pane)
+
+    await settle { !applet.authority.owners.isEmpty }
+
+    peer.shutdownAndClose()
+
+    await settle { applet.authority.owners.isEmpty }
+
+    XCTAssertEqual(applet.authority.owners, [])
+  }
 }

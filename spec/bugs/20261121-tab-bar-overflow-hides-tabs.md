@@ -1,6 +1,7 @@
 # Tabs past the tab bar's trailing edge cannot be seen or clicked
 
-**Status:** open
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27, by UTERM-041 M1. The shared tab bar scrolls by trackpad and shift-scroll and keeps the selected tab in view.
 **Estimate:** medium; no open design decisions. The user chose the scrolling bar at UTERM-041's review gate.
 **Triaged:** 2026-11-22 (still reproduces in a package test; fix stays with UTERM-041 M1)
 **Validation:** found by reading the code during the UTERM-041 review. Reproduced by a package test on 2026-11-22, not in the running app.

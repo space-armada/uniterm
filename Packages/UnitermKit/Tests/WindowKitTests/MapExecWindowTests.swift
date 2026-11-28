@@ -32,6 +32,24 @@ final class MapExecWindowTests: XCTestCase {
     return (pane, try XCTUnwrap(controller.paneArea.applet(for: pane) as? MapViewerApplet))
   }
 
+  /// Catches a driven map that shows the authority marker. The driver commands its own pane
+  /// through its attached channel, and no connection is acting for it, so the map's one tab carries
+  /// no marker whether the pane is disconnected or remote-controlled.
+  func testADrivenMapCarriesNoAuthorityMarker() throws {
+    let fixture = try ExecPaneFixture()
+    addTeardownBlock { @MainActor in fixture.cleanUp() }
+
+    let controller = try fixture.openWindow()
+    let (pane, map) = try mapPane(fixture, controller)
+
+    XCTAssertNil(map.publishedTabs.first.markers[.authority])
+
+    controller.enableRemoteControl(pane)
+
+    XCTAssertEqual(controller.paneAuthority(for: pane).owners, [])
+    XCTAssertNil(map.publishedTabs.first.markers[.authority])
+  }
+
   private func waitUntil(
     _ what: String, timeout: TimeInterval = 15, file: StaticString = #filePath, line: UInt = #line,
     _ condition: () -> Bool

@@ -627,6 +627,21 @@ final class TerminalAppletTests: XCTestCase {
     XCTAssertTrue(bar.isHidden)
   }
 
+  /// Catches a terminal tab marked as controlled. A terminal owns its input and takes neither
+  /// commands nor sent content, so even a grant the host accepted marks no tab.
+  func testATerminalTabNeverCarriesTheAuthorityMarker() throws {
+    let (applet, _, _, _) = makeApplet()
+
+    applet.openTab()
+    applet.authorityDidChange(PaneAuthority(owners: [AppletCaller(grant: "connection 1")]))
+
+    XCTAssertTrue(applet.publishedTabs.all.allSatisfy { $0.markers.isEmpty })
+
+    let bar = try tabBar(of: applet)
+
+    XCTAssertTrue(bar.subviews.allSatisfy { !($0 is AppletMarkerView) })
+  }
+
   /// Catches a bar close that resolves its index only when the close runs. A tab closes before the
   /// queued close runs, so the clicked tab shifts down one place. The clicked tab closes, and its
   /// neighbor stays.

@@ -108,6 +108,7 @@ extension BrowserApplet: AppletCommandHandling {
     }
 
     tabOwners[id] = caller
+    refresh()
 
     // The text passed every check in `typedText`, so a false answer is not expected. The caller
     // still gets the reference, since it owns the tab that now exists.
@@ -228,14 +229,25 @@ extension BrowserApplet: AppletCommandHandling {
     guard !closed else { return }
 
     tabOwners[tab.id] = caller
+    refresh()
   }
 
   public func grantDidEnd(_ caller: AppletCaller) {
     for (id, owner) in tabOwners where owner == caller { tabOwners[id] = nil }
+
+    refresh()
   }
 
   private func releaseOwnedTabs() {
     tabOwners.removeAll()
+    refresh()
+  }
+
+  public func authorityDidChange(_ authority: PaneAuthority) {
+    guard authority != self.authority else { return }
+
+    self.authority = authority
+    refresh()
   }
 
   public func hostBadgeReachDidChange(_ width: CGFloat) {

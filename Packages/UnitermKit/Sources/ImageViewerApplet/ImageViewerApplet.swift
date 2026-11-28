@@ -32,6 +32,10 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
   public internal(set) var title = ImageViewerApplet.untitled
   public internal(set) var segments: [AppletSegment] = []
   public internal(set) var publishedTabs: AppletTabList
+
+  /// The grants that can act on the pane now. The one tab carries the authority marker while any
+  /// can.
+  private var authority = PaneAuthority.none
   public let openPicker: OpenPicker
   public let sourceSwap = SourceSwap()
 
@@ -1101,6 +1105,15 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     maybePrefetch()
   }
 
+  public func authorityDidChange(_ authority: PaneAuthority) {
+    guard authority != self.authority else { return }
+
+    self.authority = authority
+    publishedTabs = AppletTabList(
+      first: authority.applyingOneTabMarker(to: publishedTabs.first))
+    host?.appletTabsDidChange(self)
+  }
+
   public func focus() {
     content.window?.makeFirstResponder(content)
   }
@@ -1157,7 +1170,9 @@ public final class ImageViewerApplet: Applet, SourceReplacing {
     segments = newSegments
 
     if titleChanged {
-      publishedTabs = AppletTabList(first: AppletTab(id: publishedTabs.first.id, title: newTitle))
+      publishedTabs = AppletTabList(
+        first: authority.applyingOneTabMarker(
+          to: AppletTab(id: publishedTabs.first.id, title: newTitle)))
       host?.appletTabsDidChange(self)
     }
 

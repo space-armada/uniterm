@@ -25,6 +25,10 @@ public final class DataViewerApplet: Applet, SourceReplacing {
   public private(set) var title = DataViewerApplet.untitled
   public private(set) var segments: [AppletSegment] = []
   public private(set) var publishedTabs: AppletTabList
+
+  /// The grants that can act on the pane now. The one tab carries the authority marker while any
+  /// can.
+  private var authority = PaneAuthority.none
   public let openPicker: OpenPicker
   public let sourceSwap = SourceSwap()
 
@@ -401,6 +405,15 @@ public final class DataViewerApplet: Applet, SourceReplacing {
     session.close()
   }
 
+  public func authorityDidChange(_ authority: PaneAuthority) {
+    guard authority != self.authority else { return }
+
+    self.authority = authority
+    publishedTabs = AppletTabList(
+      first: authority.applyingOneTabMarker(to: publishedTabs.first))
+    host?.appletTabsDidChange(self)
+  }
+
   public func focus() {
     content.focusBody()
   }
@@ -461,7 +474,8 @@ public final class DataViewerApplet: Applet, SourceReplacing {
 
     if titleChanged {
       publishedTabs = AppletTabList(
-        first: AppletTab(id: publishedTabs.first.id, title: newTitle))
+        first: authority.applyingOneTabMarker(
+          to: AppletTab(id: publishedTabs.first.id, title: newTitle)))
       host?.appletTabsDidChange(self)
     }
 

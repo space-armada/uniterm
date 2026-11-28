@@ -114,6 +114,43 @@ final class QuestionsAppletTests: XCTestCase {
     XCTAssertEqual(restored.tabCount, 0)
   }
 
+  /// Catches a bar that shows for one question, or leaves a blank strip where it was. With no
+  /// question or one, the bar is hidden and takes no height, and the form starts at the pane's top
+  /// edge. Two questions show the bar with both tabs, and closing one hides it again.
+  func testTheBarShowsOnlyForTwoOrMoreQuestionsAndLeavesNoStripBelowTwo() throws {
+    let (applet, _) = makeApplet()
+    let window = hold(applet)
+    defer { window.close() }
+
+    let bar = applet.content.tabBar
+
+    XCTAssertTrue(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, 0)
+    XCTAssertEqual(applet.publishedTabs.all.count, 1, "an empty book still publishes one tab")
+
+    _ = applet.open(simple, for: requester("a")) { _ in }
+    applet.view.layoutSubtreeIfNeeded()
+
+    let form = try XCTUnwrap(panel(in: applet))
+
+    XCTAssertTrue(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, 0)
+    XCTAssertEqual(applet.view.convert(form.frame, from: form.superview).minY, 0, accuracy: 0.5)
+
+    _ = applet.open(simple, for: requester("b")) { _ in }
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertFalse(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, AppletTabBar.height)
+    XCTAssertEqual(applet.publishedTabs.all.count, 2)
+
+    applet.closeTab(at: 0)
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, 0)
+  }
+
   /// Catches a description that carries form content or a requester, which "The Questions pane"
   /// forbids, and a restore that accepts another applet's description.
   func testTheDescriptionHoldsNothingAndRefusesOtherTypes() throws {

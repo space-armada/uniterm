@@ -367,6 +367,100 @@ final class BrowserRemoteTests: XCTestCase {
     XCTAssertEqual(harness.applet.tabOwners.count, 0)
   }
 
+  private func markers(_ harness: BrowserHarness) -> [Bool] {
+    harness.applet.publishedTabs.all.map { $0.markers[.authority] != nil }
+  }
+
+  /// Catches an authority marker on the wrong browser tab. The host says the grant can act on the
+  /// pane. The tab the grant opened carries the marker, and the user's own tab never does. The
+  /// marker follows the grant, so it clears when the host drops the grant from the set, and when
+  /// the grant ends, and each change tells the host on the same turn.
+  func testOnlyTheTabTheGrantOpenedCarriesTheMarkerWhileTheGrantLives() async throws {
+    let harness = try await make()
+    defer { harness.stop() }
+
+    let (reference, _) = try open(harness, "/a")
+
+    XCTAssertEqual(
+      markers(harness), [false, false], "a grant the host has not accepted marked a tab")
+
+    var changes = harness.host.recording.tabChanges
+
+    harness.applet.authorityDidChange(PaneAuthority(owners: [grant]))
+
+    XCTAssertEqual(markers(harness), [false, true])
+    XCTAssertGreaterThan(harness.host.recording.tabChanges, changes)
+    XCTAssertEqual(
+      harness.applet.publishedTabs.all[1].markers[.authority]?.owners, [grant])
+
+    harness.applet.authorityDidChange(PaneAuthority(owners: [other]))
+
+    XCTAssertEqual(markers(harness), [false, false], "another grant's authority marked the tab")
+
+    harness.applet.authorityDidChange(PaneAuthority(owners: [grant, other]))
+    changes = harness.host.recording.tabChanges
+
+    XCTAssertEqual(markers(harness), [false, true])
+
+    harness.applet.grantDidEnd(grant)
+
+    XCTAssertEqual(markers(harness), [false, false])
+    XCTAssertGreaterThan(harness.host.recording.tabChanges, changes)
+    XCTAssertEqual(code(send(harness, "read", on: reference)), .notOwned)
+  }
+
+  /// Catches an adopted first tab that is marked late, and a closed tab that stays marked. A tab
+  /// adopted for the grant is marked on the same turn, a new control generation clears it, and a
+  /// closed owned tab leaves the published list.
+  func testAdoptionControlChangeAndCloseUpdateTheMarkerOnTheSameTurn() async throws {
+    let harness = try await make()
+    defer { harness.stop() }
+
+    harness.applet.authorityDidChange(PaneAuthority(owners: [grant]))
+
+    XCTAssertEqual(markers(harness), [false])
+
+    harness.applet.adoptFirstTab(for: grant)
+
+    XCTAssertEqual(markers(harness), [true])
+
+    harness.applet.controlDidChange(
+      PaneControl(access: .remoteControlled, driver: .none, generation: 9))
+
+    XCTAssertEqual(markers(harness), [false])
+
+    let (_, opened) = try open(harness, "/b")
+    let index = try XCTUnwrap(harness.applet.tabs.firstIndex { $0 === opened })
+
+    XCTAssertEqual(markers(harness), [false, true])
+
+    _ = await harness.applet.closeTab(at: index)
+
+    XCTAssertEqual(markers(harness), [false])
+  }
+
+  /// Catches a bar that shows a marked tab with no marker. The shared bar draws the marker the
+  /// browser published, beside the title of the marked tab only.
+  func testTheBarDrawsTheMarkerOfTheOwnedTabOnly() async throws {
+    let harness = try await make()
+    defer { harness.stop() }
+
+    harness.applet.authorityDidChange(PaneAuthority(owners: [grant]))
+    _ = try open(harness, "/a")
+
+    let content = harness.applet.content
+    content.frame = NSRect(x: 0, y: 0, width: 600, height: 400)
+    content.layoutSubtreeIfNeeded()
+
+    func ids(_ view: NSView) -> [String] {
+      view.subviews.flatMap {
+        ($0 as? AppletMarkerView).map { [$0.accessibilityIdentifier()] } ?? ids($0)
+      }
+    }
+
+    XCTAssertEqual(ids(content.tabBar), ["tab-1-marker-authority"])
+  }
+
   /// Catches a pane a layout created whose first tab is not its controller's, and one that keeps
   /// it for the wrong grant.
   func testTheFirstTabOfALayoutPaneBelongsToTheLayoutsCaller() async throws {

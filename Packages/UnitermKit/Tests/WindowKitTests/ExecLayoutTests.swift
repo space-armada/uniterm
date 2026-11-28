@@ -233,6 +233,111 @@ final class ExecLayoutTests: XCTestCase {
     XCTAssertEqual(notes.text, "Hi", "a revoked driver cleared the notes")
   }
 
+  /// Catches an authority marker that misstates a driver's reach. A member of the driver's group
+  /// is one the driver's commands reach, so its owner set holds the driver's grant. The driver's
+  /// own pane is never marked for it, since the driver commands that pane through its attached
+  /// channel. Revoking the driver on a member takes the group, and the member's set empties.
+  func testADriversMembersCarryItsGrantAndItsOwnPaneNever() async throws {
+    let fixture = try makeFixture()
+    let controller = try fixture.openWindow()
+
+    let (pane, members) = try await presented(fixture, controller)
+    let owner = try XCTUnwrap(controller.execAttachments[pane]?.owner)
+    let grant = AppletCaller(grant: owner.description)
+
+    await waitUntil("the driver commands its members") {
+      controller.paneAuthority(for: members[0]).owners == [grant]
+    }
+
+    XCTAssertEqual(controller.paneAuthority(for: members[1]).owners, [grant])
+    XCTAssertEqual(controller.paneAuthority(for: pane).owners, [])
+
+    controller.revokeController(members[0])
+
+    XCTAssertEqual(controller.paneAuthority(for: members[0]).owners, [])
+  }
+
+  /// Runs one owner-set state against a real driver command. The driver's presentation is laid
+  /// out, `change` moves the first member into the state, and the driver's next command, a notes
+  /// update to that member, runs. The marker's owner set and the command must agree: a command the
+  /// pane takes lands and the set holds the driver, and a refused one leaves the notes alone and
+  /// the set empty.
+  private func assertMarkerAgreesWithTheCommand(
+    state: String, refusal: String?, file: StaticString = #filePath, line: UInt = #line,
+    _ change: (MainWindowController, NodeID, GroupOwner) -> Void
+  ) async throws {
+    let fixture = try makeFixture()
+    let controller = try fixture.openWindow()
+    let later =
+      #"{"leaf":1,"later":true,"applet":"fixture-notes","schema":[0,0],"name":"set-notes","#
+      + #""arguments":{"text":"after"}}"#
+
+    let (pane, members) = try await presented(fixture, controller, later: [later])
+    let notes = try XCTUnwrap(controller.paneArea.applet(for: members[0]) as? NotesFixture)
+    let slides = try XCTUnwrap(fixture.slides(controller, pane))
+    let owner = try XCTUnwrap(controller.execAttachments[pane]?.owner)
+    let grant = AppletCaller(grant: owner.description)
+
+    await waitUntil("the driver commands its members", file: file, line: line) {
+      notes.text == "Hi"
+    }
+
+    change(controller, members[0], owner)
+
+    let marked = controller.paneAuthority(for: members[0]).owners == [grant]
+
+    XCTAssertEqual(marked, refusal == nil, "the marker for \(state)", file: file, line: line)
+
+    guard let refusal else {
+      slides.button.performClick(nil)
+
+      return await waitUntil("the driver's command lands for \(state)", file: file, line: line) {
+        notes.text == "after"
+      }
+    }
+
+    guard state != "an ended run" else {
+      XCTAssertEqual(controller.driverStanding(of: owner), .ended, file: file, line: line)
+
+      return
+    }
+
+    slides.button.performClick(nil)
+
+    await waitUntil("the command is refused for \(state)", file: file, line: line) {
+      history(controller).contains { $0.contains("error message:") && $0.contains(refusal) }
+    }
+
+    XCTAssertEqual(
+      notes.text, "Hi", "a refused command landed for \(state)", file: file, line: line)
+  }
+
+  /// Catches a marker that disagrees with the command path for a driver. For a live run, a
+  /// disconnected member, a revoked run, a run that ended, and a member the run no longer owns,
+  /// the owner set and a real driver command must reach the same answer, since both ask the same
+  /// shared steps.
+  func testTheDriversMarkerAndItsCommandsAgreeInEveryState() async throws {
+    try await assertMarkerAgreesWithTheCommand(state: "a live run", refusal: nil) { _, _, _ in }
+
+    try await assertMarkerAgreesWithTheCommand(
+      state: "a disconnected member", refusal: "The pane is disconnected"
+    ) { controller, member, _ in controller.disconnect(member) }
+
+    try await assertMarkerAgreesWithTheCommand(
+      state: "a revoked run", refusal: "You revoked"
+    ) { controller, member, _ in controller.revokeController(member) }
+
+    try await assertMarkerAgreesWithTheCommand(
+      state: "an ended run", refusal: "the driver no longer drives"
+    ) { controller, member, _ in
+      controller.execAttachments.values.first?.channel?.close()
+    }
+
+    try await assertMarkerAgreesWithTheCommand(
+      state: "a member the run no longer owns", refusal: "not open in that window"
+    ) { controller, _, owner in controller.ownerEnded(owner) }
+  }
+
   /// Catches a driver's waiting command that never answers, or that outlives its run. The wait
   /// stays pending while the driver's other commands run, and the user's Next sends the command
   /// that ends it. A second wait is failed when the run ends, and the notes are told to drop it.

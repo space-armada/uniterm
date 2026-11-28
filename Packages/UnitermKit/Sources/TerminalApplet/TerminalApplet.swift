@@ -807,9 +807,7 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
     shownTab = selected
     shownView = selected?.session?.view
 
-    tabBar.update(
-      titles: tabs.map { $0.title }, selected: selectedIndex, canOpenTab: canOpenTab)
-    tabBar.isHidden = tabs.count < 2
+    tabBar.update(tabs: publishedTabs.all, selected: selectedIndex, canOpenTab: canOpenTab)
 
     runPrompt.command = commandLine ?? ""
     runPrompt.isHidden = !isAwaitingRun
@@ -839,8 +837,7 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
     case .titleChanged(let value):
       let cleaned = Self.sanitized(value, limit: 80)
       tab.title = cleaned.isEmpty ? Self.defaultTitle : cleaned
-      tabBar.update(
-        titles: tabs.map { $0.title }, selected: selectedIndex, canOpenTab: canOpenTab)
+      tabBar.update(tabs: publishedTabs.all, selected: selectedIndex, canOpenTab: canOpenTab)
 
       if isSelected { host?.appletDidChange(self) }
 

@@ -557,6 +557,7 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     hosts[ObjectIdentifier(applet)] = HostEntry(applet: applet, host: host)
     applet.host = host
     applet.controlDidChange(paneControls.control(of: pane))
+    applet.authorityDidChange(paneAuthority(for: pane, applet: applet))
 
     paneArea.paneView(for: pane)?.onControlAction = { [weak self] action in
       self?.runControlAction(action, on: pane)
@@ -575,6 +576,21 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
       }
     }
     paneArea.paneView(for: pane)?.execStatus = execStatus(of: pane)
+    drawPaneMarkers(of: applet, in: pane)
+  }
+
+  /// Draws the markers of the applet's one tab beside the pane's badge, while the pane has no tab
+  /// bar. It reads only the published tabs, so it never feeds back into the control marks.
+  private func refreshPaneMarkers(of applet: any Applet) {
+    guard let pane = paneArea.tree.paneIDs.first(where: { paneArea.applet(for: $0) === applet })
+    else { return }
+
+    drawPaneMarkers(of: applet, in: pane)
+  }
+
+  private func drawPaneMarkers(of applet: any Applet, in pane: NodeID) {
+    paneArea.paneView(for: pane)?.paneMarkers =
+      applet.publishedTabs.paneLevelTab?.markers.ordered ?? []
   }
 
   /// Makes the applet ready for the window. A launcher also learns how to open its choice, and gets
@@ -1473,6 +1489,8 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
   /// Records the tab as recent when it is the focused pane's. A tab that changes in the
   /// background never counts as recent. Then the palette updates its rows in place, a moment later.
   public func appletTabsDidChange(_ applet: any Applet) {
+    refreshPaneMarkers(of: applet)
+
     if applet === paneArea.applet(for: paneArea.focusedPane) {
       recordFocusedTab()
     }

@@ -225,13 +225,11 @@ final class BrowserView: NSView, NSTextFieldDelegate {
     errorPage.show(error)
   }
 
-  /// Shows one item for each title. The bar takes no room while there is one tab.
-  func show(tabTitles: [String], selected: Int) {
-    let visible = tabTitles.count > 1
-
-    tabBar.update(titles: tabTitles, selected: selected, canOpenTab: true)
-    tabBar.isHidden = !visible
-    tabBarHeight?.constant = visible ? AppletTabBar.height : 0
+  /// Shows one item for each tab. The bar takes no room while the shared rule hides it.
+  func show(tabs: [AppletTab], selected: Int) {
+    tabBar.update(tabs: tabs, selected: selected, canOpenTab: true)
+    tabBarHeight?.constant =
+      AppletTabList.barShows(forTabCount: tabs.count) ? AppletTabBar.height : 0
   }
 
   func show(canGoBack: Bool, canGoForward: Bool, isLoading: Bool) {

@@ -50,10 +50,17 @@ public struct AppletTab: Sendable, Equatable, Identifiable {
   /// Extra text the tab is found by, such as a working directory. Also untrusted text.
   public var details: [String]
 
-  public init(id: AppletTabID, title: String, details: [String] = []) {
+  /// What the tab shows beside its title: at most one marker of each kind. A tab without markers
+  /// draws as a plain tab.
+  public var markers: AppletMarkerSet
+
+  public init(
+    id: AppletTabID, title: String, details: [String] = [], markers: AppletMarkerSet = .init()
+  ) {
     self.id = id
     self.title = title
     self.details = details
+    self.markers = markers
   }
 }
 
@@ -80,6 +87,18 @@ public struct AppletTabList: Sendable, Equatable {
   }
 
   public var all: [AppletTab] { [first] + rest }
+
+  /// True when a tab bar shows for this many tabs. Every applet with a bar follows it, and the host
+  /// reads it to know whether the pane's one tab shows its markers at the pane level.
+  public static func barShows(forTabCount count: Int) -> Bool {
+    count >= 2
+  }
+
+  /// True when the applet's tab bar shows.
+  public var showsBar: Bool { Self.barShows(forTabCount: all.count) }
+
+  /// The tab that stands for the pane when no bar shows. Nil while a bar shows.
+  public var paneLevelTab: AppletTab? { showsBar ? nil : first }
 
   public func contains(_ id: AppletTabID) -> Bool {
     all.contains { $0.id == id }
