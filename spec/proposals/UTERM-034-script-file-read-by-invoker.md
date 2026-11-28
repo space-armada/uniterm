@@ -161,7 +161,7 @@ None.
   control-frame cap, and refuses a byte count over the cap from the begin alone.
 - **UTERM-032, UTERM-029, and this proposal change the same wire in place** — likelihood: medium, impact: low. Two
   changes could take the same message name. Mitigation: each change takes its own new message name, and the decoders
-  refuse a name they do not know, so a clash fails by name.
+  refuse a name they do not know, so a clash fails by name. Amended 2026-11-27; see Decision Log.
 - **macOS charges the command's read to uniterm instead of to the program that started it** — likelihood: medium,
   impact: high. The evidence does not settle the likelihood, so it takes the higher rating. The fix assumes the bundled command's reads are checked against the privacy grants of the process that launched
   it, not of the app bundle it sits in. If not, the command's own read borrows uniterm's grants with no race at all.

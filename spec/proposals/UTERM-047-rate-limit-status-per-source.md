@@ -215,11 +215,11 @@ way.
   deviation.
 - **The `post-status` contract changes for scripts** — likelihood: medium, impact: medium.
   Mitigation: status history is not persisted, and the change alters no stored format, so a redeploy reverts it. The
-  `uniterm` command and the app ship together. Other programs send `post-status` too, and ScriptWire is at 0 under UTERM-063, so
-  the contract changes in place, and an older program's message is read with its old meaning or refused by name. `busy`
-  already exists on the wire. Exec drivers send no status call. The host posts their failures through an applet
-  producer. Only a refusal from `post-status`, if "What happens over the budget" picks one, would become published
-  script behavior, and its leaves-undone line says what it breaks.
+  `uniterm` command and the app ship together. Other programs send `post-status` too, and ScriptWire is at 0 under
+  UTERM-063, so the contract changes in place, and an older program's message is read with its old meaning or refused
+  by name. `busy` already exists on the wire. Exec drivers send no status call. The host posts their failures through
+  an applet producer. Only a refusal from `post-status`, if "What happens over the budget" picks one, would become
+  published script behavior, and its leaves-undone line says what it breaks. Amended 2026-11-27; see Decision Log.
 
 ## Milestones
 

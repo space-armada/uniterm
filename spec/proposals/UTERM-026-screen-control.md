@@ -152,8 +152,8 @@ permission kind of its own. A controller's zoom behaves as the user's zoom, so t
 - The refusals are distinct: already zoomed, and not a member. The reply and `list-windows` say which pane is zoomed and
   who made the zoom.
 - A window holds one zoom at a time, so a second zoom is refused as already zoomed, whether or not the window is key.
-- The kind is `:pane-zoom`, named by kind alone and at edition 0, in declared files only. A package that names it is refused, and an exec driver
-  never gets it. The approval says the controller may hide your other panes in the windows it controls.
+- The kind is `:pane-zoom`, named by kind alone, in declared files only. A package that names it is refused, and an
+  exec driver never gets it. The approval says the controller may hide your other panes in the windows it controls.
 - The user ends zoom with Zoom Pane again, a split, a close, or a focus move to a hidden pane.
 - A script's `open-pane` is the user's split. So it ends zoom, and its new pane takes focus.
 - A layout request that makes a new pane is a set of the user's splits made at once, per UTERM-036. So it ends zoom,
@@ -679,7 +679,8 @@ Amended 2026-11-20; see Decision Log.
   "each named by kind alone and at edition 0", and that "the helper and the app run no call when their versions differ:
   at ScriptWire's hello, or at the helper's begin once UTERM-056 has landed". The kinds carry no version, and the hello
   cannot tell builds apart at 0. The text now says the kinds are named by kind alone, and that an older program is
-  refused by name at its first changed message.
+  refused by name at its first changed message. "Pane zoom" said the kind is "named by kind alone and at edition 0". It
+  now says named by kind alone, as "Names and version skew" does.
 
 ## References
 
