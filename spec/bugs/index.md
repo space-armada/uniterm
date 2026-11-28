@@ -78,4 +78,3 @@
 | [20261127-ui-test-run-fails-in-a-fresh-checkout](20261127-ui-test-run-fails-in-a-fresh-checkout.md) | A local UI test run fails at once in a checkout with no test build folder | open |
 | [20261127-closing-a-terminal-whose-shell-is-stopped-may-hang-the-app](20261127-closing-a-terminal-whose-shell-is-stopped-may-hang-the-app.md) | Closing a terminal whose shell is stopped may block the main thread until the shell continues | fixed |
 | [20261127-terminal-engine-changes-the-apps-own-environment](20261127-terminal-engine-changes-the-apps-own-environment.md) | Starting the terminal engine edits the whole process's environment, which leaks between tests | open |
-| [20261127-svg-routes-to-image-viewer-that-refuses-it](20261127-svg-routes-to-image-viewer-that-refuses-it.md) | An SVG file opens in the image viewer, which refuses it as not an image | open |
