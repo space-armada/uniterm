@@ -78,5 +78,5 @@
 | [20261127-ui-test-run-fails-in-a-fresh-checkout](20261127-ui-test-run-fails-in-a-fresh-checkout.md) | A local UI test run fails at once in a checkout with no test build folder | fixed |
 | [20261127-closing-a-terminal-whose-shell-is-stopped-may-hang-the-app](20261127-closing-a-terminal-whose-shell-is-stopped-may-hang-the-app.md) | Closing a terminal whose shell is stopped may block the main thread until the shell continues | fixed |
 | [20261127-terminal-engine-changes-the-apps-own-environment](20261127-terminal-engine-changes-the-apps-own-environment.md) | Starting the terminal engine edits the whole process's environment, which leaks between tests | proposed |
-| [20261127-post-status-at-producer-limit-says-no-window](20261127-post-status-at-producer-limit-says-no-window.md) | `post-status` at the producer limit is refused as "uniterm has no window to show the message" | open |
+| [20261127-post-status-at-producer-limit-says-no-window](20261127-post-status-at-producer-limit-says-no-window.md) | `post-status` at the producer limit is refused as "uniterm has no window to show the message" | fixed |
 | [20261127-pending-request-line-shows-unmarked-self-reported-name](20261127-pending-request-line-shows-unmarked-self-reported-name.md) | A "Pending request:" line can show a program's self-reported name with no unverified marker | open |

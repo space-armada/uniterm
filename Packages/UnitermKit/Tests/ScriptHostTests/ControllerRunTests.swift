@@ -53,7 +53,7 @@ final class ControllerRunTests: XCTestCase {
 
     host = ScriptHost(
       listener: try ScriptListener.start(directory: directory, commandIdentity: command),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows,
+      issueProducer: { center.requestProducer(kind: .script, name: $0) }, windows: windows,
       controllers: ControllerSettings(
         runsRoot: runs, helper: command, trustDirectory: work.appendingPathComponent("trust")),
       settings: settings.store)

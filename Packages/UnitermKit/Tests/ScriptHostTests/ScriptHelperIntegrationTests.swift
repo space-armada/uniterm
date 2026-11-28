@@ -31,7 +31,7 @@ final class ScriptHelperIntegrationTests: XCTestCase {
 
     host = ScriptHost(
       listener: listener,
-      issueProducer: { center.issueProducer(kind: .script, name: $0) },
+      issueProducer: { center.requestProducer(kind: .script, name: $0) },
       onRefusal: { [weak self] in
         self?.refusals.append($0)
         self?.refused?.fulfill()
@@ -104,6 +104,61 @@ final class ScriptHelperIntegrationTests: XCTestCase {
     XCTAssertEqual(run.status, 1)
     XCTAssertTrue(run.standardError.contains("the level must be"), run.standardError)
     XCTAssertTrue(center.history.isEmpty)
+  }
+
+  /// Catches a refusal at the producer limit that blames a missing window. The script's error names
+  /// the limit, and nothing is posted. It cannot prove the refusal when no window is open.
+  func testAScriptRefusedAtTheProducerLimitIsToldTheLimitNotAMissingWindow() async throws {
+    var policy = StatusPolicy()
+    policy.producerLimit = 1
+
+    let full = StatusCenter(policy: policy)
+    let held = full.issueProducer(kind: .script, name: "holds the only slot")
+
+    XCTAssertNotNil(held)
+
+    let otherDirectory = try ScriptFixtures.makeSocketDirectory()
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: otherDirectory)
+    let limited = ScriptHost(
+      listener: listener, issueProducer: { full.requestProducer(kind: .script, name: $0) })
+
+    limited.start()
+    recordTestProcessAsSessionRoot(limited)
+
+    defer {
+      limited.stop()
+      try? FileManager.default.removeItem(at: otherDirectory)
+    }
+
+    let run = try await ScriptFixtures.run(
+      socket: limited.instanceAddress, script: ScriptFixtures.script("post-status"))
+
+    XCTAssertEqual(run.status, 1, run.standardError)
+    XCTAssertTrue(run.standardError.contains("limit"), run.standardError)
+    XCTAssertFalse(run.standardError.contains("no window"), run.standardError)
+    XCTAssertTrue(full.history.isEmpty)
+  }
+
+  /// Catches a missing window that is reported as anything but a missing window. It cannot prove
+  /// the wording the user sees in the running app.
+  func testAScriptWithNoWindowIsToldThereIsNoWindow() async throws {
+    let otherDirectory = try ScriptFixtures.makeSocketDirectory()
+    let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: otherDirectory)
+    let windowless = ScriptHost(listener: listener, issueProducer: { _ in .noWindow })
+
+    windowless.start()
+    recordTestProcessAsSessionRoot(windowless)
+
+    defer {
+      windowless.stop()
+      try? FileManager.default.removeItem(at: otherDirectory)
+    }
+
+    let run = try await ScriptFixtures.run(
+      socket: windowless.instanceAddress, script: ScriptFixtures.script("post-status"))
+
+    XCTAssertEqual(run.status, 1, run.standardError)
+    XCTAssertTrue(run.standardError.contains("no window"), run.standardError)
   }
 
   /// Catches a helper that starts with Janet's full power. A script may read no file unless the

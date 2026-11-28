@@ -13,8 +13,8 @@ import StatusKit
 /// posts as uniterm. The producer's name is the script's, which the user can read in the history.
 @MainActor
 public final class ScriptHost {
-  /// Issues a script producer, or nil when no window can show one.
-  public typealias ProducerIssuer = @MainActor (_ name: String) -> StatusProducer?
+  /// Issues a script producer, or says why none came back.
+  public typealias ProducerIssuer = @MainActor (_ name: String) -> ProducerRequest
 
   /// The longest producer name shown, in UTF-8 bytes.
   static let maxLabelBytes = 64
@@ -563,11 +563,19 @@ public final class ScriptHost {
 
     switch call {
     case .postStatus(let level, let text):
-      guard let producer = producer(for: connection) else {
-        return .failure(.refused, "uniterm has no window to show the message")
-      }
+      switch producer(for: connection) {
+      case .issued(let producer):
+        producer.post(level: Self.level(level), text: text)
 
-      producer.post(level: Self.level(level), text: text)
+      case .noWindow:
+        return .failure(.refused, "uniterm has no window to show the message")
+
+      case .limitReached:
+        return .failure(
+          .refused,
+          "uniterm is at its limit of live status sources. Post again after a script or applet ends."
+        )
+      }
 
       return .ok(Data())
 
@@ -1039,15 +1047,19 @@ public final class ScriptHost {
     return .failure(error.kind, error.text)
   }
 
-  private func producer(for connection: ScriptConnection) -> StatusProducer? {
+  private func producer(for connection: ScriptConnection) -> ProducerRequest {
     var session = sessions[connection.id, default: Session()]
 
-    if session.producer == nil {
-      session.producer = issueProducer(session.name)
+    if let producer = session.producer { return .issued(producer) }
+
+    let request = issueProducer(session.name)
+
+    if case .issued(let producer) = request {
+      session.producer = producer
       sessions[connection.id] = session
     }
 
-    return session.producer
+    return request
   }
 
   private static func level(_ level: ScriptStatusLevel) -> StatusLevel {

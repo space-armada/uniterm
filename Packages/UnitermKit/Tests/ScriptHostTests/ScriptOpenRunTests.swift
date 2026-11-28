@@ -33,7 +33,7 @@ final class ScriptOpenRunTests: XCTestCase {
 
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) })
+      issueProducer: { center.requestProducer(kind: .script, name: $0) })
     opener = CapturingOpener()
     host.fileOpener = opener
     host.start()

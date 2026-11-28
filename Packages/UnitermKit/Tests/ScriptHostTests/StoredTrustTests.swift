@@ -23,7 +23,7 @@ final class StoredTrustTests: XCTestCase {
     trust = work.appendingPathComponent("trust")
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { _ in nil },
+      issueProducer: { _ in .noWindow },
       controllers: ControllerSettings(
         runsRoot: work.appendingPathComponent("runs"),
         helper: BundleHelperIdentity(helperURL: work.appendingPathComponent("none")),

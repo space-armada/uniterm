@@ -147,6 +147,14 @@ public final class StatusCenter {
     return StatusProducer(source: source, center: self)
   }
 
+  /// Like `issueProducer`, but says why no producer came back. A caller that tells a user about
+  /// the refusal needs the reason.
+  public func requestProducer(kind: StatusProducerKind, name: String) -> ProducerRequest {
+    guard let producer = issueProducer(kind: kind, name: name) else { return .limitReached }
+
+    return .issued(producer)
+  }
+
   /// Frees the slot of a producer. Ending the identity is idempotent.
   func retire(_ source: StatusSource) {
     switch source {

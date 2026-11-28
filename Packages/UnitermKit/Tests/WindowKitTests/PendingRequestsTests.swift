@@ -174,7 +174,7 @@ extension PendingRequestsTests {
     let center = StatusCenter()
     let host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) },
+      issueProducer: { center.requestProducer(kind: .script, name: $0) },
       controllers: ControllerSettings(
         runsRoot: directory.appendingPathComponent("runs"), helper: AcceptingHelper()),
       permissionRequests: windows.permissionRequests, settings: store)

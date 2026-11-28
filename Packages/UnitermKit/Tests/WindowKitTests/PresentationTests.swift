@@ -98,7 +98,7 @@ final class PresentationTests: XCTestCase {
     let center = StatusCenter()
     let host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: socketDirectory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) },
+      issueProducer: { center.requestProducer(kind: .script, name: $0) },
       windows: fixture.scripting)
 
     host.start()

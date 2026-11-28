@@ -69,7 +69,7 @@ final class CommandHelperSandboxTests: XCTestCase {
     let center = StatusCenter()
     let host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) })
+      issueProducer: { center.requestProducer(kind: .script, name: $0) })
 
     host.start()
     recordTestProcessAsSessionRoot(host)
@@ -108,7 +108,7 @@ final class CommandHelperSandboxTests: XCTestCase {
     let opener = ShippedOpenRecorder()
     let host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) })
+      issueProducer: { center.requestProducer(kind: .script, name: $0) })
 
     host.fileOpener = opener
     host.start()

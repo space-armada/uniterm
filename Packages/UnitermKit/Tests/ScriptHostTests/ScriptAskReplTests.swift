@@ -23,7 +23,7 @@ final class ScriptAskReplTests: XCTestCase {
 
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows,
+      issueProducer: { center.requestProducer(kind: .script, name: $0) }, windows: windows,
       reaper: .inert)
     host.start()
 

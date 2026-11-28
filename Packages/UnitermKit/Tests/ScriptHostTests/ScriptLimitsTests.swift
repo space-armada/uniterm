@@ -27,7 +27,7 @@ final class ScriptLimitsTests: XCTestCase {
 
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) })
+      issueProducer: { center.requestProducer(kind: .script, name: $0) })
     host.start()
 
     recordTestProcessAsSessionRoot(host)
