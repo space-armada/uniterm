@@ -3,7 +3,6 @@ restrict:
   - glob: "/private/tmp/claude-501/-Users-ripta-projects-uniterm/*"
     message: "scratchpad executables may not take arguments"
 allow:
-  - regex: '^/private/tmp/claude-501/-Users-ripta-projects-uniterm/[^ ]+$'
   - exact: [./scripts/check-sandbox-off.sh]
   - exact: [./scripts/check-sandbox-off.sh, .build/DerivedData/Build/Products/Debug/uniterm.app]
   - prefix: [./scripts/clean-test-processes.sh]
@@ -15,6 +14,7 @@ allow:
   - prefix: [/usr/bin/swift, format]
   - prefix: [/usr/bin/tar, -xzOf, .cache/ghostty/dl/83fb95624b0439ee660c2679b43b38c8b63769cd.tar.gz]
   - prefix: [/usr/bin/tar, -xzf, /Users/ripta/projects/uniterm/.cache/ghostty/dl/83fb95624b0439ee660c2679b43b38c8b63769cd.tar.gz]
+  - regex: '^/private/tmp/claude-501/-Users-ripta-projects-uniterm/[^ ]+$'
   - prefix: [actionlint]
   - wrapper: [caffeinate, -dimsu]
   - prefix: [caffeinate, -dimsu, ./scripts/run-ui-tests.sh]
@@ -46,3 +46,4 @@ allow:
   - prefix: [xcodebuild]
   - prefix: [xcrun, lldb]
   - prefix: [xcrun, xcresulttool]
+  - prefix: [xcrun, xctest]
