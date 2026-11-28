@@ -27,7 +27,7 @@ final class InputRecordingProofTest: UnitermUITestCase {
     let center = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
     center.click()
     center.rightClick()
-    terminal.scroll(byDeltaX: 0, deltaY: -100)
+    sendWheel(deltaY: -100, at: terminal, in: window)
     terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3)).hover()
 
     let dragStart = terminal.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.2))

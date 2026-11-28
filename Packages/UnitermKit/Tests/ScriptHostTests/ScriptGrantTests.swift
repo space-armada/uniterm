@@ -23,7 +23,7 @@ final class ScriptGrantTests: XCTestCase {
   private var directory: URL!
   private var host: ScriptHost!
   private var windows: FakeWindowAPI!
-  private var source: Process!
+  private var source: HelperHandle!
   private var sourceRoot: ProcessIdentity!
   private var peers: [FramedSocket] = []
 
@@ -41,14 +41,14 @@ final class ScriptGrantTests: XCTestCase {
       issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows)
     host.start()
 
-    source = Process()
-    source.executableURL = URL(fileURLWithPath: "/bin/sleep")
-    source.arguments = ["120"]
-    try source.run()
+    source = try HelperHandle.spawn(
+      executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["120"], environment: [:],
+      standardOutput: .null, standardError: .null,
+      deadlines: [HelperDeadline(after: .seconds(150), signal: SIGKILL)])
 
-    let started = try XCTUnwrap(ProcessInspection.startTime(of: source.processIdentifier))
+    let started = try XCTUnwrap(ProcessInspection.startTime(of: source.pid))
 
-    sourceRoot = ProcessIdentity(pid: source.processIdentifier, started: started)
+    sourceRoot = ProcessIdentity(pid: source.pid, started: started)
     host.recordSessionRoot(sourceRoot, sessionGeneration: 1, window: window, pane: pane)
   }
 
@@ -58,7 +58,7 @@ final class ScriptGrantTests: XCTestCase {
     peers = []
     host.stop()
 
-    if source.isRunning { source.terminate() }
+    source.signal(SIGTERM)
 
     try? FileManager.default.removeItem(at: directory)
   }
@@ -276,9 +276,9 @@ final class ScriptGrantTests: XCTestCase {
   func testTheSourceSessionProcessExitingEndsTheGrant() async throws {
     let (peer, _) = try await grantedPeer()
 
-    source.terminate()
+    source.signal(SIGTERM)
 
-    expect(await processIsGone(source.processIdentifier), "the source session never exited")
+    expect(await processIsGone(source.pid), "the source session never exited")
     assertRefused(try await call(peer, id: 3), saying: "has closed")
     XCTAssertEqual(host.allGrants(), [])
   }
@@ -556,7 +556,7 @@ final class ScriptGrantTests: XCTestCase {
 /// fork and exit, leaving its child with the socket, which no Swift test can do without forking
 /// the test process itself.
 final class SocketRelay: @unchecked Sendable {
-  private let process = Process()
+  private let process: HelperHandle
   private let input = Pipe()
   private let output = Pipe()
   private let lock = NSLock()
@@ -567,13 +567,18 @@ final class SocketRelay: @unchecked Sendable {
   /// With `nested`, the relay connects from a grandchild of the process it starts, and that first
   /// process can stand for a session root.
   init(path: String, nested: Bool = false) throws {
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-    process.arguments =
-      [Bundle.module.resourceURL!.appendingPathComponent("Fixtures/socket-relay.pl").path, path]
-      + (nested ? ["nested"] : [])
-    process.standardInput = input
-    process.standardOutput = output
-    process.standardError = FileHandle.nullDevice
+    process = try HelperHandle.spawn(
+      executable: URL(fileURLWithPath: "/usr/bin/perl"),
+      arguments: [
+        Bundle.module.resourceURL!.appendingPathComponent("Fixtures/socket-relay.pl").path, path,
+      ] + (nested ? ["nested"] : []),
+      environment: ProcessInfo.processInfo.environment,
+      standardInput: .file(input.fileHandleForReading),
+      standardOutput: .file(output.fileHandleForWriting), standardError: .null,
+      deadlines: [HelperDeadline(after: .seconds(150), signal: SIGKILL)])
+
+    try? input.fileHandleForReading.close()
+    try? output.fileHandleForWriting.close()
 
     output.fileHandleForReading.readabilityHandler = { [weak self] handle in
       let data = handle.availableData
@@ -586,15 +591,13 @@ final class SocketRelay: @unchecked Sendable {
 
       self?.take(data)
     }
-
-    try process.run()
   }
 
   /// Ends the relay and any child it left. Closing its input ends the read loop of either one.
   func stop() {
     try? input.fileHandleForWriting.close()
 
-    if process.isRunning { process.terminate() }
+    process.signal(SIGTERM)
   }
 
   private func take(_ data: Data) {

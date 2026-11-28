@@ -65,40 +65,20 @@ final class PresentationTests: XCTestCase {
   /// Runs the helper on a script and waits for it off the main actor, so the host answers its
   /// calls meanwhile. A helper that hangs is ended after 60 seconds.
   static func run(script: URL, socket: String) async throws -> (Int32, String, String) {
-    let process = Process()
     var environment = ProcessInfo.processInfo.environment
 
     environment["UNITERM_SOCKET"] = nil
 
-    process.environment = environment
-    process.executableURL = helper()
-    process.arguments = ["run", "--socket", socket, script.path]
-    process.standardInput = FileHandle.nullDevice
-    process.standardOutput = Pipe()
-    process.standardError = Pipe()
+    let run = try await HelperHandle.spawn(
+      executable: helper(), arguments: ["run", "--socket", socket, script.path],
+      environment: environment,
+      deadlines: [
+        HelperDeadline(after: .seconds(60), signal: SIGTERM),
+        HelperDeadline(after: .seconds(70), signal: SIGKILL),
+      ]
+    ).finish()
 
-    try process.run()
-
-    let watchdog = process
-
-    DispatchQueue.global().asyncAfter(deadline: .now() + 60) {
-      if watchdog.isRunning { watchdog.terminate() }
-    }
-
-    return await withCheckedContinuation { continuation in
-      DispatchQueue.global().async {
-        let out = (process.standardOutput as! Pipe).fileHandleForReading.readDataToEndOfFile()
-        let err = (process.standardError as! Pipe).fileHandleForReading.readDataToEndOfFile()
-
-        process.waitUntilExit()
-
-        continuation.resume(
-          returning: (
-            process.terminationStatus, String(decoding: out, as: UTF8.self),
-            String(decoding: err, as: UTF8.self)
-          ))
-      }
-    }
+    return (run.status, run.standardOutput, run.standardError)
   }
 
   /// Catches any break on the path from a script's layout to the fixtures it drives: a layout

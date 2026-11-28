@@ -351,21 +351,10 @@ final class ControllerRunTests: XCTestCase {
       "lib/later.janet": "(def value :original)\n",
     ])
     let input = Pipe()
-    let output = Pipe()
-    let process = Process()
+    let (process, lines) = try start(
+      ["run", "--socket", host.instanceAddress, package.path], input: input)
 
-    process.executableURL = try HardenedHelper.url()
-    process.arguments = ["run", "--socket", host.instanceAddress, package.path]
-    process.environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("DYLD_") }
-    process.standardInput = input
-    process.standardOutput = output
-    process.standardError = FileHandle.nullDevice
-
-    let lines = LineCollector(output.fileHandleForReading)
-
-    try process.run()
-
-    defer { if process.isRunning { process.terminate() } }
+    defer { process.signal(SIGTERM) }
 
     expect(await waitUntil { lines.text.contains("ready\n") }, "the entry never started")
 
@@ -380,25 +369,28 @@ final class ControllerRunTests: XCTestCase {
     try input.fileHandleForWriting.write(contentsOf: Data("go\n".utf8))
 
     expect(await waitUntil { !process.isRunning }, "the run never ended")
-    XCTAssertEqual(process.terminationStatus, 0)
+    XCTAssertEqual(try process.exitStatus(), .exited(0))
     XCTAssertEqual(lines.text, "ready\noriginal\n")
   }
 
-  /// Starts the bundle command on `arguments` with its output collected as it arrives.
-  private func start(_ arguments: [String]) throws -> (process: Process, output: LineCollector) {
-    let process = Process()
+  /// Starts the bundle command on `arguments` with its output collected as it arrives. A command
+  /// that never ends is killed after 60 seconds.
+  private func start(_ arguments: [String], input: Pipe? = nil) throws -> (
+    process: HelperHandle, output: LineCollector
+  ) {
     let output = Pipe()
 
-    process.executableURL = try HardenedHelper.url()
-    process.arguments = arguments
-    process.environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("DYLD_") }
-    process.standardInput = FileHandle.nullDevice
-    process.standardOutput = output
-    process.standardError = FileHandle.nullDevice
+    let process = try HelperHandle.spawn(
+      executable: try HardenedHelper.url(), arguments: arguments,
+      environment: ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("DYLD_") },
+      standardInput: input.map { .file($0.fileHandleForReading) } ?? .null,
+      standardOutput: .file(output.fileHandleForWriting), standardError: .null,
+      deadlines: [HelperDeadline(after: .seconds(60), signal: SIGKILL)])
 
-    let lines = LineCollector(output.fileHandleForReading)
+    let lines = LineCollector(output.fileHandleForReading, retaining: output)
 
-    try process.run()
+    try? input?.fileHandleForReading.close()
+    try? output.fileHandleForWriting.close()
 
     return (process, lines)
   }
@@ -417,21 +409,10 @@ final class ControllerRunTests: XCTestCase {
       """
     ])
     let input = Pipe()
-    let process = Process()
-    let output = Pipe()
+    let (process, lines) = try start(
+      ["run", "--socket", host.instanceAddress, package.path], input: input)
 
-    process.executableURL = try HardenedHelper.url()
-    process.arguments = ["run", "--socket", host.instanceAddress, package.path]
-    process.environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("DYLD_") }
-    process.standardInput = input
-    process.standardOutput = output
-    process.standardError = FileHandle.nullDevice
-
-    let lines = LineCollector(output.fileHandleForReading)
-
-    try process.run()
-
-    defer { if process.isRunning { process.terminate() } }
+    defer { process.signal(SIGTERM) }
 
     expect(await waitUntil { lines.text.contains("ready\n") }, "the entry never started")
 
@@ -466,15 +447,14 @@ final class ControllerRunTests: XCTestCase {
       let package = try janetPackage(files)
       let (process, lines) = try start(["run", "--socket", host.instanceAddress, package.path])
 
-      defer { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+      defer { process.signal(SIGKILL) }
 
       expect(await waitUntil { lines.text.contains("ready\n") }, "\(files.keys) never started")
 
-      kill(process.processIdentifier, SIGINT)
+      XCTAssertEqual(process.signal(SIGINT), .sent)
 
       expect(await waitUntil { !process.isRunning }, "SIGINT did not stop \(files.keys)")
-      XCTAssertEqual(process.terminationReason, .exit, "\(files.keys)")
-      XCTAssertEqual(process.terminationStatus, 130, "\(files.keys)")
+      XCTAssertEqual(try process.exitStatus(), .exited(130), "\(files.keys)")
     }
   }
 
@@ -553,19 +533,17 @@ final class ControllerRunTests: XCTestCase {
     let (process, lines) = try start(
       ["controller", "run", "--socket", host.instanceAddress, package.path, "wait"])
 
-    defer { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+    defer { process.signal(SIGKILL) }
 
     expect(await waitUntil { lines.text.contains("waiting\n") }, "the entry never started")
 
     let admitted = try XCTUnwrap(seenRuns.first)
 
-    XCTAssertEqual(admitted.pid, process.processIdentifier)
-
-    kill(process.processIdentifier, SIGINT)
+    XCTAssertEqual(admitted.pid, process.pid)
+    XCTAssertEqual(process.signal(SIGINT), .sent)
 
     expect(await waitUntil { !process.isRunning }, "SIGINT did not reach the entry")
-    XCTAssertEqual(process.terminationReason, .uncaughtSignal)
-    XCTAssertEqual(process.terminationStatus, SIGINT)
+    XCTAssertEqual(try process.exitStatus(), .signalled(SIGINT))
     expect(await waitUntil { self.runFolders.isEmpty }, "the snapshot outlived its process")
     XCTAssertTrue(host.allControllerRuns().isEmpty)
   }
@@ -578,7 +556,7 @@ final class ControllerRunTests: XCTestCase {
     let (process, lines) = try start(
       ["controller", "run", "--socket", host.instanceAddress, package.path, "exec"])
 
-    defer { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+    defer { process.signal(SIGKILL) }
 
     expect(await waitUntil { lines.text.contains("execing\n") }, "the entry never started")
 
@@ -663,21 +641,20 @@ final class ControllerRunTests: XCTestCase {
   /// executing from, or that keeps an ended instance's. Each instance gets a folder of its own.
   func testALaunchRemovesOnlyTheRunsOfInstancesThatEnded() throws {
     let root = work.appendingPathComponent("instances")
-    let other = Process()
+    let other = try HelperHandle.spawn(
+      executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["60"], environment: [:],
+      standardOutput: .null, standardError: .null,
+      deadlines: [HelperDeadline(after: .seconds(90), signal: SIGKILL)])
     let gone = Process()
 
-    other.executableURL = URL(fileURLWithPath: "/bin/sleep")
-    other.arguments = ["60"]
     gone.executableURL = URL(fileURLWithPath: "/bin/sleep")
     gone.arguments = ["0.3"]
-    try other.run()
     try gone.run()
 
-    defer { other.terminate() }
+    defer { other.signal(SIGKILL) }
 
     let running = ProcessIdentity(
-      pid: other.processIdentifier,
-      started: try XCTUnwrap(ProcessInspection.startTime(of: other.processIdentifier)))
+      pid: other.pid, started: try XCTUnwrap(ProcessInspection.startTime(of: other.pid)))
     let ended = ProcessIdentity(
       pid: gone.processIdentifier,
       started: try XCTUnwrap(ProcessInspection.startTime(of: gone.processIdentifier)))
@@ -786,7 +763,13 @@ final class LineCollector: @unchecked Sendable {
   private let lock = NSLock()
   private var collected = ""
 
-  init(_ handle: FileHandle) {
+  /// What owns the handle, such as its pipe. A pipe closes its read end when it is released, and
+  /// a helper that still writes would then die of SIGPIPE.
+  private let owner: AnyObject?
+
+  init(_ handle: FileHandle, retaining owner: AnyObject? = nil) {
+    self.owner = owner
+
     handle.readabilityHandler = { [weak self] handle in
       let data = handle.availableData
 

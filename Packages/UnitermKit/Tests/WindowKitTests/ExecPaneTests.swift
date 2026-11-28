@@ -9,6 +9,7 @@ import LayoutKit
 import MapViewerApplet
 import PaneModel
 import Preferences
+import ProcessTestSupport
 import ScriptHost
 import ScriptWire
 import TextViewerApplet
@@ -804,6 +805,7 @@ final class ExecPaneTests: XCTestCase {
     await waitUntil("the driver connects") { isRunning(controller, pane) }
 
     let pid = try XCTUnwrap(controller.execAttachments[pane]?.channel?.pid)
+    let driver = try XCTUnwrap(ProcessRecord(pid: pid), "the connected driver has no start time")
     let started = Date()
 
     fixture.windows.endDriversForQuit()
@@ -812,7 +814,7 @@ final class ExecPaneTests: XCTestCase {
 
     await waitUntil("the driver is gone", timeout: 3) { kill(pid, 0) != 0 }
 
-    if kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+    ProcessSender.signal(SIGKILL, driver, expecting: .token)
   }
 
   /// Catches a stalled driver that holds the main thread: while it neither reads nor writes, and

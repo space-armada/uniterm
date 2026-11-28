@@ -1,5 +1,7 @@
 import Darwin
 import Foundation
+import ProcessTestSupport
+import ScriptTestSupport
 import XCTest
 
 /// The fixture's own spawn, reap, and signal contract, through `HelperHandle.spawn` the way the
@@ -197,7 +199,9 @@ final class HelperHandleTests: XCTestCase {
       standardInput: .file(input.fileHandleForReading), deadlines: backstop)
 
     XCTAssertEqual(helper.signal(SIGSTOP), .sent)
-    expect(await pollUntil(timeout: .seconds(10)) { isStopped(helper.pid) }, "it never stopped")
+    expect(
+      await pollUntil(timeout: .seconds(10)) { ProcessSender.isStopped(helper.pid) },
+      "it never stopped")
 
     XCTAssertTrue(helper.isRunning)
     XCTAssertNil(try helper.exitStatus())
@@ -208,7 +212,9 @@ final class HelperHandleTests: XCTestCase {
 
     guard continued == .sent else { return }
 
-    expect(await pollUntil(timeout: .seconds(10)) { !isStopped(helper.pid) }, "it never went on")
+    expect(
+      await pollUntil(timeout: .seconds(10)) { !ProcessSender.isStopped(helper.pid) },
+      "it never went on")
 
     let killed = helper.signal(SIGKILL)
 
@@ -666,16 +672,6 @@ final class HelperHandleTests: XCTestCase {
         line.append(byte)
       }
     }.value
-  }
-
-  /// Whether the process is stopped, as SIGSTOP leaves it.
-  private func isStopped(_ pid: pid_t) -> Bool {
-    var info = proc_bsdinfo()
-    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-
-    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return false }
-
-    return info.pbi_status == UInt32(SSTOP)
   }
 }
 

@@ -161,21 +161,24 @@ final class ScriptReplGrantTests: XCTestCase {
     channel.end()
   }
 
+  /// A process outside every session, which stands in for another pane's session root.
+  private func standIn() throws -> HelperHandle {
+    try HelperHandle.spawn(
+      executable: URL(fileURLWithPath: "/bin/sleep"), arguments: ["60"], environment: [:],
+      standardOutput: .null, standardError: .null,
+      deadlines: [HelperDeadline(after: .seconds(90), signal: SIGKILL)])
+  }
+
   /// Catches a stolen token that binds a process from another pane. The token is presented from a
   /// process outside the channel's session, both after the root arrived and before it. Either way
   /// the attach is refused, the second time once the root arrives.
   func testATokenPresentedFromOutsideTheChannelsSessionIsRefused() async throws {
-    let other = Process()
+    let other = try standIn()
 
-    other.executableURL = URL(fileURLWithPath: "/bin/sleep")
-    other.arguments = ["60"]
-    try other.run()
-
-    defer { other.terminate() }
+    defer { other.signal(SIGKILL) }
 
     let otherRoot = ProcessIdentity(
-      pid: other.processIdentifier,
-      started: try XCTUnwrap(ProcessInspection.startTime(of: other.processIdentifier)))
+      pid: other.pid, started: try XCTUnwrap(ProcessInspection.startTime(of: other.pid)))
 
     host.recordSessionRoot(otherRoot, sessionGeneration: 1, window: 1, pane: NodeID(rawValue: 2))
 
@@ -208,17 +211,12 @@ final class ScriptReplGrantTests: XCTestCase {
   /// the session root. That call is refused without asking the user. Once the attach completes,
   /// no request waits for the connection, and a grant to another pane's session is refused.
   func testACallWhileTheAttachWaitsLeavesNoRequestThatCanMoveTheBinding() async throws {
-    let other = Process()
+    let other = try standIn()
 
-    other.executableURL = URL(fileURLWithPath: "/bin/sleep")
-    other.arguments = ["60"]
-    try other.run()
-
-    defer { other.terminate() }
+    defer { other.signal(SIGKILL) }
 
     let otherRoot = ProcessIdentity(
-      pid: other.processIdentifier,
-      started: try XCTUnwrap(ProcessInspection.startTime(of: other.processIdentifier)))
+      pid: other.pid, started: try XCTUnwrap(ProcessInspection.startTime(of: other.pid)))
     let otherPane = NodeID(rawValue: 2)
 
     host.recordSessionRoot(otherRoot, sessionGeneration: 1, window: 1, pane: otherPane)

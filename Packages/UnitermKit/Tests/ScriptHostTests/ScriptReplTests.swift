@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import ScriptTestSupport
 import ScriptWire
 import StatusKit
 import XCTest
@@ -142,7 +143,7 @@ final class ScriptReplTests: XCTestCase {
 
     expect(await waitUntil { events.lastEvaluating == true && events.lines.count == 2 })
 
-    repl.interrupt()
+    repl.sendInterrupt()
 
     expect(await repl.waitForError("interrupted"), repl.standardError)
     expect(await waitUntil { events.lastEvaluating == false })
@@ -173,7 +174,7 @@ final class ScriptReplTests: XCTestCase {
 
     expect(await waitUntil { events.lastEvaluating == true })
 
-    repl.interrupt()
+    repl.sendInterrupt()
 
     expect(await repl.waitForError("interrupted"), repl.standardError)
     expect(await waitUntil { events.lastEvaluating == false })
@@ -308,8 +309,8 @@ final class ScriptReplTests: XCTestCase {
 
     expect(await repl.waitForOutput("2\n"))
 
-    repl.interrupt()
-    repl.interrupt()
+    repl.sendInterrupt()
+    repl.sendInterrupt()
 
     // An idle Ctrl-C leaves no trace to wait for. A helper that the signal killed would show in
     // `isRunning` within moments, so this is a bounded sleep.
@@ -474,38 +475,22 @@ final class ScriptReplTests: XCTestCase {
   /// Debug builds, so this test runs the package twin and never the shipped command. A watchdog
   /// kills the helper if it does not finish.
   func testTheReplStartsInHomeWithNoInheritedEnvironment() async throws {
-    let process = Process()
-    let output = Pipe()
+    let helper = try HelperHandle.spawn(
+      executable: ScriptFixtures.helper(), arguments: ["repl", "--probe-environment"],
+      environment: [
+        ScriptProtocol.replTokenVariable: String(
+          repeating: "ab", count: ScriptProtocol.tokenBytes),
+        "UNITERM_DECOY": "inherited", "HOME": "/private/tmp", "PATH": "/usr/bin",
+      ],
+      directory: URL(fileURLWithPath: "/private/tmp"), standardError: .null,
+      deadlines: [HelperDeadline(after: .seconds(20), signal: SIGKILL)])
+    let run = try await helper.finish()
 
-    process.executableURL = ScriptFixtures.helper()
-    process.arguments = ["repl", "--probe-environment"]
-    process.currentDirectoryURL = URL(fileURLWithPath: "/private/tmp")
-    process.environment = [
-      ScriptProtocol.replTokenVariable: String(repeating: "ab", count: ScriptProtocol.tokenBytes),
-      "UNITERM_DECOY": "inherited", "HOME": "/private/tmp", "PATH": "/usr/bin",
-    ]
-    process.standardOutput = output
-    process.standardError = Pipe()
-
-    try process.run()
-
-    let watchdog = DispatchWorkItem {
-      if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-    }
-
-    DispatchQueue.global().asyncAfter(deadline: .now() + 20, execute: watchdog)
-
-    let data = output.fileHandleForReading.readDataToEndOfFile()
-
-    process.waitUntilExit()
-    watchdog.cancel()
-
-    let report = String(decoding: data, as: UTF8.self).trimmingCharacters(
-      in: .whitespacesAndNewlines)
+    let report = run.standardOutput.trimmingCharacters(in: .whitespacesAndNewlines)
     let home = try XCTUnwrap(ScriptAddress.homeDirectory())
     let resolved = URL(fileURLWithPath: home).resolvingSymlinksInPath().path
 
-    XCTAssertEqual(process.terminationStatus, 0)
+    XCTAssertEqual(run.exit, .exited(0))
     XCTAssertEqual(report, "cwd=\(resolved) environment=0 token=read")
     XCTAssertNotEqual(resolved, "/private/tmp")
   }
@@ -673,7 +658,7 @@ final class ScriptReplTests: XCTestCase {
 
     expect(await attached(events))
 
-    kill(repl.pid, SIGKILL)
+    repl.process.signal(SIGKILL)
 
     expect(await waitUntil { events.ended })
     XCTAssertFalse(channel.isAttached == true && events.ended == false)

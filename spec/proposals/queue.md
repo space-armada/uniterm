@@ -5,9 +5,7 @@
 | UTERM-044 M3 | UTERM-044 M2 | Needs a shard to fail on CI. It advances only when one does |
 | UTERM-060 M5 | UTERM-060 M2 | Needs a Cmd-T stall with recording on. It advances only when the shortcut test stalls |
 | UTERM-060 M6 | UTERM-060 M4 | Needs a shard to fail on CI. It advances only when one does |
-| UTERM-046 M3 | UTERM-046 M2, UTERM-046 M4 | Split from M1-M2 and M4: moves test sites onto M2's fixture handle and M4's guarded call |
-| UTERM-045 M3 | UTERM-045 M1 | Split from M1: the count gates M2. It advances only as pushed CI runs accumulate. A later run recounts |
-| UTERM-045 M2 | UTERM-045 M3, UTERM-044 M1 | Split from M1: starts once M3's clean count is met. After UTERM-044 M1, so its own count runs on shards and never spans that landing |
+| UTERM-045 M4 | UTERM-045 M2 | Needs clean CI runs after M2 lands. It advances only when the launcher test has run clean to M2's count |
 | UTERM-063 M1-M2 | None | Placed before UTERM-043 M1, the first row that changes an external wire. In-place wire changes below it land after M2 |
 | UTERM-067 M1-M2 | None | Before UTERM-032 M2, which stores folder approvals in the one store M2 builds. Beside UTERM-063 M1-M2, so the two store breaks can ship together |
 | UTERM-043 M1 | None | Split from M2: M1 builds only on today's control code. M2 checks it against newer features |

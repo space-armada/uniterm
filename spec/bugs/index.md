@@ -41,7 +41,7 @@
 | [20261122-tests-leak-preference-files](20261122-tests-leak-preference-files.md) | Tests leave tens of thousands of preference files in ~/Library/Preferences | fixed |
 | [20261122-package-snapshot-opens-program-chosen-folder](20261122-package-snapshot-opens-program-chosen-folder.md) | The app opens a package folder the command names, with uniterm's privacy grants | proposed |
 | [20261122-rusage-units-comment-claims-safe-failure](20261122-rusage-units-comment-claims-safe-failure.md) | The usage reader claims a units change fails safe, but it would signal idle unused processes | fixed |
-| [20261122-declared-file-watchdog-may-signal-reused-pid](20261122-declared-file-watchdog-may-signal-reused-pid.md) | The declared-file test watchdog may signal a process id that was already reused | proposed |
+| [20261122-declared-file-watchdog-may-signal-reused-pid](20261122-declared-file-watchdog-may-signal-reused-pid.md) | The declared-file test watchdog may signal a process id that was already reused | fixed |
 | [20261122-picked-file-start-directory-stat-on-main-thread](20261122-picked-file-start-directory-stat-on-main-thread.md) | A viewer stats a picked or dropped file on the main thread | fixed |
 | [20261122-quit-skips-unsaved-work-when-nothing-runs](20261122-quit-skips-unsaved-work-when-nothing-runs.md) | Quitting loses unsaved work when nothing is running | fixed |
 | [20261122-map-save-reads-file-on-main-thread](20261122-map-save-reads-file-on-main-thread.md) | Saving a map reads its file on the main thread | fixed |
@@ -71,3 +71,5 @@
 | [20261127-exec-driver-cannot-name-its-pane-for-a-first-layout](20261127-exec-driver-cannot-name-its-pane-for-a-first-layout.md) | An exec driver cannot make its first layout, since nothing tells it its pane's number | proposed |
 | [20261127-chosen-open-check-misses-full-load-failures](20261127-chosen-open-check-misses-full-load-failures.md) | A file that passes the open check but fails its full load still replaces the pane's old file | proposed |
 | [20261127-image-load-messages-say-image-twice](20261127-image-load-messages-say-image-twice.md) | The image viewer's load messages say "image" twice | fixed |
+| [20261127-input-records-lost-to-log-quarantine](20261127-input-records-lost-to-log-quarantine.md) | The unified log can drop every input record of a UI test iteration, and the kept log shows no sign of it | open |
+| [20261127-terminal-test-exits-silently-under-make-select](20261127-terminal-test-exits-silently-under-make-select.md) | A terminal test ends the test process with no result under `make test-package-select` | open |

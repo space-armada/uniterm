@@ -112,32 +112,27 @@ final class DeclaredFileRunTests: XCTestCase {
 
   private func start(
     _ file: URL, allow: [String] = [], arguments: [String] = [], input: Pipe? = nil
-  ) throws -> (process: Process, output: LineCollector, errors: LineCollector) {
-    let process = Process()
+  ) throws -> (process: HelperHandle, output: LineCollector, errors: LineCollector) {
     let output = Pipe()
     let errors = Pipe()
 
-    process.executableURL = try HardenedHelper.url()
-    process.arguments =
-      ["run", "--socket", host.instanceAddress] + allow.flatMap { ["--allow", $0] } + [file.path]
-      + arguments
-    process.environment = environment()
-    process.standardInput = input ?? FileHandle.nullDevice
-    process.standardOutput = output
-    process.standardError = errors
+    let process = try HelperHandle.spawn(
+      executable: try HardenedHelper.url(),
+      arguments: ["run", "--socket", host.instanceAddress] + allow.flatMap { ["--allow", $0] }
+        + [file.path] + arguments,
+      environment: environment(),
+      standardInput: input.map { .file($0.fileHandleForReading) } ?? .null,
+      standardOutput: .file(output.fileHandleForWriting),
+      standardError: .file(errors.fileHandleForWriting),
+      deadlines: [HelperDeadline(after: .seconds(60), signal: SIGKILL)])
 
-    let collected = (process, LineCollector(output.fileHandleForReading))
-    let failures = LineCollector(errors.fileHandleForReading)
+    let collected = LineCollector(output.fileHandleForReading, retaining: output)
+    let failures = LineCollector(errors.fileHandleForReading, retaining: errors)
 
-    try process.run()
+    try? output.fileHandleForWriting.close()
+    try? errors.fileHandleForWriting.close()
 
-    let watchdog = process
-
-    DispatchQueue.global().asyncAfter(deadline: .now() + 60) {
-      if watchdog.isRunning { kill(watchdog.processIdentifier, SIGKILL) }
-    }
-
-    return (collected.0, collected.1, failures)
+    return (process, collected, failures)
   }
 
   private func run(_ file: URL, allow: [String] = [], arguments: [String] = []) async throws
@@ -167,7 +162,7 @@ final class DeclaredFileRunTests: XCTestCase {
       ])
     let started = try start(file)
 
-    defer { if started.process.isRunning { started.process.terminate() } }
+    defer { started.process.signal(SIGTERM) }
 
     expect(await waitUntil { !self.host.controllerReviews.isEmpty }, "no review was queued")
 
@@ -184,7 +179,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     XCTAssertNil(failure)
     expect(await waitUntil { !started.process.isRunning }, "the file never ran")
-    XCTAssertEqual(started.process.terminationStatus, 0, started.errors.text)
+    XCTAssertEqual(try started.process.exitStatus(), .exited(0), started.errors.text)
     XCTAssertEqual(started.output.text, "ran\n")
     expect(await waitUntil { self.runFolders.isEmpty }, "the snapshot outlived its run")
   }
@@ -198,7 +193,7 @@ final class DeclaredFileRunTests: XCTestCase {
       "(declare-permissions {:kind :pane-control :version 1})\n(print :ran)\n", named: "plain-name")
     let started = try start(file)
 
-    defer { if started.process.isRunning { started.process.terminate() } }
+    defer { started.process.signal(SIGTERM) }
 
     expect(await waitUntil { !self.host.controllerReviews.isEmpty }, "no review was queued")
 
@@ -209,7 +204,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     await host.decideReview(review.id, .deny)
     expect(await waitUntil { !started.process.isRunning }, "the denied file kept running")
-    XCTAssertNotEqual(started.process.terminationStatus, 0)
+    XCTAssertNotEqual(try started.process.exitStatus(), .exited(0))
     XCTAssertTrue(started.errors.text.contains("You denied this"), started.errors.text)
     XCTAssertEqual(started.output.text, "")
   }
@@ -226,7 +221,7 @@ final class DeclaredFileRunTests: XCTestCase {
 
     let started = try start(file)
 
-    defer { if started.process.isRunning { started.process.terminate() } }
+    defer { started.process.signal(SIGTERM) }
 
     expect(await waitUntil { !self.host.controllerReviews.isEmpty }, "no review was queued")
 
@@ -268,7 +263,7 @@ final class DeclaredFileRunTests: XCTestCase {
     let file = try declared(#"(print "reviewed")"#)
     let started = try start(file)
 
-    defer { if started.process.isRunning { started.process.terminate() } }
+    defer { started.process.signal(SIGTERM) }
 
     expect(await waitUntil { !self.host.controllerReviews.isEmpty }, "no review was queued")
 
@@ -511,7 +506,7 @@ final class DeclaredFileRunTests: XCTestCase {
     let file = try signed(#"(print "ran")"#)
     let started = try start(file)
 
-    defer { if started.process.isRunning { started.process.terminate() } }
+    defer { started.process.signal(SIGTERM) }
 
     expect(await waitUntil { !self.host.controllerReviews.isEmpty }, "no review was queued")
 
@@ -533,7 +528,7 @@ final class DeclaredFileRunTests: XCTestCase {
     let file = try declared(#"(print "ran")"#, header: Self.signedHeader)
     let started = try start(file)
 
-    defer { if started.process.isRunning { started.process.terminate() } }
+    defer { started.process.signal(SIGTERM) }
 
     expect(await waitUntil { !self.host.controllerReviews.isEmpty }, "no review was queued")
     XCTAssertFalse(try XCTUnwrap(host.controllerReviews.first).isSigned)

@@ -54,7 +54,7 @@ final class ScriptAskReplTests: XCTestCase {
 
     let key = try XCTUnwrap(windows.askedForms.first?.requester.key)
 
-    repl.interrupt()
+    repl.sendInterrupt()
 
     expect(await waitUntil { !self.windows.hasOpenForm(requester: key) }, "the form stayed open")
     expect(await waitUntil { self.host.forms.isEmpty }, "the handle stayed")

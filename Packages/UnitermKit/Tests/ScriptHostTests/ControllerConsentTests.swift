@@ -22,6 +22,7 @@ final class ControllerConsentTests: XCTestCase {
   private var work: URL!
   private var trust: URL!
   private var host: ScriptHost!
+  private let spawned = SpawnedHelpers()
   private var windows: FakeWindowAPI!
   private var clipboard: MemoryClipboard!
   private var watch: ChangeObservers.Token?
@@ -126,13 +127,29 @@ final class ControllerConsentTests: XCTestCase {
 
     environment["UNITERM_SOCKET"] = nil
 
-    return try await ScriptFixtures.finish(
-      try HelperHandle.spawn(
-        executable: try executable ?? HardenedHelper.url(),
-        arguments: ["run", "--socket", host.instanceAddress] + allow.flatMap { ["--allow", $0] }
-          + [package.path],
-        environment: environment,
-        deadlines: [HelperDeadline(after: .seconds(60), signal: SIGKILL)]))
+    let helper = try HelperHandle.spawn(
+      executable: try executable ?? HardenedHelper.url(),
+      arguments: ["run", "--socket", host.instanceAddress] + allow.flatMap { ["--allow", $0] }
+        + [package.path],
+      environment: environment,
+      deadlines: [HelperDeadline(after: .seconds(60), signal: SIGKILL)])
+
+    spawned.add(helper)
+
+    return try await ScriptFixtures.finish(helper)
+  }
+
+  /// Ends the run the host admitted as process `pid`, through the handle of the helper this test
+  /// started. The admitted pid must be one of those helpers. A pid that is none of them is a run
+  /// that this test did not start, so nothing is signalled.
+  private func endRun(_ pid: pid_t, file: StaticString = #filePath, line: UInt = #line) {
+    guard let helper = spawned.helper(pid: pid) else {
+      return XCTFail(
+        "the admitted process \(pid) is none of the helpers this test started: \(spawned.pids)",
+        file: file, line: line)
+    }
+
+    helper.signal(SIGKILL)
   }
 
   private var reviewCount: Int { reviewsSeen.count }
@@ -649,7 +666,7 @@ final class ControllerConsentTests: XCTestCase {
     XCTAssertTrue(host.allControllerRuns().isEmpty, "the run kept its authority")
     XCTAssertEqual(after.policies, [])
 
-    kill(admitted.pid, SIGKILL)
+    endRun(admitted.pid)
     _ = try await running.value
 
     reviewAnswer = .deny
@@ -677,7 +694,7 @@ final class ControllerConsentTests: XCTestCase {
 
     expect(await waitUntil { !self.host.allControllerRuns().isEmpty }, "the run never started")
 
-    kill(try XCTUnwrap(host.allControllerRuns().first).pid, SIGKILL)
+    endRun(try XCTUnwrap(host.allControllerRuns().first).pid)
     _ = try await first.value
 
     let remembered = await host.rememberedTrust()
@@ -776,7 +793,7 @@ final class ControllerConsentTests: XCTestCase {
       XCTAssertFalse(otherProgram)
       XCTAssertFalse(missing)
 
-      kill(admitted.pid, SIGKILL)
+      endRun(admitted.pid)
       _ = try await running.value
       expect(await waitUntil { self.host.allControllerRuns().isEmpty })
     }
@@ -821,7 +838,7 @@ final class ControllerConsentTests: XCTestCase {
         XCTAssertEqual(access.scope, try ReadScope(directories: [folder]))
       }
 
-      kill(admitted.pid, SIGKILL)
+      endRun(admitted.pid)
       _ = try await running.value
       expect(await waitUntil { self.host.allControllerRuns().isEmpty })
 
@@ -864,7 +881,7 @@ final class ControllerConsentTests: XCTestCase {
       await waitUntil { self.host.readAccess(for: admitted.connection).mayShow(source: target) },
       "the real path inside a scope written through a link stayed hidden")
 
-    kill(admitted.pid, SIGKILL)
+    endRun(admitted.pid)
     _ = try await running.value
   }
 
@@ -929,7 +946,7 @@ final class ControllerConsentTests: XCTestCase {
     XCTAssertTrue(staysIn)
     XCTAssertFalse(leadsOut, "a link led the launch out of its folder")
 
-    kill(admitted.pid, SIGKILL)
+    endRun(admitted.pid)
     _ = try await running.value
   }
 
@@ -1029,7 +1046,7 @@ final class ControllerConsentTests: XCTestCase {
 
     let pid = try XCTUnwrap(host.allControllerRuns().first?.pid)
 
-    kill(pid, SIGKILL)
+    endRun(pid)
     _ = try await disconnected.value
     expect(
       await waitUntil { self.host.permissionRequests.rows.isEmpty },
@@ -1044,5 +1061,24 @@ final class ControllerConsentTests: XCTestCase {
 
     XCTAssertEqual(replacedRun.standardOutput, "false\n")
     XCTAssertEqual(clipboard.reads, 0)
+  }
+}
+
+/// The helpers a test started, so a test can end the run the host admitted through the handle of
+/// the helper that made it.
+private final class SpawnedHelpers: @unchecked Sendable {
+  private let lock = NSLock()
+  private var helpers: [HelperHandle] = []
+
+  func add(_ helper: HelperHandle) {
+    lock.withLock { helpers.append(helper) }
+  }
+
+  func helper(pid: pid_t) -> HelperHandle? {
+    lock.withLock { helpers.first { $0.pid == pid } }
+  }
+
+  var pids: [pid_t] {
+    lock.withLock { helpers.map(\.pid) }
   }
 }

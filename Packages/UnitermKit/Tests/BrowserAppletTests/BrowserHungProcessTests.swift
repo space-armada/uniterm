@@ -1,6 +1,7 @@
 import Darwin
 import OSLog
 import ProcessInspection
+import ProcessTestSupport
 import Synchronization
 import WebKit
 import XCTest
@@ -467,7 +468,16 @@ final class BrowserHungProcessTests: XCTestCase {
     policy.process = WebContentProcess(
       sample: sample,
       signal: { identity, number in
-        let result = WebContentProcess.guardedSignal(identity, number)
+        // Only a process the test recorded is signalled. The product's identity goes to the
+        // sender as read, so a start time that is off reaches no process.
+        let known = learnedContent.withLock { $0.contains { $0.pid == identity.pid } }
+        let result =
+          known
+          ? ProcessSender.send(
+            number,
+            ProcessRecord(pid: identity.pid, startedMicroseconds: identity.startedMicroseconds),
+            expecting: .token)
+          : .refused
 
         log?.add(identity, result)
 
@@ -503,9 +513,10 @@ final class BrowserHungProcessTests: XCTestCase {
 
     await harness.load("/a", expecting: "A")
 
-    let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     spin(harness.tab.webView)
     harness.applet.reload()
@@ -538,9 +549,10 @@ final class BrowserHungProcessTests: XCTestCase {
     await harness.load("/a", expecting: "A")
 
     let opener = harness.tab
-    let pid = try XCTUnwrap(WebContent.processID(of: opener.webView))
+    let content = try XCTUnwrap(WebContent.record(of: opener.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     await harness.run("window.open('/popup')")
     await harness.host.until("the pop-up opens") {
@@ -580,9 +592,10 @@ final class BrowserHungProcessTests: XCTestCase {
     harness.applet.openTab()
 
     let hung = harness.applet.tabs[0]
-    let pid = try XCTUnwrap(WebContent.processID(of: hung.webView))
+    let content = try XCTUnwrap(WebContent.record(of: hung.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     spin(hung.webView)
 
@@ -617,9 +630,10 @@ final class BrowserHungProcessTests: XCTestCase {
 
     await harness.load("/a", expecting: "A")
 
-    let pid = try XCTUnwrap(WebContent.processID(of: harness.tab.webView))
+    let content = try XCTUnwrap(WebContent.record(of: harness.tab.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     let allowance = Self.readerAllowance
     let before = OwnTimes.now()
@@ -671,9 +685,10 @@ final class BrowserHungProcessTests: XCTestCase {
     await harness.load("/a", expecting: "A")
 
     let opener = harness.tab
-    let pid = try XCTUnwrap(WebContent.processID(of: opener.webView))
+    let content = try XCTUnwrap(WebContent.record(of: opener.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     await harness.run("window.open('/popup')")
     await harness.host.until("the pop-up opens") {
@@ -722,7 +737,7 @@ final class BrowserHungProcessTests: XCTestCase {
 
     let stopped = harness.applet.tabs[0]
 
-    await WebContent.kill(stopped.webView, in: harness)
+    await WebContent.crash(stopped.webView, in: harness)
     await harness.eventually("the tab lost its content") { stopped.generation == 1 }
 
     let scheduled = timer.scheduled
@@ -746,9 +761,10 @@ final class BrowserHungProcessTests: XCTestCase {
     await harness.load("/a", expecting: "A")
 
     let opener = harness.tab
-    let pid = try XCTUnwrap(WebContent.processID(of: opener.webView))
+    let content = try XCTUnwrap(WebContent.record(of: opener.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     await harness.run("window.open('/popup')")
     await harness.host.until("the pop-up opens") {
@@ -781,9 +797,10 @@ final class BrowserHungProcessTests: XCTestCase {
     await harness.load("/a", expecting: "A")
 
     let opener = harness.tab
-    let pid = try XCTUnwrap(WebContent.processID(of: opener.webView))
+    let content = try XCTUnwrap(WebContent.record(of: opener.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     await harness.run("window.open('/popup')")
     await harness.host.until("the pop-up opens") {
@@ -824,9 +841,10 @@ final class BrowserHungProcessTests: XCTestCase {
     harness.applet.openTab()
 
     let hung = harness.applet.tabs[0]
-    let pid = try XCTUnwrap(WebContent.processID(of: hung.webView))
+    let content = try XCTUnwrap(WebContent.record(of: hung.webView))
+    let pid = content.pid
 
-    defer { if WebContent.isRunning(pid) { Darwin.kill(pid, SIGKILL) } }
+    defer { WebContent.end(content) }
 
     spin(hung.webView)
 

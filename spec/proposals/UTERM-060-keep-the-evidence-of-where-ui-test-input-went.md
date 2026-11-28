@@ -736,6 +736,17 @@ Split from M4 on 2026-11-25; see Decision Log.
   own kept log". The shards have since landed, so M6 drops the condition. The check is unchanged. (run best guess)
 - 2026-11-25: M4's tap bullet does not apply, since no tap code ships. The bullet stays in M4, and its As built block
   says so. The decision is M2's entry on the grant probe. (run best guess)
+- 2026-11-27: 40 more local runs of the shortcut test alone, with recording on, reproduced no Cmd-T stall. The first
+  run was 10 iterations, with testing from 02:59:43 to 03:00:29. The second was 30, with testing from 03:00:43 to
+  03:03:02. All 40 passed, at about 4.6 s each by the runner's test marks. The saved `log show` output spans 02:59:42
+  to 03:03:12. It holds 40 test starts, 40 test ends, and no issue mark. It holds no "confirmation delay timeout"
+  line, so no Cmd-T event was even confirmed late. The 45 earlier runs bring the total to 85 runs with no stall since
+  the 3-in-9 sighting. These runs cannot show whether recording changes the rate. They leave M5's check open. In one
+  iteration, the log quarantined the app for high logging volume before its Cmd-T. None of that iteration's records
+  reached the log. So a missing record is not proof that an event never reached uniterm, until a reader can see the
+  quarantine. The kept log's predicate leaves the quarantine line out. The bug file is
+  `20261127-input-records-lost-to-log-quarantine`. M5 stays NOT STARTED and keeps waiting for a stall with recording on.
+  (run best guess)
 
 ## References
 

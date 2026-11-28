@@ -3,6 +3,8 @@ import AppletKit
 import Darwin
 import ExecTestSupport
 import Foundation
+import ProcessInspection
+import ProcessTestSupport
 import StatusKit
 import XCTest
 
@@ -442,13 +444,17 @@ final class ExecDriverChannelTests: XCTestCase {
     let text = try String(contentsOf: file, encoding: .utf8)
     let child = try XCTUnwrap(pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)))
 
-    XCTAssertEqual(kill(child, 0), 0, "the background child is not running")
+    let background = try XCTUnwrap(ProcessRecord(pid: child), "the background child is not running")
+
+    XCTAssertEqual(
+      ProcessInspection.parent(of: child)?.pid, channel.pid,
+      "the pid the driver wrote is not its own child")
 
     channel.close()
 
     await waitUntil("the background child is gone", timeout: 5) { kill(child, 0) != 0 }
 
-    if kill(child, 0) == 0 { kill(child, SIGKILL) }
+    ProcessSender.signal(SIGKILL, background, expecting: .token)
   }
 
   /// Catches a paused driver that the transport ends as if it had exited.
@@ -457,7 +463,8 @@ final class ExecDriverChannelTests: XCTestCase {
   /// believes that report sends the driver's group SIGKILL.
   ///
   /// The test pauses a connected driver with SIGSTOP and resumes it with SIGCONT. The driver stays
-  /// connected and still answers the user's Next. It signals the driver by pid. The transport
+  /// connected and still answers the user's Next. It signals the driver through the sender, on the
+  /// token path, with the identity it recorded while the channel was connected. The transport
   /// holds the driver unreaped while it runs, and this driver never exits on its own. SIGCONT goes
   /// out only while the driver still reads as stopped, since a driver that was ended may already be
   /// reaped.
@@ -472,15 +479,18 @@ final class ExecDriverChannelTests: XCTestCase {
     await waitUntil("the second slide shows") { applet.index == 1 }
 
     let pid = try XCTUnwrap(channel.pid)
+    let driver = try XCTUnwrap(ProcessRecord(pid: pid), "the connected driver has no start time")
 
-    XCTAssertEqual(kill(pid, SIGSTOP), 0)
-    await waitUntil("the driver stops or ends") { isStopped(pid) || !ended.isEmpty }
+    XCTAssertTrue(ProcessSender.signal(SIGSTOP, driver, expecting: .token))
+    await waitUntil("the driver stops or ends") {
+      ProcessSender.isStopped(pid) || !ended.isEmpty
+    }
 
-    guard ended.isEmpty, isStopped(pid) else {
+    guard ended.isEmpty, ProcessSender.isStopped(pid) else {
       return XCTFail("the driver did not stay paused, so the pause ended it. Ends seen: \(ended)")
     }
 
-    XCTAssertEqual(kill(pid, SIGCONT), 0)
+    XCTAssertTrue(ProcessSender.signal(SIGCONT, driver, expecting: .token))
 
     applet.button.performClick(nil)
 
@@ -489,16 +499,6 @@ final class ExecDriverChannelTests: XCTestCase {
     XCTAssertEqual(ended, [], "the pause ended the driver")
     XCTAssertEqual(applet.index, 2)
     XCTAssertEqual(channel.phase, .connected)
-  }
-
-  /// Whether the process is stopped, as SIGSTOP leaves it.
-  private func isStopped(_ pid: pid_t) -> Bool {
-    var info = proc_bsdinfo()
-    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-
-    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return false }
-
-    return info.pbi_status == UInt32(SSTOP)
   }
 
   /// Catches a channel whose applet closed before it started, and that spawns a child anyway or

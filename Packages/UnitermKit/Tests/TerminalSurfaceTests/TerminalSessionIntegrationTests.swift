@@ -1,4 +1,6 @@
 import AppKit
+import ProcessInspection
+import ProcessTestSupport
 import Theme
 import XCTest
 
@@ -81,17 +83,18 @@ final class TerminalSessionIntegrationTests: XCTestCase {
   override func tearDown() async throws {
     // A program a test starts can outlive its session. Everything the test process started since
     // setUp is ended, children first, so no test leaves an orphan.
+    //
+    // The tree is recorded before close(). libghostty reaps `login` when its session closes, and
+    // its pid is then free. A signal goes only to a process that still has the recorded start time.
     let started = Set(children(of: getpid())).subtracting(baselineChildren)
-    let stragglers = started.flatMap { tree(of: $0) }
+    let stragglers = started.flatMap { recordTree(of: $0) }
 
     for session in sessions {
       session.close()
     }
     sessions = []
 
-    for pid in stragglers.reversed() {
-      kill(pid, SIGKILL)
-    }
+    endTree(stragglers)
     engine = nil
     pasteboard.releaseGlobally()
     window.close()
@@ -762,19 +765,67 @@ final class TerminalSessionIntegrationTests: XCTestCase {
     return result > 0 ? Array(buffer.prefix { $0 > 0 }) : []
   }
 
-  private func tree(of root: pid_t) -> [pid_t] {
-    var found = [root]
+  /// The tree under `root`, each member recorded in one pass with its start time. A child counts
+  /// only while its parent is still the member that listed it, so a pid taken over between the
+  /// listing and the read is left out.
+  ///
+  /// `login` is setuid root, so the system gives no audit token for it and its signal goes by pid.
+  private func recordTree(of root: pid_t) -> [TreeMember] {
+    guard let rootRecord = ProcessRecord(pid: root) else { return [] }
+
+    var found = [rootRecord]
+    var members = [TreeMember(record: rootRecord, path: signalPath(of: root))]
     var index = 0
 
     while index < found.count {
-      for child in children(of: found[index]) where !found.contains(child) {
-        found.append(child)
+      let parent = found[index].pid
+
+      for child in children(of: parent) where !found.contains(where: { $0.pid == child }) {
+        guard let record = ProcessRecord(pid: child),
+          ProcessInspection.parent(of: child)?.pid == parent
+        else { continue }
+
+        found.append(record)
+        members.append(TreeMember(record: record, path: signalPath(of: child)))
       }
 
       index += 1
     }
 
-    return found
+    return members
+  }
+
+  private func signalPath(of pid: pid_t) -> ExpectedSignalPath {
+    ProcessInspection.executablePath(of: pid)?.hasSuffix("/login") == true ? .pid : .token
+  }
+
+  /// Catches a teardown that expects the wrong signal path for the processes under `login`. The
+  /// teardown ends them after `close()` has already reaped `login`, so it never sends a live
+  /// signal to `login` itself. This test sends the harmless SIGCONT to each live member through the
+  /// path the teardown expects, so a system that changes what it allows fails here and not only
+  /// when a leaked process needs ending.
+  func testEachMemberOfTheSessionsTreeTakesTheSignalPathTheTeardownExpects() async throws {
+    let before = Set(children(of: getpid()))
+    let session = try startShell()
+    try await waitUntil("an idle prompt") { !session.isRunningSomething }
+
+    let login = try XCTUnwrap(
+      Set(children(of: getpid())).subtracting(before).first, "the session's child was not found")
+
+    try run("sleep 1000", in: session)
+    try await waitUntil("sleep to run") { session.isRunningSomething }
+
+    let members = recordTree(of: login)
+    defer { endTree(members) }
+
+    XCTAssertGreaterThan(members.count, 2, "no sleep under the shell")
+    XCTAssertEqual(members.first?.path, .pid, "`login` is expected to take the pid path")
+
+    for member in members {
+      XCTAssertTrue(
+        ProcessSender.signal(SIGCONT, member.record, expecting: member.path),
+        "\(member.record.pid) was not reached")
+    }
   }
 
   /// Guards the main thread against a hung close. libghostty hangs the child up with SIGHUP and
@@ -797,19 +848,11 @@ final class TerminalSessionIntegrationTests: XCTestCase {
     try await waitUntil("sleep to run") { session.isRunningSomething }
     try await Task.sleep(for: .milliseconds(300))
 
-    let members = tree(of: child)
+    let members = recordTree(of: child)
     XCTAssertGreaterThan(members.count, 2, "no sleep under the shell")
-    defer {
-      for pid in members.reversed() {
-        kill(pid, SIGKILL)
-      }
-    }
+    defer { endTree(members) }
 
-    let rescue = DispatchWorkItem {
-      for pid in members.reversed() {
-        kill(pid, SIGKILL)
-      }
-    }
+    let rescue = DispatchWorkItem { endTree(members) }
     DispatchQueue.global().asyncAfter(deadline: .now() + 8, execute: rescue)
 
     let started = ContinuousClock.now
@@ -1373,5 +1416,18 @@ final class TerminalSessionIntegrationTests: XCTestCase {
     XCTAssertEqual(
       Int(info.kp_proc.p_starttime.tv_sec), identity.started, "the start time is not the child's",
       file: file, line: line)
+  }
+}
+
+/// A process of a session's tree, with the path its signal is expected to take.
+private struct TreeMember: Sendable {
+  let record: ProcessRecord
+  let path: ExpectedSignalPath
+}
+
+/// Ends each member of a recorded tree, children first. A member that has already gone is fine.
+private func endTree(_ members: [TreeMember]) {
+  for member in members.reversed() {
+    ProcessSender.signal(SIGKILL, member.record, expecting: member.path)
   }
 }

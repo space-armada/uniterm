@@ -413,12 +413,13 @@ Fixed by: "Wait for the form's focus before typing its answers" and "Give the Qu
 - Evidence: `LauncherUITests.swift:199` failed with "the scroll wheel did not scroll the list", with uniterm frontmost
   and the launcher's filter box focused. The failure screenshot showed the list still at its top. Waiting for the list
   to settle did not help. Locally it passed 15 of 15, and 10 of 10 with legacy scrollers forced as CI shows them.
-- First suspected cause: the test sent one wheel of -1000 to a list that starts at the top. Which way that moves the
-  list follows the machine's scroll direction setting, and CI runners differ in it. When the wheel went up, the list
-  could not move. Flipping the sign to +1000 on a local machine failed the first run with CI's message.
-- Tried: "Scroll the short launcher either way the machine's wheel goes". The wheel goes the other way when the first
-  one leaves the last entry out of view. A list that scrolls neither way still fails. After that change, the launcher
-  tests passed 7 of 7 locally, and 3 of 3 with the two wheels swapped.
+- First suspected cause, which proved partial: the test sent one wheel of -1000 to a list that starts at the top.
+  Which way that moves the list follows the machine's scroll direction setting, and CI runners differ in it. When the
+  wheel went up, the list could not move. Flipping the sign to +1000 on a local machine failed the first run with
+  CI's message.
+- First fix: "Scroll the short launcher either way the machine's wheel goes". The wheel goes the other way when the
+  first one leaves the last entry out of view. A list that scrolls neither way still fails. After that change, the
+  launcher tests passed 7 of 7 locally, and 3 of 3 with the two wheels swapped.
 - Seen again after that change: 2026-11-21, at `LauncherUITests.swift:209`, the assertion after both wheels. It failed
   CI on the merge of #82 into main, which carried the change, and on the first `app` runs of #83 and #87. Neither PR
   touches the launcher. #83's rerun passed. So the scroll direction is not the whole cause.
@@ -429,13 +430,10 @@ Fixed by: "Wait for the form's focus before typing its answers" and "Give the Qu
   pane's launcher scrolled to its last entry, and the one before the wheels shows it at its top. The first wheel went
   to the middle pane's list. In #83, two of seven snapshots show the focused list moved 84 pt, so a wheel can also
   land partly on the right list.
-- Suspected cause: a wheel goes to whatever is under the pointer when it is delivered, and the pointer had not yet
+- Cause: a wheel goes to whatever is under the pointer when it is delivered, and the pointer had not yet
   reached the focused list. A wrong-pane lookup does not fit, since the same lookup gave the focused list's frame just
   before and after the first wheel. A local run that left the pointer over the middle pane first still passed, so the
-  race does not show on this machine.
-- Tried: the pointer now goes to the focused list's center, and the test waits until it is inside the list before any
-  wheel. The report also gives the pointer's position. If it fails again with the pointer inside the list, this cause
-  is wrong.
+  race did not show on that machine.
 - Recount through 2026-11-25T05:48Z, from the first sighting on: 2 failures in 22 CI attempts up to "Wait for the
   launcher's last entry to come into view after a scroll", 4 in 20 up to "Scroll the short launcher either way the
   machine's wheel goes", and 3 in 19 up to "Settle the pointer on the launcher list before the scroll test's wheels".
@@ -446,7 +444,24 @@ Fixed by: "Wait for the form's focus before typing its answers" and "Give the Qu
   skipped, so they neither count nor break the streak.
 - Method: the test's own `passed` and `failed` lines in every `app` job log, by attempt. A fix is held when the tree
   CI tested holds it, which for a PR job is the merge of its head into its base.
-- Status: unresolved until 10 more clean CI runs reach the count of 33.
+- Recount through 2026-11-26T05:25:54Z: 10 more clean CI attempts, in 9 runs, so the streak since the pointer change
+  reached 33. Six ran the full UI suite in one `app` job, where the test was the 82nd of 215. Four ran it sharded, in
+  shard 1 of 3, the second shard. There it ran fourth or fifth, after 3 or 4 other tests, and never first. Two of the
+  six failed on `QuestionsUITests.testEveryAnswerTypeReturnsItsShape`, which is logged under its own entry, so the
+  test's pass counts. Four `app` jobs were cancelled before the test could have started. 11 runs skipped the `app`
+  job, the last of them after the last clean attempt, at 2026-11-26T05:33Z. One rerun attempt only carried its first
+  attempt's shard jobs. None of those counts or breaks the streak. Every head held the pointer change. UTERM-044's
+  shards landed inside this span.
+- Fix: the pointer goes to the focused list's center, and the test waits until it is inside the list before any
+  wheel. The report also gives the pointer's position. A later change skips the wait when a fresh read shows the
+  pointer already inside. 33 consecutive clean CI attempts since the pointer change met the count, which the lowest
+  window rate of 2 failures in 22 attempts sets.
+- Moved back to Potential by "Send every UI test wheel through one settled call". The launcher's wheels left the
+  element's own scroll, clean in 33 CI attempts, for a coordinate scroll at the hover point, with no CI history. A
+  change to the aim restarts the count. The window from the pointer change to this change holds no failure, so it sets
+  no N, and the count is still 33.
+- Status: unresolved until 33 consecutive clean CI attempts since that change. A wheel failure with the pointer inside
+  the list reopens the aiming question, with the element's own scroll as the known-good fallback.
 
 ### `WindowsUITests.testCommandNOpensASecondWindowWithItsOwnShell`
 
@@ -869,4 +884,3 @@ Fixed by: "Wait for the app to be frontmost before UI tests type, and paste open
 - Fix: the foreground assertion now waits for the state to settle, without activating the app. The same wait replaces
   the one-shot read in `testClosingTheLastWindowKeepsTheAppRunningAndCommandNOpensAgain`. `waitForTerminal` activates
   the app before the first key.
-
