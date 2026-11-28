@@ -1,6 +1,8 @@
 # The unified log can drop every input record of a UI test iteration
 
-**Status:** open
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27
+**Estimate:** small to medium; one non-trivial decision, which of the four fixes below to take. The user chose the first two together.
 **Validation:** confirmed on 2026-11-27 in a local run of 40 iterations, where 1 was quarantined
 
 ## Observed
@@ -59,3 +61,14 @@ An option can combine the first with either of the others.
 
 Read the quarantine line directly in a run's `log show --info --debug` output for the app's pid, as the repro did. M5's
 reader must do this before treating a missing record as an event that never arrived.
+
+## Fix note
+
+The user chose the first two options together on 2026-11-27.
+
+- `scripts/collect-ui-test-log.sh` now selects uniterm's quarantine line, so the kept log shows the loss.
+- `spec/flaky-tests.md` tells a reader to count a quarantined iteration as neither a stall nor a clean run.
+- `scripts/test-ci.sh` pins the predicate with a stub `log`. The test failed before the fix.
+- The lost lines stay lost. The recorder's volume is unchanged.
+- `m5-summary.sh` does not exist yet. M5 must apply the same rule when it is written.
+- UTERM-060's "What the kept log holds" still describes the old predicate. The proposal text is not amended here.

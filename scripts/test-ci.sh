@@ -808,3 +808,27 @@ expect_evidence "a job with no log is listed under the count, not judged" "    r
 
 printf '{"artifacts":[{"name":"ui-test-results-shard-0-attempt-1"}]}' >"$evidence/artifacts-3.json"
 expect_evidence "a job at the limit names its upload" "ui-test-results-shard-0-attempt-1 was uploaded"
+
+# The collector's predicate is the contract for what the kept log can show. A stub `log` records it.
+collector_bin="$scratch/collector-bin"
+mkdir -p "$collector_bin"
+cat >"$collector_bin/log" <<'STUB'
+#!/usr/bin/env bash
+while (($#)); do
+  if [[ "$1" == "--predicate" ]]; then
+    printf '%s' "$2" >"$COLLECTOR_PREDICATE_FILE"
+  fi
+  shift
+done
+echo "testmanagerd stub line"
+STUB
+chmod +x "$collector_bin/log"
+
+PATH="$collector_bin:$PATH" COLLECTOR_PREDICATE_FILE="$scratch/collector-predicate" \
+  bash "$root/scripts/collect-ui-test-log.sh" "$(date +%s)" "$scratch/collector-kept-log.txt" >"$scratch/collector-out" 2>&1
+if ! grep -qF -- "QUARANTINED" "$scratch/collector-predicate"; then
+  echo "FAIL: the kept log's predicate does not select the log's quarantine line" >&2
+  cat "$scratch/collector-predicate" >&2
+  exit 1
+fi
+echo "PASS: the kept log's predicate selects the log's quarantine line"

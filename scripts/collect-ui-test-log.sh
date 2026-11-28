@@ -24,8 +24,13 @@ echo "Collecting testmanagerd log from the run..."
 # Only the app's recording category is taken, none of its other lines. Only a debug build that a UI
 # test launch asked to record writes that category, so a developer's own uniterm never lands in an
 # artifact.
+#
+# The log quarantines a process for high logging volume and drops its later lines. The quarantine
+# line comes from libsystem_trace.dylib, outside the app's subsystem. It is taken so that a missing
+# record can be told apart from an event that never arrived.
 predicate="process == 'testmanagerd' OR subsystem == 'dev.uniterm.uitests'"
 predicate+=" OR (process == 'uniterm' AND subsystem == 'dev.uniterm.app' AND category == 'input-recording')"
+predicate+=" OR (process == 'uniterm' AND eventMessage CONTAINS 'QUARANTINED DUE TO HIGH LOGGING VOLUME')"
 
 # Decide whether to compress the output.
 if [[ "$output_path" == *.gz ]]; then
