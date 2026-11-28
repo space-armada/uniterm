@@ -222,8 +222,8 @@ The final review covered the run's twelve commits, with an ADR review of the thr
 - ADR review: ADR-13's amendment matches the user-approved text word for word, and meets the rules for amending an
   accepted ADR. ADR-16 and ADR-18 are proposed, and their edits are sound.
 - Findings and dispositions:
-  - Left for the user: ADR-18's Context and Consequences still say the trust stores fail whole over one entry. That is
-    stale since "Keep every approval the trust store cannot read, in one policy file". The run does not edit that ADR.
+  - ADR-18's Context and Consequences still said the trust stores fail whole over one entry. Corrected after the run.
+    See "Left open".
   - Fixed: ADR-16's consequence line cited a proposal section. It now cites ADR-13 C1.
   - Dismissed: renaming ADR-13's file to match its new title. UTERM-063's check says the filename stays.
   - Fixed: a public parse function in the strict JSON reader had lost its only caller. Folded back.
@@ -277,7 +277,12 @@ The final review covered the run's twelve commits, with an ADR review of the thr
 
 ### Left open
 
-- Three `**Pending override:**` lines wait for the user: two on UTERM-019 and one on UTERM-050.
+- The three `**Pending override:**` lines, two on UTERM-019 and one on UTERM-050, are gone. The user said UTERM-063
+  is correct, and that bringing older proposals in line with it is not a design question. The three decisions were
+  rewritten in "Bring UTERM-019 and UTERM-050 in line with versions that stay at 0", and a sweep of every live
+  proposal for other stale version wording followed.
+- ADR-18's Context and Consequences no longer say the trust stores fail whole. The coordinator corrected those two
+  passages after the run, on the same ruling. The ADR stays proposed, and its principles are unchanged.
 - `.cg.yaml` has an uncommitted edit this run did not make. It names an absolute scratchpad path. Left alone.
 - The branch `agent/petunia-before-rebase-20261127` marks the head before the rebase. The coordinator made it as a
   recovery point, against the run's rule not to create branches.
