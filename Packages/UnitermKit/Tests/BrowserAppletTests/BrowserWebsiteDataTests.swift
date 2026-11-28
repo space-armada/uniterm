@@ -12,12 +12,30 @@ import XCTest
 final class BrowserWebsiteDataTests: XCTestCase {
   private var identifiers: [UUID] = []
 
+  /// Removes each store the test made. WebKit's network process keeps a store in use for a few
+  /// dozen milliseconds after its last web view closes, and refuses a removal until then. So the
+  /// removal is retried until a deadline.
+  ///
+  /// A store that is still in use at the deadline fails the test. Left behind, it stays on disk
+  /// under the test runner's WebKit folder for good, and every run would add more.
   override func tearDown() async throws {
     for identifier in identifiers {
-      try? await WKWebsiteDataStore.remove(forIdentifier: identifier)
+      try await Self.remove(identifier)
     }
 
     identifiers = []
+  }
+
+  private static func remove(_ identifier: UUID, seconds: Double = 5) async throws {
+    let deadline = ContinuousClock.now + .seconds(seconds)
+
+    while true {
+      do {
+        return try await WKWebsiteDataStore.remove(forIdentifier: identifier)
+      } catch  where ContinuousClock.now < deadline {
+        await Task.yield()
+      }
+    }
   }
 
   /// A persistent store of its own. The identifier is a throwaway, so the test never reaches the
