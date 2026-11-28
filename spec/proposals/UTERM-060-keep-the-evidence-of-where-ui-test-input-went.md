@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-25
-**Updated:** 2026-11-25
+**Updated:** 2026-11-27
 
 ## Impacts
 
@@ -317,9 +317,9 @@ None.
   then too, which is accepted: without XCTest's event lines, its records could not be matched to unconfirmed events.
 - **Keeping the log adds time to a failed CI job** — likelihood: medium, impact: high. Mitigation: a `log show` over a
   full suite's window runs after the tests, inside the job's time limit. If it pushed the job past the limit, the job
-  would be cancelled, and its upload, the test results included, would never run. M6 measures it on a failed full
-  suite, and requires the results and the kept log to upload even when the job reaches its limit. Amended 2026-11-25;
-  see Decision Log.
+  would be cancelled, and its upload, the test results included, would never run. M6 measures it on a failed shard.
+  M7 requires the results and the kept log to upload even when the job reaches its limit. Amended 2026-11-27; see
+  Decision Log.
 - **Recording changes the timing it measures** — likelihood: medium, impact: medium. Mitigation: pointer moves arrive
   at about 100 a second. In the `TerminalLinkUITests` entry, only the pointer moves and the debug logging differed
   between a failing and a passing run. M2 measures the cost over a burst that includes moves, and skips the hit test
@@ -588,7 +588,9 @@ that name it. See Decision Log.
 
 **Status:** NOT STARTED
 
-Amended 2026-11-25; see Decision Log.
+Waits for a stall seen in an ordinary local run or in a kept CI log. No run repeats the shortcut test to find one.
+
+Amended 2026-11-27; see Decision Log.
 
 - With recording on, the shortcut test still reproduces the Cmd-T stall at about its usual rate
 - A run of the shortcut test alone that reproduces the Cmd-T stall shows, for the unconfirmed T events, whether
@@ -596,14 +598,43 @@ Amended 2026-11-25; see Decision Log.
 
 ### M6: A failed CI shard keeps its evidence
 
-**Status:** NOT STARTED
+**Status:** DONE
 
-Split from M4 on 2026-11-25; see Decision Log.
+Amended 2026-11-27; see Decision Log.
 
 - A failed CI `app` job uploads the same log with its test results
-- `log show`'s time on a failed full suite is measured on CI and recorded in the As built block. The test results and
-  the kept log still upload when the job reaches its time limit
+- `log show`'s time on a failed shard is measured on CI and recorded in the As built block
 - Each failing shard's upload carries its own kept log
+
+**As built:**
+
+All clock times here are UTC, on 2026-11-27. The proof is the first two failed shards on CI: `app (0)` of run
+46052402044, and `app (1)` of run 46055769038. Both are attempt 1 of a pull request run.
+
+- Each failed job uploaded one artifact, named for its shard and attempt. `ui-test-results-shard-0-attempt-1` is
+  6,081,023 bytes, and `ui-test-results-shard-1-attempt-1` is 5,876,874 bytes. Each holds two `.xcresult` bundles and
+  that shard's kept log, `ui-test-kept-log-shard-0.txt.gz` and `ui-test-kept-log-shard-1.txt.gz`.
+- The CI runner does not hide the log. Shard 0's kept log holds 152,154 lines. Of them, 134,366 name `testmanagerd`,
+  75 are "Recording input" lines, and 4 are "confirmation delay timeout" lines. Shard 1's holds 97,886 lines, with
+  84,732, 76, and 10 of the same. Both hold the runner's frontmost lines.
+- `log show` took 8.4 s on shard 0, from 19:04:49.6 to 19:04:58.1. It took 7.0 s on shard 1, from 19:32:26.9 to
+  19:32:33.9. Each covers one shard's window. The jobs ended 14:38 and 12:22 after they started, against a limit of 50
+  minutes.
+- Each run had one failed shard, and each upload carries the log with its own shard's index. No run has yet had two
+  shards fail together.
+- In both jobs the follow-up collection step ran after the test step had already collected the log, and wrote over
+  it. The uploads carry the second copy, so the counts above come from it. See
+  `spec/bugs/20261127-ci-kept-log-collected-twice-on-a-failed-shard.md`.
+- The artifacts expire on 2026-12-04, after 7 days.
+- The upload at a job's time limit moved to M7. See Decision Log.
+
+### M7: The evidence uploads at a job's time limit
+
+**Status:** NOT STARTED
+
+Split from M6 on 2026-11-27; see Decision Log.
+
+- The test results and the kept log still upload when a CI `app` job reaches its time limit
 
 ## Decision Log
 
@@ -757,6 +788,19 @@ Split from M4 on 2026-11-25; see Decision Log.
   QUARANTINED line. So no iteration lost its records to the quarantine that
   `20261127-input-records-lost-to-log-quarantine` describes. The total with no stall is now 125 runs since the 3-in-9
   sighting. These runs still cannot show whether recording changes the rate. M5 stays NOT STARTED and keeps waiting for a stall with recording on. (run best guess)
+- 2026-11-27: M6 amended and finished, and M7 "The evidence uploads at a job's time limit" split from it. The user
+  chose this. M6's second bullet read: "`log show`'s time on a failed full suite is measured on CI and recorded in the
+  As built block. The test results and the kept log still upload when the job reaches its time limit". CI runs the
+  suite in three shards since UTERM-044, so no CI job runs a full suite, and no job has reached its time limit. The
+  measurement now reads "on a failed shard". The time-limit sentence moved to M7, which waits for a CI `app` job to
+  reach its limit. M6 closed on the two failed shards of 2026-11-27. The risk "Keeping the log adds time to a failed CI
+  job" read: "M6 measures it on a failed full suite, and requires the results and the kept log to upload even when the
+  job reaches its limit." It now names M6 for the shard measurement and M7 for the upload. Queue row
+  `| UTERM-060 M7 | UTERM-060 M6 | ... |` added after UTERM-060 M5. M6's row moved to history ahead of M5's, since M6
+  needs nothing from M5.
+- 2026-11-27: No run repeats the shortcut test to find M5's stall. The user chose this after 125 runs with no stall
+  across four batches. M5 keeps its checks and stays NOT STARTED. It waits for a stall seen in an ordinary local run
+  or in a kept CI log. Whether recording changed the stall's rate stays open until then. M5 had no goal line before.
 
 ## References
 
