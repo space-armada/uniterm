@@ -7,8 +7,9 @@ import XCTest
 /// paths, and a capture of each look.
 ///
 /// A controller must stay connected for its marker to show, so each script holds its connection
-/// open after it has printed. The app's end ends it. Nothing publishes the run-end marker yet, so
-/// its captures use the marked fixture, which only a debug build with `UNITERM_TEST_APPLETS` knows.
+/// open, in the foreground of a terminal pane's shell. The app's end ends it. Nothing publishes
+/// the run-end marker yet, so its captures use the marked fixture, which only a debug build with
+/// `UNITERM_TEST_APPLETS` knows.
 @MainActor
 final class MarkerUITests: UnitermUITestCase {
   private func element(_ identifier: String, in container: XCUIElement) -> XCUIElement {
@@ -50,53 +51,53 @@ final class MarkerUITests: UnitermUITestCase {
     }
     """#
 
-  /// Starts a controller script from the terminal and leaves it connected. The script prints the
-  /// pane it made, and the test reads that from `output`. `before` runs in the shell first, and may
-  /// write the script.
+  /// Starts a controller script in the focused terminal and leaves it connected. The script runs
+  /// in the foreground of the pane's shell, so it descends from the pane's session root and the
+  /// host binds it to the pane. A shell that exits, or a script put in the background of one that
+  /// exits, hands the script to launchd, and the host then refuses it as outside every pane. The
+  /// terminal stays busy while the script holds its connection, so a test drives the app by the
+  /// window afterwards. `before` runs in the shell first, and may write the script.
   private func startController(
     janet: String, named name: String, before: String = "", in app: XCUIApplication
-  ) throws -> (output: String, requests: String) {
+  ) throws {
     let command = try bundledCommand()
     let script = scratch + "-\(name).janet"
     let shell = scratch + "-\(name).sh"
-    let output = scratch + "-\(name).out"
-    let status = scratch + "-\(name).status"
     let requests = scratch + "-\(name).requests"
 
     try write(janet, to: script)
     try write(
       """
       \(before.replacingOccurrences(of: "__REQUESTS__", with: requests))
-      (
-        attempts=0
-        while [ $attempts -lt 100 ]; do
-          "\(command)" run --socket "\(testSocket)" "\(script)" > "\(output)" 2> "\(output).err"
-          code=$?
-          [ $code -ne 69 ] && break
-          attempts=$((attempts + 1))
-          sleep 0.1
-        done
-        echo "exit=$code" > "\(status)"
-      ) < /dev/null > /dev/null 2>&1 &
       printf '\\033[H\\033[2J\\033[3J'
+      attempts=0
+      while [ $attempts -lt 100 ]; do
+        "\(command)" run --socket "\(testSocket)" "\(script)" > /dev/null
+        code=$?
+        [ $code -ne 69 ] && break
+        attempts=$((attempts + 1))
+        sleep 0.1
+      done
       """, to: shell)
 
     addTeardownBlock {
-      for path in [script, shell, output, output + ".err", status, requests] {
+      for path in [script, shell, requests] {
         try? FileManager.default.removeItem(atPath: path)
       }
     }
 
     runInTerminal(shell, in: app)
     answerFirstReview(in: app, pressing: "pending-requests-allow-session")
-
-    return (output, requests)
   }
 
-  private func printedPane(_ program: (output: String, requests: String)) throws -> String {
-    let text = try XCTUnwrap(waitForFile(program.output), "the controller printed nothing")
+  /// The pane the controller opened beside the terminal, found on screen.
+  private func openedPane(in window: XCUIElement) throws -> String {
+    let panes = window.groups.matching(
+      NSPredicate(format: "identifier BEGINSWITH 'pane-' AND identifier != 'pane-1'"))
 
-    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    XCTAssertTrue(panes.firstMatch.waitForExistence(timeout: 40), "the controller opened no pane")
+
+    return String(try XCTUnwrap(panes.firstMatch.identifier).dropFirst("pane-".count))
   }
 
   /// Catches a marker on the wrong tab, a marker the user cannot reach, and a user tab that picks
@@ -150,7 +151,7 @@ final class MarkerUITests: UnitermUITestCase {
       }
     }
 
-    let program = try startController(
+    try startController(
       janet: "",
       named: "markers",
       before: """
@@ -163,7 +164,7 @@ final class MarkerUITests: UnitermUITestCase {
         sed "s/__PORT__/$(cat "\(portFile)")/g" "\(template)" > "\(scratch)-markers.janet"
         """, in: app)
 
-    let pane = try printedPane(program)
+    let pane = try openedPane(in: window)
     let group = window.groups["pane-\(pane)"]
 
     XCTAssertTrue(group.waitForExistence(timeout: 15), "the browser pane never opened")
@@ -198,7 +199,7 @@ final class MarkerUITests: UnitermUITestCase {
     _ = waitForTerminal(in: app)
     enableRemoteControl(pane: 1, in: app)
 
-    let program = try startController(
+    try startController(
       janet: """
         (declare-permissions {:name "Synthetic Marker Controller"}
           {:kind :pane-control})
@@ -220,7 +221,7 @@ final class MarkerUITests: UnitermUITestCase {
         (os/sleep 180)
         """, named: "viewer-marker", in: app)
 
-    let pane = try printedPane(program)
+    let pane = try openedPane(in: window)
     let group = window.groups["pane-\(pane)"]
 
     XCTAssertTrue(group.waitForExistence(timeout: 15), "the viewer pane never opened")
@@ -236,6 +237,59 @@ final class MarkerUITests: UnitermUITestCase {
     XCTAssertEqual(marker.frame.midY, badge.frame.midY, accuracy: 2)
 
     keepElementScreenshot(group, named: "Text viewer with its marker beside the control badge")
+  }
+
+  /// Catches a chip on the wrong tab, on both tabs, or one the user cannot reach. The user opens a
+  /// second terminal tab and starts a controller in it, with the pane remote-controlled. Only the
+  /// second tab shows the chip, as an image whose label and value name the controller. The first
+  /// tab shows none, and the pane shows no marker beside its badge while the bar shows. The capture
+  /// shows the two tabs side by side.
+  func testAControllerStartedInTheSecondTerminalTabMarksThatTabOnly() throws {
+    try write("PROMPT='%% '\nRPROMPT=''\n", to: scratch + "-shell/.zshrc")
+
+    let app = launchApp()
+    let window = mainWindow(in: app)
+
+    _ = waitForTerminal(in: app)
+    enableRemoteControl(pane: 1, in: app)
+
+    app.typeKey("t", modifierFlags: .command)
+
+    let terminal = window.textViews["terminal"]
+
+    XCTAssertTrue(element("tab-1", in: window).appears(timeout: 15), "the second tab never opened")
+    XCTAssertTrue(
+      waitFor(terminal, timeout: 40) { $0.contains("% ") }, "the new tab never showed a prompt")
+
+    try startController(
+      janet: """
+        (declare-permissions {:name "Synthetic Chip Controller"}
+          {:kind :pane-control})
+
+        (import uniterm)
+
+        (def me (get (uniterm/list-windows) 0))
+
+        (print (me :pane))
+        (flush)
+        (os/sleep 180)
+        """, named: "chip", in: app)
+
+    let pane = "1"
+    let group = window.groups["pane-\(pane)"]
+    let chip = element("tab-1-marker-chip", in: group)
+
+    XCTAssertTrue(
+      chip.appears(timeout: 40), "the controller's tab shows no chip")
+    XCTAssertEqual(chip.label, "Controller acts for this tab")
+    XCTAssertTrue(
+      (chip.value as? String ?? "").contains("PID"), "the chip names no controller")
+    XCTAssertFalse(element("tab-0-marker-chip", in: group).exists, "the other tab showed a chip")
+    XCTAssertFalse(
+      element("pane-marker-chip-\(pane)", in: group).exists,
+      "a pane with a bar drew a pane-level chip")
+
+    keepElementScreenshot(group, named: "Two-tab terminal with the chip on the second tab")
   }
 
   /// Catches tabs that lie out of reach, a wheel or a key that leaves the selected tab hidden, and
@@ -281,8 +335,14 @@ final class MarkerUITests: UnitermUITestCase {
 
     keepElementScreenshot(window, named: "Overflowed tab bar scrolled by a sideways swipe")
 
+    app.typeKey("2", modifierFlags: .command)
+
+    XCTAssertTrue(waitFor(tab(1), timeout: 10) { $0 == "selected" })
+    XCTAssertTrue(waitUntilHittable(tab(1)), "the selected second tab stayed out of view")
+
     app.typeKey("1", modifierFlags: .command)
 
+    XCTAssertTrue(waitFor(tab(0), timeout: 10) { $0 == "selected" })
     XCTAssertTrue(
       pollUntil(timeout: 5) { abs(tab(0).frame.minX - start) < 2 },
       "selecting the first tab did not bring it back into view")

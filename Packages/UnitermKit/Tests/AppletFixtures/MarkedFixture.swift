@@ -7,7 +7,8 @@ import Theme
   /// in the app publishes that kind yet. The fixture holds one tab, which carries the marker and
   /// shows it at the pane level, or two tabs under a tab bar, the second of which carries it.
   ///
-  /// The payload's `tabs` is 1 or 2. It takes no commands, so no controller can mark it.
+  /// The payload's `tabs` is 1 or 2. It takes no commands, so no controller can mark it. It takes
+  /// the keyboard itself, so a stray key never lands on the bar's close button and closes a tab.
   @MainActor
   public final class MarkedFixture: Applet {
     public nonisolated static let typeID = "fixture-marked"
@@ -61,7 +62,9 @@ import Theme
 
     public func close() {}
 
-    public func focus() {}
+    public func focus() {
+      container.window?.makeFirstResponder(container)
+    }
 
     public func describe() -> AppletDescription {
       AppletDescription(
@@ -87,5 +90,7 @@ import Theme
     }
 
     override var isFlipped: Bool { true }
+
+    override var acceptsFirstResponder: Bool { true }
   }
 #endif

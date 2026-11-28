@@ -828,7 +828,10 @@ final class QuestionsUITests: UnitermUITestCase {
 
     XCTAssertEqual(outcome(of: first)?["outcome"] as? String, "ended")
     XCTAssertTrue(element("tab-1", in: app).disappears(timeout: 10))
-    XCTAssertEqual(element("tab-0", in: app).label, "Second script")
+    XCTAssertTrue(
+      element("tab-0", in: app).disappears(timeout: 10), "one form left, and the bar stayed")
+    XCTAssertEqual(
+      element("questions-requester-name", in: app).value as? String, "Second script")
     XCTAssertTrue(element("questions-applet", in: app).exists)
   }
 
