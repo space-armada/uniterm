@@ -632,6 +632,57 @@ expect_split_error "zero tests fails" 1 "A 0" "test count must be a positive int
 # Invalid format fails.
 expect_split_error "invalid format fails" 1 "A" "invalid line format"
 
+# The follow-up step exists for a test step that its timeout stopped before it collected the kept
+# log. A shard whose tests failed already collected one, and collecting again would replace it with
+# a log whose window ends later. The step's script runs against a fake collector that records its
+# calls, so the test proves what the workflow's own script does, not GitHub's scheduling of it.
+followup_script() {
+  awk '
+    /- name: Collect kept log if test step did not complete/ { found = 1; next }
+    found && /^        run: \|$/ { body = 1; next }
+    body && /^$/ { print; next }
+    body && /^          / { sub(/^          /, ""); print; next }
+    body { exit }
+  ' "$root/.github/workflows/ci.yml" | sed 's/\${{ strategy.job-index }}/0/g'
+}
+
+expect_followup() {
+  local name="$1" kept_before="$2" expected_calls="$3" expected_log="$4" calls log
+  local dir="$scratch/followup-$RANDOM"
+  mkdir -p "$dir/scripts" "$dir/.build/DerivedData-test"
+  printf '1700000000\n' >"$dir/.build/DerivedData-test/ui-test-start-time.txt"
+  cat >"$dir/scripts/collect-ui-test-log.sh" <<'FAKE'
+#!/usr/bin/env bash
+echo "collected" >>"$(dirname "$0")/../calls"
+echo "second copy" >"$2"
+FAKE
+  chmod +x "$dir/scripts/collect-ui-test-log.sh"
+  if [[ -n "$kept_before" ]]; then
+    printf '%s\n' "$kept_before" >"$dir/.build/DerivedData-test/ui-test-kept-log-shard-0.txt.gz"
+  fi
+  followup_script >"$dir/followup.sh"
+  if [[ ! -s "$dir/followup.sh" ]]; then
+    echo "FAIL: $name: the follow-up step's script was not found in ci.yml" >&2
+    exit 1
+  fi
+  (cd "$dir" && bash followup.sh >"$dir/out" 2>&1) || {
+    echo "FAIL: $name: the follow-up script failed" >&2
+    cat "$dir/out" >&2
+    exit 1
+  }
+  calls=0
+  [[ -f "$dir/calls" ]] && calls="$(wc -l <"$dir/calls" | tr -d ' ')"
+  log="$(cat "$dir/.build/DerivedData-test/ui-test-kept-log-shard-0.txt.gz" 2>/dev/null || true)"
+  if [[ "$calls" != "$expected_calls" || "$log" != "$expected_log" ]]; then
+    echo "FAIL: $name: expected $expected_calls collection(s) and log \"$expected_log\", got $calls and \"$log\"" >&2
+    exit 1
+  fi
+  echo "PASS: $name"
+}
+
+expect_followup "a shard that failed its tests keeps the log its test step collected" "first copy" 0 "first copy"
+expect_followup "a shard stopped by its timeout gets a log from the follow-up step" "" 1 "second copy"
+
 # The waiting-evidence report reads only GitHub. The fake serves one file per endpoint and applies
 # the script's own --jq filter, so the filters are proved too. A log with no file is one GitHub no
 # longer serves.
@@ -757,3 +808,49 @@ expect_evidence "a job with no log is listed under the count, not judged" "    r
 
 printf '{"artifacts":[{"name":"ui-test-results-shard-0-attempt-1"}]}' >"$evidence/artifacts-3.json"
 expect_evidence "a job at the limit names its upload" "ui-test-results-shard-0-attempt-1 was uploaded"
+
+# The collector's predicate is the contract for what the kept log can show. A stub `log` records it.
+collector_bin="$scratch/collector-bin"
+mkdir -p "$collector_bin"
+cat >"$collector_bin/log" <<'STUB'
+#!/usr/bin/env bash
+while (($#)); do
+  if [[ "$1" == "--predicate" ]]; then
+    printf '%s' "$2" >"$COLLECTOR_PREDICATE_FILE"
+  fi
+  shift
+done
+echo "testmanagerd stub line"
+STUB
+chmod +x "$collector_bin/log"
+
+PATH="$collector_bin:$PATH" COLLECTOR_PREDICATE_FILE="$scratch/collector-predicate" \
+  bash "$root/scripts/collect-ui-test-log.sh" "$(date +%s)" "$scratch/collector-kept-log.txt" >"$scratch/collector-out" 2>&1
+if ! grep -qF -- "QUARANTINED" "$scratch/collector-predicate"; then
+  echo "FAIL: the kept log's predicate does not select the log's quarantine line" >&2
+  cat "$scratch/collector-predicate" >&2
+  exit 1
+fi
+echo "PASS: the kept log's predicate selects the log's quarantine line"
+
+# A fresh checkout has no test build folder yet. The runner must create the kept log's folder before it
+# writes the start time there. A stub `swift` stands in for the GUI session check, and a held lock skips
+# the screen lock, so only the setup runs.
+runner_bin="$scratch/runner-bin"
+mkdir -p "$runner_bin"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$runner_bin/swift"
+chmod +x "$runner_bin/swift"
+
+runner_kept_log="$scratch/fresh-checkout/DerivedData-test/ui-test-kept-log.txt.gz"
+if ! PATH="$runner_bin:$PATH" UNITERM_UI_LOCK_HELD=1 UNITERM_UI_LOCK_FILE="$scratch/runner.lock" \
+  UNITERM_UI_KEPT_LOG="$runner_kept_log" \
+  bash "$root/scripts/run-ui-tests.sh" true >"$scratch/runner-out" 2>&1; then
+  echo "FAIL: the UI test runner stops in a checkout with no test build folder" >&2
+  cat "$scratch/runner-out" >&2
+  exit 1
+fi
+if [[ ! -s "$(dirname "$runner_kept_log")/ui-test-start-time.txt" ]]; then
+  echo "FAIL: the UI test runner did not record its start time in a checkout with no test build folder" >&2
+  exit 1
+fi
+echo "PASS: the UI test runner creates the kept log's folder before it records the start time"

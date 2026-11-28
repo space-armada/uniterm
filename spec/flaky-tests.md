@@ -46,8 +46,11 @@ fixed ones.
     `testmanagerd`'s line by its `source_userdata`, which is the event's number, and by its `type`. Its `source_pid`
     is `testmanagerd`'s pid. "Key 17 down" records as `type=keyDown keycode=17`. A modifier's down and up both record
     as `type=flagsChanged`, as in `keycode=55` for Command. A click's "Mouse up" records as `type=leftMouseUp`.
-  - No record means AppKit never dequeued the event. Either it never reached uniterm, or it never left the queue. A
-    record of an unconfirmed event means uniterm took it and its confirmation never came. A record also names the key
+  - The log can quarantine uniterm for high logging volume and drop every later line. The kept log then holds a
+    `QUARANTINED DUE TO HIGH LOGGING VOLUME` line for uniterm. An iteration with that line has lost its records, so a
+    missing record in it is no evidence. Count such an iteration as neither a stall nor a clean run.
+  - In an iteration with no quarantine line, no record means AppKit never dequeued the event. Either it never reached
+    uniterm, or it never left the queue. A record of an unconfirmed event means uniterm took it and its confirmation never came. A record also names the key
     window and the first responder at the moment uniterm took the event. AppKit merges queued moves, drags, and
     scrolls, so a missing record for one of those proves nothing. A press on the menu bar leaves no record either.
   - The app's `window_resigned_key` and `window_became_key` lines show another app's panel taking the keyboard while

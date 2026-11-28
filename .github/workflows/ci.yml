@@ -89,6 +89,12 @@ jobs:
       - name: Collect kept log if test step did not complete
         if: always() && steps.test.outcome != 'success' && steps.test.outcome != 'skipped'
         run: |
+          # A test step that ran to its end already collected its log. Only a step its timeout stopped has none.
+          if [[ -f ".build/DerivedData-test/ui-test-kept-log-shard-${{ strategy.job-index }}.txt.gz" ]]; then
+            echo "The test step already kept its log, skipping kept log collection"
+            exit 0
+          fi
+
           if [[ -f .build/DerivedData-test/ui-test-start-time.txt ]]; then
             start_time=$(cat .build/DerivedData-test/ui-test-start-time.txt)
             scripts/collect-ui-test-log.sh "$start_time" ".build/DerivedData-test/ui-test-kept-log-shard-${{ strategy.job-index }}.txt.gz"
