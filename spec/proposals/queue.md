@@ -5,7 +5,6 @@
 | UTERM-060 M5 | UTERM-060 M2 | Needs a Cmd-T stall with recording on, seen in an ordinary run. No run repeats the shortcut test to find one. `make ci-waiting-evidence` reports a CI failure of it |
 | UTERM-060 M7 | UTERM-060 M6 | Split from M6: needs a CI `app` job to reach its time limit. It advances only when `make ci-waiting-evidence` reports one |
 | UTERM-045 M4 | UTERM-045 M2 | Needs clean CI runs after M2 lands. It advances only when `make ci-waiting-evidence` reports the launcher test clean to M2's count |
-| UTERM-043 M1 | None | Split from M2: M1 builds only on today's control code. M2 checks it against newer features |
 | UTERM-041 M1-M2 | None | |
 | UTERM-042 M1-M3 | UTERM-041 M2 | M2 builds on UTERM-041 M1's tab bar and markers. M3 builds on its chip. M1 needs neither |
 | UTERM-054 M6 | None | Split from M1-M5: M6 amends UTERM-019 and must land before UTERM-019 M1 ships |
