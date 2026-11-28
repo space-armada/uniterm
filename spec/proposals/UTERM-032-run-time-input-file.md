@@ -307,7 +307,8 @@ None.
 ## Risks
 
 - **An input file is a new approval contract** — likelihood: high, impact: medium. Users and tools would depend on how
-  it is declared and shown. Mitigation: version the declaration under UTERM-021, and show the folder in the sheet.
+  it is declared and shown. Mitigation: the declaration is named by kind alone under UTERM-021, with no version, and the sheet shows the folder.
+  Amended 2026-11-27; see Decision Log.
 - **A user names a deck in too broad a folder, such as `~`** — likelihood: medium, impact: medium. Mitigation: the sheet
   shows the folder, UTERM-015's protected-location rule still applies, and the grant covers slide images only.
 - **A program-started run reuses a remembered folder** — likelihood: medium, impact: high. Any process can run
@@ -519,6 +520,9 @@ None.
   - Amended "The stored approval". It said "The kind's meaning version never changes with the list", and that "A
     meaning version raised with the list would make a build that lacks the newest version keep every folder policy
     unread".
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. The risk "An input file is a new approval
+  contract" said "Mitigation: version the declaration under UTERM-021". A declaration names a permission by kind alone
+  and carries no version, so the mitigation now says that. "Version skew" already said ScriptWire stays at 0.
 
 ## References
 

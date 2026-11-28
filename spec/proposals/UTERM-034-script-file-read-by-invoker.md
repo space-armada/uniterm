@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-19
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -25,7 +25,8 @@
 - UTERM-032 — "Which argument is the input file" and "How the text reaches the script": both speak of the snapshot's
   declaration. UTERM-032 is queued first and builds against the snapshot. M1 here amends both sections to the
   declaration the command reads, with the folder riding on the declaration that follows the bytes.
-- UTERM-032 — "Version skew": both proposals bump ScriptWire's version. Whichever lands second bumps again.
+- UTERM-032 — "Version skew": both proposals change ScriptWire in place. ScriptWire is at 0 under UTERM-063 and does not
+  bump. Amended 2026-11-27; see Decision Log.
 
 ## Summary
 
@@ -133,15 +134,16 @@ Decision: no change needed. Settled 2026-11-22 (autonomous); see Decision Log.
 
 ### Version skew
 
-Decision: the file begin changes, and chunk messages are new, so ScriptWire's version goes up. Settled 2026-11-22
-(autonomous); see Decision Log.
+Decision: the file begin changes, and chunk messages are new. ScriptWire is at 0 under UTERM-063 and does not bump, so
+both land in place after UTERM-063 M2. The old begin is a retired message, and the app refuses it by name. Settled
+2026-11-22 (autonomous). Amended 2026-11-27; see Decision Log.
 
-- The command and the app ship in one bundle. ADR-13 P6 lets the command's own messages refuse every version but their
-  own. A newer command and an older app, and the reverse, refuse each other before the script's bytes are sent, at the
-  hello, or at the begin once UTERM-056 has landed. The message tells the user to relaunch uniterm, which heals
-  it. Amended 2026-11-23; see Decision Log.
+- The command and the app ship in one bundle. ADR-13 P6 lets the command's own messages refuse every build but their
+  own. An older command's begin is refused by name before the script's bytes are sent. An older app's strict decoder
+  refuses the new begin and chunk messages by name. A swapped bundle is caught by the command's identity check, which
+  says to relaunch uniterm.
 - No deploy order is needed. A revert and a redeploy undo the change.
-- UTERM-032 and UTERM-029 also bump ScriptWire's version, and neither is built. Whichever lands later bumps again.
+- UTERM-032 and UTERM-029 also change ScriptWire in place, and neither is built. None of them bumps its version.
 - No stored data changes. The trust store keys a file's approvals by its version, which stays the SHA-256 of the whole
   file, so earlier approvals still apply.
 
@@ -157,9 +159,9 @@ None.
 - **A large file begin makes the app hold memory before it trusts the peer** — likelihood: low, impact: low. Any
   same-user process can connect. Mitigation: the app reads chunks only after authenticating the peer, each within the
   control-frame cap, and refuses a byte count over the cap from the begin alone.
-- **UTERM-032, UTERM-029, and this proposal bump the same wire version** — likelihood: medium, impact: low. Two changes
-  could take the same number. Mitigation: whichever lands later bumps again, and the hello refuses any mismatch, so a
-  clash fails closed.
+- **UTERM-032, UTERM-029, and this proposal change the same wire in place** — likelihood: medium, impact: low. Two
+  changes could take the same message name. Mitigation: each change takes its own new message name, and the decoders
+  refuse a name they do not know, so a clash fails by name.
 - **macOS charges the command's read to uniterm instead of to the program that started it** — likelihood: medium,
   impact: high. The evidence does not settle the likelihood, so it takes the higher rating. The fix assumes the bundled command's reads are checked against the privacy grants of the process that launched
   it, not of the app bundle it sits in. If not, the command's own read borrows uniterm's grants with no race at all.
@@ -191,8 +193,8 @@ The app never opens a path for a declared script file or its signature.
 - The review's title comes from the begin's name, the resolved file's last component, cleaned as today
 - A test that swaps a parent folder for a link after the command's read shows the run uses the bytes the command read,
   and the app opens nothing
-- An older command and a newer app, and the reverse, refuse each other before the script's bytes are sent. Amended
-  2026-11-23; see Decision Log
+- An older command's file begin is refused by name before the script's bytes are sent, and an older app refuses the
+  new messages by name. Amended 2026-11-27; see Decision Log
 - The chunk messages can also carry a controller package's descriptor, signature, per-file byte counts, and many files
   in one stream, so UTERM-057 reuses them and builds no second mechanism
 - Earlier approvals of a file still apply to the same bytes
@@ -259,6 +261,12 @@ The app never opens a path for a declared script file or its signature.
   unbuilt keeps one mechanism for both.
 - 2026-11-23: From UTERM-056's acceptance. "Version skew" and M1's check said each side refuses any other version "at the
   hello". UTERM-056 moves an older command's refusal to its begin.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. "Version skew" said "the file begin changes, and
+  chunk messages are new, so ScriptWire's version goes up". It said an older command and a newer app "refuse each other
+  before the script's bytes are sent, at the hello, or at the begin once UTERM-056 has landed" with a relaunch message,
+  and that UTERM-032 and UTERM-029 "bump ScriptWire's version... Whichever lands later bumps again". The Impacts line,
+  the risk "bump the same wire version", and M1's check on an older command said the same. ScriptWire stays at 0, so the
+  change lands in place. The old begin is refused by name. A swapped bundle is caught by the identity check.
 
 ## References
 

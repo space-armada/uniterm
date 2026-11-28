@@ -78,9 +78,9 @@ Decision: four new typed permissions, separate from M8's browser navigation and 
 - Browser input covers synthesized mouse, key, and scroll events.
 - Browser cookies covers reading and writing cookies, per "Cookies".
 - Browser capture covers snapshots, PDF output, and find in page.
-- Navigation and frame events fall under browser read version 2, since they carry URLs. User agent, zoom, and
-  print-media emulation fall under browser navigation version 2. See "Widened browser read and browser navigation".
-  Amended 2026-11-11; see Decision Log.
+- Navigation and frame events fall under browser read, since they carry URLs. User agent, zoom, and print-media
+  emulation fall under browser navigation. A controller approved for either before it grew is asked again. See "Widened
+  browser read and browser navigation". Amended 2026-11-27; see Decision Log.
 - Each permission's approval review states its meaning. Browser script says a script can read and change anything the
   page shows, signed in as the user. Browser cookies says it returns session cookies, including HttpOnly ones.
 - An approval stored before these permissions existed cannot cover them, per ADR-09.
@@ -217,7 +217,7 @@ holds that document. Main frame only is the fallback if WebKit cannot target a h
 - An ID names one document in one frame. A new document in the same iframe gets a new ID. For a controller-world run,
   the old ID is stale.
 - A frame-appeared event carries the ID, the frame's origin, and its parent's ID. A list-frames command returns the
-  tab's live frames. Both need browser read version 2 or browser script, since a script cannot target a frame it
+  tab's live frames. Both need browser read or browser script, since a script cannot target a frame it
   cannot name.
 - A controller-world run-script with a frame ID checks, inside the same call and before its body runs, that the frame
   still holds the token recorded for the ID. A same-origin navigation inside the frame fails the check.
@@ -258,15 +258,16 @@ browser capture. Dialog and script events go under browser script. Amended 2026-
 - Browser navigation also covers user agent, zoom, and print-media emulation.
 - Browser capture covers find in page, beside snapshots and PDF output.
 - Browser script covers the dialog opened and script finished events, per "Commands that wait".
-- Each permission has one meaning in a build, per "Permission descriptor format".
+- Each permission means what the running build says it means, per "Permission descriptor format".
 - Each build's review text describes only what that build grants.
 
-Rationale: ADR-09 says a change in meaning cannot increase an existing approval. UTERM-004 already compares a
-permission's semantic version against the approval, and the version works in either build order. Find returns a match
+Rationale: ADR-09 says a change in meaning cannot increase an existing approval. UTERM-063 gives each permission kind an
+internal edition that uniterm records with each approval. When a kind grows, its edition moves, and an older approval
+stops covering it. That works in either build order. Find returns a match
 result, so repeated queries recover any text on the page. That is page content, not an address, and capture already
 reveals it. A dialog's message is page text too, so its event cannot ride under browser read. Amending UTERM-005 first
 would bet on M8 starting after this proposal is accepted, when M1 starts after M8. New permission kinds for events and
-settings would add review entries with no power behind them that the version-2 meanings lack. Converged in 2 passes.
+settings would add review entries with no power behind them that the grown meanings lack. Converged in 2 passes.
 
 ### Commands that wait
 
@@ -324,7 +325,7 @@ capability returns a new applet code, `unsupported-capability`, carried on the e
   `:browser/snapshot`, `:browser/pdf`, `:browser/find`, `:browser/page-settings`, `:browser/cookie-store`,
   `:browser/pointer-input`, and `:browser/key-input`.
 - A name never changes meaning. A dropped feature leaves the set. A rename adds one name and drops the other.
-  None of this bumps the browser command schema's major version. Together with UTERM-020, the set stays within 64 names, the
+  None of this bumps the browser command schema, which stays at 0.0. Together with UTERM-020, the set stays within 64 names, the
   most fields a script record holds.
 - `unsupported-capability` comes back only for a capability missing from the set, and only when nothing ran. A listed
   capability that cannot run now returns `failed`, which also means nothing ran. A failure after an effect is
@@ -335,14 +336,13 @@ capability returns a new applet code, `unsupported-capability`, carried on the e
 - Skew: the browser schema is at 0.0, per UTERM-063, so new commands and new reply keys land in place with no bump. An
   older script's message is read with its old meaning or refused by name, never reinterpreted. A script on a build
   without this proposal gets `:bad-argument` from the capabilities command, and nothing runs. The shipped helpers read
-  that as an empty set. From schema 1.0 on, new commands and new reply keys bump the minor, never the major, per
-  UTERM-007 M5. Amended 2026-11-27; see Decision Log.
+  that as an empty set. After uniterm's maintainers declare the schema stable at 1.0, new commands and new reply keys
+  bump the minor, never the major, per UTERM-007 M5. Amended 2026-11-27; see Decision Log.
 
 Rationale: an unknown command already maps to `:bad-argument`, so the open question's premise, that a script cannot
 tell "this build cannot" from "no such command", does not hold. A new wire kind would buy a distinction no current
-caller needs, at the cost of a ScriptWire bump. A command schema version matches on its major, so a major bump for a
-rename would break every browser script, including scripts that never check capabilities. UTERM-020 can fail a capability the
-startup set lists, so the error kind follows membership in the set. Judge after 3 passes, on budget. The critic moved
+caller needs, at the cost of a change to ScriptWire. A rename that changed a schema's major version would break every
+browser script, including scripts that never check capabilities. UTERM-020 can fail a capability the startup set lists, so the error kind follows membership in the set. Judge after 3 passes, on budget. The critic moved
 from bare error reuse, to a symbol set with schema bumps, to this record. Each move rested on code facts the judge
 re-checked.
 
@@ -366,22 +366,21 @@ it, and the user is asked again. Amended 2026-11-27; see Decision Log.
   name listed twice is refused.
 - Approvals record each permission's name, edition, and scopes. A request at the approved edition needs no new review.
   A grown permission needs one.
-- Format 1 descriptors keep working with format 1's two kinds.
-- Each command is gated on its own permission alone. A browser read at version 1 hides only the events version 2 adds.
-- Skew: a build without M6 refuses format 2 at load. A build that lacks a kind or version refuses it at load. A newer
-  app reads older formats and versions with their own meanings. An older app reading a newer policy file authorizes
-  nothing, per UTERM-004. No deploy order is needed.
+- Each command is gated on its own permission alone. Browser read covers the page events this proposal adds. An approval
+  made before that does not cover them, and the user is asked again.
+- Skew: the descriptor format is 0 and does not bump. A build that lacks a permission name refuses the descriptor at
+  load, by name. A newer app asks again for a permission that grew since the approval. An older app reading a newer
+  policy file authorizes nothing, per UTERM-004. No deploy order is needed.
 - Skew for exec drivers: a deferred reply reaches a driver matched by request ID, as layout replies already do. An old
   driver never sends the new commands. A new driver on an old app gets `unknown-command`, and nothing runs. The
   `unsupported-capability` code reaches a driver as a new code string. A driver that does not know it treats it as a
   refusal, and nothing ran.
 
 Rationale: approvals must key on meaning, not on file layout. A new format per meaning change would make a signed
-update that only bumps the format re-prompt for nothing, or else let a changed meaning slip past ADR-09. The fix for
-that is a per-format table of meaning versions, which is this version field in a hidden form. UTERM-020 adds six more
-kinds, and the field carries them with no further format bump. The rule changes the "Widened browser read and browser
-navigation" line that the format carries the version. The version now rides in each permission, and each (kind,
-version) has one meaning. Converged in 1 pass.
+update that only changes the format ask again for nothing, or else let a changed meaning slip past ADR-09. A version
+written by the author would be the same constant in every descriptor. uniterm keeps the edition itself, so a grown
+permission is asked again and nothing else is. UTERM-020 adds six more kinds, and each is a new name with no format
+change. Converged in 1 pass.
 
 ### Content world
 
@@ -642,31 +641,28 @@ It no longer matters. Under ADR-15 the controller's submit is the user's submit,
 Removing every
 registration on a scripted site would delete the user's own workers and push subscriptions. Converged in 1 pass.
 
-### Who builds descriptor format 2
+### Who builds the permission descriptor rules
 
 Original question:
 
-"Permission descriptor format" says UTERM-005 M8 ships its two kinds at version 1 in format 2. UTERM-005 is accepted,
-and its M8 says nothing about format 2. M8 starts before this proposal's M1, which also builds format 2. Format 1
-refuses any kind it does not know, so M8 must change the descriptor somehow. Raised by the coherence review.
+"Permission descriptor format" says UTERM-005 M8 adds its two kinds to the descriptor. UTERM-005 is accepted, and its M8
+says nothing about how the descriptor names a kind. M8 starts before this proposal's M1, which also adds kinds. The
+descriptor refuses any kind it does not know, so M8 must change it somehow. Raised by the coherence review.
 
-Decision: format 2 is defined in its owner, UTERM-004 "Verified artifact and run binding", with the rules settled
-under "Permission descriptor format". UTERM-004 M6 builds it, since M6 already introduces format 2 for its clipboard
-and host launch kinds. UTERM-005 M8 adds its two kinds at version 1. This proposal's M1 adds kinds and versions.
-(addition) Amended 2026-11-11; see Decision Log.
+Decision: the descriptor's rules live in their owner, UTERM-004 "Verified artifact and run binding". UTERM-063 sets the
+format to 0 and has each permission named by kind alone. UTERM-005 M8 adds browser navigation and browser read by name.
+This proposal's M1 adds the four new names. (addition) Amended 2026-11-27; see Decision Log.
 
-- UTERM-004 gains format 2 in place: a version on every permission, the (kind, version) table, the refusal rules, and
-  reading format 1. M6 builds the version-aware parsing before format 2 ships.
-- UTERM-005 M8 adds browser navigation and browser read at version 1 to format 2. Its checks require that format 1 and
-  format 2 both load, each with its own kinds.
-- UTERM-004 M6 makes the UTERM-004 edit as part of its own work. The UTERM-005 M8 edit is made beside this review.
+- UTERM-004 holds the name table, the refusal rules, and the edition each approval records. UTERM-063 M1 built them.
+- UTERM-005 M8 adds browser navigation and browser read to the table by name. Its checks require that a descriptor
+  naming only those two kinds loads.
+- This proposal's M1 adds browser script, browser input, browser cookies, and browser capture by name, and moves the
+  editions of browser navigation and browser read.
 
-Rationale: M8 must change the descriptor, since format 1 refuses any kind it does not know. Pointing accepted M8 at
-this draft's text would let shipped builds read a format no accepted document defines. Signed format 2 packages must
-then be read forever. Writing format 2 into UTERM-004, which owns format 1, gives M8 an accepted definition. M6
-already makes format 2 for its own kinds. Versioning it before it lands leaves one format 2, not a kinds-only format 2
-and a versioned format 3 that signed packages would need forever. Moving M8 after M1 would form a cycle, since M1
-tests M8's version 1 kinds. A separate proposal for a few rules would delay M8 for its own review. Converged in 1 pass.
+Rationale: M8 must change the descriptor, since it refuses any kind it does not know. Pointing accepted M8 at this
+draft's text would let shipped builds read a descriptor no accepted document defines. Writing the rules into UTERM-004,
+which owns the descriptor, gives M8 an accepted definition. Moving M8 after M1 would form a cycle, since M1 tests M8's
+kinds. A separate proposal for a few rules would delay M8 for its own review. Converged in 1 pass.
 
 ### Result encoding
 
@@ -709,7 +705,7 @@ are folded in, and the proposal re-check covers them.
 
 Original question:
 
-An exec driver's read-result reaches it as a member command at version 4, and each reply carries one chunk. The app
+An exec driver's read-result reaches it as a member command, and each reply carries one chunk. The app
 keeps at most 4 MiB of unsent output per driver, and an overflow ends the driver. Pushed applet events share that queue.
 A driver that sends every read for a large result before it reads its stdin fills the queue and is ended, with its run,
 its powers, and its handles. "Large results" named no bound on reads in flight, and no chunk size for the exec wire.
@@ -738,9 +734,9 @@ settles for capture reads.
   Revocation and run end free every handle, so they fail every held read.
 - M3 builds the hold, since it ships exec read-result first. UTERM-055 M1 routes capture reads through the same hold,
   and raises the count to cover both result pools.
-- Skew: read-result is new in M3, so the hold and its `busy` refusal ship with its first release. No meaning a version
-  4 driver already relies on changes, as ADR-13 asks. `busy` is already a code a version 4 driver sees from a full
-  per-tab cap.
+- Skew: read-result is new in M3, so the hold and its `busy` refusal ship with its first release. The exec wire is at 0
+  under UTERM-063, so nothing bumps. No existing message changes meaning. `busy` is already a code a driver sees from a
+  full per-tab cap. Amended 2026-11-27; see Decision Log.
 
 Leaves undone: pushed events alone still end a driver that never reads its stdin, as UTERM-028 accepts.
 
@@ -773,10 +769,10 @@ None.
 - **The capability names become a published contract** — likelihood: high, impact: medium. Scripts will depend on them,
   and renaming one breaks them. Mitigation: names are append-only and never change meaning, per "Capability names and
   the unavailable error". A dropped feature leaves the set, and a script that checks membership falls back.
-- **Descriptor format 2 is a one-way door** — likelihood: medium, impact: high. Signed format 2 packages must load in
-  every later build. If format 2 ships from text no accepted document holds, a later change strands those packages.
-  Mitigation: UTERM-004 M6 writes format 2 into UTERM-004 and builds it with versions before it ships, per "Who builds
-  descriptor format 2". An unknown kind or version refuses the whole descriptor, so a later format can only add.
+- **The descriptor rules ship from text no accepted document holds** — likelihood: medium, impact: medium. The
+  descriptor format is 0, so a later change lands in place and a signed package may need signing again. Mitigation:
+  UTERM-004 holds the rules, per "Who builds the permission descriptor rules". An unknown permission name refuses the
+  whole descriptor by name, so an older package never reads under a new meaning.
 - **A controller's code can outlive its run through site storage** — likelihood: low, impact: high. The rebuild ends
   every document, and new service workers are removed. Changes to other storage stay, and a page that reads them can
   act on them. A worker added on one host of a site that already had one survives. Accepted: removing site storage
@@ -799,7 +795,7 @@ None.
   attribution no longer applies, since nothing attributes input.
 - **Result chunks on the exec wire become a published contract** — likelihood: high, impact: low. External drivers will
   read the base64 field. Mitigation: it appears only in replies to commands this proposal adds, and it follows the
-  browser command schema's append-only rule.
+  browser command schema's rules at 0.0, where a changed meaning takes a new name.
 - **Large reads in flight end an exec driver** — likelihood: medium, impact: medium. A driver that sends every read
   before reading its stdin fills the 4 MiB outbound queue. Mitigation: the app holds a read until the queue has room,
   per "How the app bounds browser reads in flight". A driver that never reads its stdin can still be ended by pushed
@@ -829,12 +825,14 @@ Starts after UTERM-005 M8.
 - The shipped helpers read `:bad-argument` from the capabilities command as an empty set
 - The capabilities command needs no browser permission and takes no arguments
 - Browser script, browser input, browser cookies, and browser capture are typed permissions with review text
-- A controller holding only browser read and browser navigation at version 1 gets a structured error from every
-  command in this proposal except capabilities
+- A controller holding only browser read and browser navigation as they were before this proposal grew them gets a
+  structured error from every command in this proposal except capabilities
 - An approval stored before these permissions existed covers none of them
-- This proposal's kinds and versions join format 2 as UTERM-004 M6 builds it. An unknown version of them refuses the
+- This proposal's four permission names join the descriptor by name alone. A permission that names a version refuses the
   whole descriptor at load
-- Each command is gated on its own permission alone. Browser script with browser read at version 1 still runs
+- Browser read and browser navigation grow, and an approval made before that asks the user again before it covers the
+  new parts
+- Each command is gated on its own permission alone. Browser script with only the older browser read still runs
   run-script
 
 ### M2: Page events
@@ -853,7 +851,7 @@ Starts after UTERM-005 M8.
 - A Ctrl-C during next-events takes effect within next-events' maximum timeout, and never ends the helper
 - An exec driver gets a deferred reply matched by request ID, and sees `unsupported-capability` as a code string
 - The per-run event byte budget holds across all of a run's tabs
-- List-frames and frame-appeared are refused or hidden for a caller without browser read at its widened edition or browser script
+- List-frames and frame-appeared are refused or hidden for a caller without the grown browser read or browser script
 - A packaged `uniterm/browser.janet` file cannot shadow the built-in module
 - A full buffer drops its oldest events, and the next reply reports how many
 - A flood of events, such as a page that creates a thousand iframes, never pushes a reply past the reply cap and never
@@ -1204,7 +1202,7 @@ Amended 2026-11-27; see Decision Log.
   - Amended M3. Its check said "A detached pane holds the user's view of its dialog until reattach, and the script can
     answer it meanwhile". It now checks the same for a tab that is not selected.
   - Amended M4 and M6. Their checks said "an unselected tab or a tab in a detached pane".
-- 2026-11-27 (override pending): From UTERM-063. The browser schema is at 0.0 and ScriptWire and the exec protocol are at 0, and none
+- 2026-11-27: From UTERM-063. The browser schema is at 0.0 and ScriptWire and the exec protocol are at 0, and none
   bumps. This proposal's changes to them land in place, after UTERM-063 M2, and an older program's message is read
   with its old meaning or refused by name.
   - Amended the Impacts lines for UTERM-005, UTERM-004, and UTERM-003. They said permission versions, "descriptor format
@@ -1215,9 +1213,9 @@ Amended 2026-11-27; see Decision Log.
   - Amended "Result encoding". Its skew bullet said "ScriptWire takes the next version after the one it is at when this
     lands. It is at 12 after UTERM-007 M5", and that the exec protocol "stays at 4 unless another change moves it".
   - Amended the frames check in the milestone checks. It said "browser read version 2".
-  - Two decisions are the user's and are left as written, each with a pending override: "Widened browser read and
-    browser navigation" and "Permission descriptor format". UTERM-063 replaces permission versions with internal
-    editions and a descriptor that names a kind alone.
+  - Two decisions are the user's and were first left as written: "Widened browser read and browser navigation" and
+    "Permission descriptor format". UTERM-063 replaces permission versions with internal editions and a descriptor that
+    names a kind alone. The next entry rewrites both.
   - The two `**Decided by:**` lines read the user's choice from this log: the review gate of 2026-11-11 kept every
     decision, and chose that format 2 versions every permission.
 
@@ -1227,8 +1225,39 @@ Amended 2026-11-27; see Decision Log.
   meanings. Each permission in the descriptor carries its version, and an approval under version 1 covers only UTERM-005
   M8's commands." The second said before: "descriptor format 2 adds a required `version` on every permission,
   `pane-control` and `capability` included. Each build knows a fixed set of (kind, version) pairs, each with one
-  meaning, one review text, and the versions it covers." Later bullets under the second decision that still say
-  "format 1", "format 2", or "version" describe the plan before UTERM-063, and are read by this rule.
+  meaning, one review text, and the versions it covers."
+- 2026-11-27: Brought every passage in line with UTERM-063 at the user's direction. The goal is to freeze external
+  versions at 0, so nothing here bumps one. Each rewritten passage carries the Amended 2026-11-27 marker, and the
+  `**Decided by:**` lines of the two rewritten decisions read `user, 2026-11-27`. What the passages said before:
+  - "Permissions", fourth bullet: "Navigation and frame events fall under browser read version 2, since they carry URLs.
+    User agent, zoom, and print-media emulation fall under browser navigation version 2." It now says the two grow and
+    an earlier approval is asked again.
+  - "Frames": list-frames and frame-appeared "need browser read version 2 or browser script". They now say "browser
+    read or browser script".
+  - "Widened browser read and browser navigation": its sixth bullet said "Each permission has one meaning in a build".
+    Its Rationale said "UTERM-004 already compares a permission's semantic version against the approval, and the
+    version works in either build order", and "the version-2 meanings". It now names the internal edition and the grown
+    meanings.
+  - "Permission descriptor format": its bullets said "Format 1 descriptors keep working with format 1's two kinds", "A
+    browser read at version 1 hides only the events version 2 adds", and "Skew: a build without M6 refuses format 2 at
+    load. A build that lacks a kind or version refuses it at load. A newer app reads older formats and versions with
+    their own meanings." Its Rationale spoke of "a per-format table of meaning versions", "no further format bump", and
+    "each (kind, version) has one meaning". All are rewritten around a descriptor that names each kind alone, at format
+    0, with an internal edition per kind.
+  - "Who builds descriptor format 2" is now "Who builds the permission descriptor rules". It said "format 2 is defined
+    in its owner, UTERM-004 ... UTERM-004 M6 builds it ... UTERM-005 M8 adds its two kinds at version 1", with "a version
+    on every permission, the (kind, version) table, the refusal rules, and reading format 1". It now says UTERM-004 holds
+    the rules at format 0 and each kind is added by name.
+  - "Capability names and the unavailable error": "None of this bumps the browser command schema's major version" now
+    says the schema stays at 0.0. The line on bumping the minor now starts after the maintainers declare 1.0.
+  - "How the app bounds browser reads in flight": it said "a member command at version 4" and "No meaning a version 4
+    driver already relies on changes, as ADR-13 asks". It now says the exec wire is at 0 and nothing bumps.
+  - Risks: "Descriptor format 2 is a one-way door" became a risk on rules held by no accepted document. The result
+    chunk risk said chunks "follow the browser command schema's append-only rule", and now says the schema's rules at
+    0.0.
+  - M1: it said "A controller holding only browser read and browser navigation at version 1", "join format 2 as UTERM-004
+    M6 builds it. An unknown version of them refuses the whole descriptor at load", and "Browser script with browser
+    read at version 1 still runs run-script". M2's list-frames check said "browser read at its widened edition".
 
 ## References
 

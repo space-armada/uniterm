@@ -140,8 +140,8 @@ two are not skewed. A newer user script on an older app gets an unbound-symbol e
 
 - Exec drivers: this proposal changes no exec frame, and the exec wire stays at 0, so a driver on either side sees no
   difference. UTERM-055 adds exec capture in place at version 0. Amended 2026-11-22; see Decision Log.
-- New descriptor, old app: a descriptor that names the capture power is refused at load, as UTERM-004 format 2 refuses
-  every unknown kind. A controller that needs capture states it, and runs only on an app that knows it.
+- New descriptor, old app: a descriptor that names the capture power is refused at load, as the descriptor reader refuses
+  every unknown kind. Amended 2026-11-27; see Decision Log. A controller that needs capture states it, and runs only on an app that knows it.
 - Old descriptor, new app: a descriptor without the capture power gets none. A grant stored before the power existed
   covers none of it, under ADR-14 P10.
 - New policy file, old app: once the user approves the capture power, the policy file holds a kind the older app lacks.
@@ -274,13 +274,14 @@ type, its event buffer is per tab, and its handle cap is per tab. A terminal pan
 - A capture that only reads holds a pending reply under ADR-11, and the reply carries the handle once the PNG is ready.
   No completion event is needed. A capture that also copies to the clipboard has an effect, so it keeps the
   handle-plus-event shape.
-- Per-applet commands, such as `:terminal/capture`, each added to that applet's command schema with a schema minor bump.
+- Per-applet commands, such as `:terminal/capture`, each added to that applet's command schema in place, since schemas stay at 0.0 under UTERM-063. Amended
+  2026-11-27; see Decision Log.
   Each applet then needs its own handle slot and event delivery, which the terminal lacks.
 - The browser keeps UTERM-019's per-tab snapshot, and every other applet uses a host-level command. Two shapes for one
   operation.
 
-Every candidate rides the existing `command` or `paneCommand` frame, or waits for UTERM-028's version negotiation. See
-"Version skew". The PNG bytes read back in chunks under a byte type. UTERM-019's "Result encoding" defines that type,
+Every candidate rides the existing `command` or `paneCommand` frame, or lands a new frame or call in place at version 0. See
+"Version skew". Amended 2026-11-27; see Decision Log. The PNG bytes read back in chunks under a byte type. UTERM-019's "Result encoding" defines that type,
 and it has not been built.
 
 Decision: capture is a host-level operation. The host owns the steps "Capture never blocks the main thread" gives it:
@@ -853,6 +854,12 @@ Lands before UTERM-019 M1 ships, and does not wait for M1 to M5 here.
   - Amended the Impacts line for UTERM-055, the exec-capture bullet in "Where a program's capture command lives", the
     native-controller risk, and the risk on the power becoming a published name. That risk said "the power is versioned
     in the descriptor format".
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. Three leftovers in the options and "Version skew"
+  said: "a descriptor that names the capture power is refused at load, as UTERM-004 format 2 refuses every unknown
+  kind", per-applet capture commands are "added to that applet's command schema with a schema minor bump", and every
+  candidate "waits for UTERM-028's version negotiation". There is no format 2, no schema bump, and no negotiation at 0.
+  The text now says the descriptor reader refuses an unknown kind, a schema change lands in place at 0.0, and a new
+  frame or call lands in place at version 0.
 
 ## References
 

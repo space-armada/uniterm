@@ -194,7 +194,7 @@ path, and lands only in a pane the requester may address. The path-reading power
 The walk filters by the requester's authority before it ranks by distance, as UTERM-004's nearest rule does. Its
 origin is the requester's source pane, and an unbound caller's origin is the source pane the user granted it. With no
 capable pane it may address, the request fails with a structured not-found error, unless the open may make a pane as
-described below. It never hands off to macOS, and it asks the user only what the user's own open of that file asks. The permissions keep UTERM-004's versioned meanings and admission, which carry their skew rules.
+described below. It never hands off to macOS, and it asks the user only what the user's own open of that file asks. The permissions keep UTERM-004's meanings and admission, which carry their skew rules. Amended 2026-11-27; see Decision Log.
 
 This leaves one thing undone: a REPL script cannot open a link in the user's own browser pane beside it. Doing that
 would need a new power and would reverse UTERM-005's settled conclusion that program opens reach "a program's own
@@ -558,8 +558,9 @@ and the path-reading power, and after UTERM-062 M5, so a script's file open adds
 - A URL a script opens lands as the user's open does, selected and taking focus, per UTERM-037
 - A script's file open into an existing viewer adds a tab under UTERM-062's rate bound, keyed on the run, and an open
   past it is refused as busy
-- The open request travels in a versioned schema under UTERM-004's admission, so an unsupported version is refused
-  before any effect
+- The open request travels in a message under UTERM-004's admission. ScriptWire is at 0 under UTERM-063, so the message
+  lands in place, and a request a build cannot read is refused by name before any effect. Amended 2026-11-27; see
+  Decision Log.
 
 ## Decision Log
 
@@ -693,6 +694,10 @@ and the path-reading power, and after UTERM-062 M5, so a script's file open adds
   by placement. The user's own opens keep the walk. M5 gained the check.
 - 2026-11-27: Its M1-M2 row moved up to follow UTERM-054 M1-M4, so UTERM-064, which uses M1's nearest-pane metric,
   lands before the program-facing rows.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. A checkable line said "The open request travels
+  in a versioned schema under UTERM-004's admission, so an unsupported version is refused before any effect". Nothing
+  carries a version at 0, so it now says the message lands in place and an unreadable request is refused by name. The
+  Summary's "UTERM-004's versioned meanings and admission" now reads "meanings and admission".
 
 ## References
 

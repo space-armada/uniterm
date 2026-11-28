@@ -2,7 +2,7 @@
 
 **Status:** draft
 **Created:** 2026-11-21
-**Updated:** 2026-11-23
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -215,8 +215,8 @@ way.
   deviation.
 - **The `post-status` contract changes for scripts** — likelihood: medium, impact: medium.
   Mitigation: status history is not persisted, and the change alters no stored format, so a redeploy reverts it. The
-  `uniterm` command and the app ship together. Other programs send `post-status` too, and ADR-13 keeps each accepted
-  ScriptWire version's meaning for them. `busy`
+  `uniterm` command and the app ship together. Other programs send `post-status` too, and ScriptWire is at 0 under UTERM-063, so
+  the contract changes in place, and an older program's message is read with its old meaning or refused by name. `busy`
   already exists on the wire. Exec drivers send no status call. The host posts their failures through an applet
   producer. Only a refusal from `post-status`, if "What happens over the budget" picks one, would become published
   script behavior, and its leaves-undone line says what it breaks.
@@ -293,6 +293,9 @@ way.
   ADR is settled as "Rest the budget on ADR-14 P15 and C1".
 - 2026-11-23: From UTERM-056's acceptance. The `post-status` risk said "ScriptWire's hello requires an exact match, per
   ADR-13". That holds only for the command's own messages.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. The `post-status` risk said "ADR-13 keeps each
+  accepted ScriptWire version's meaning for them". At version 0 a change lands in place, and an older program's message
+  is read with its old meaning or refused by name.
 
 ## References
 

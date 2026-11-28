@@ -363,7 +363,7 @@ Decision: commands are fields of the permission entry, and the helpers read thro
 
 ```janet
 (declare-permissions {:id "dev.example.presenter" :name "Presenter"}
-  {:kind :controller-commands :version 1
+  {:kind :controller-commands
    :commands [{:name :next-slide :title "Next Slide" :keys [:right :down :page-down :space]}
               {:name :previous-slide :title "Previous Slide" :keys [:left :up :page-up]}]})
 ```
@@ -463,11 +463,12 @@ None.
 
 ## Risks
 
-- **A new ScriptWire version, permission kind, Janet functions, and event shape are published contracts** —
-  likelihood: high, impact: medium. Mitigation: ScriptWire refuses an unknown version at the hello, and an unknown
+- **New ScriptWire messages, a permission kind, Janet functions, and an event shape are published contracts** —
+  likelihood: high, impact: medium. Mitigation: ScriptWire refuses an unknown message by name, and an unknown
   permission kind fails closed. See "Version skew". The Janet names follow UTERM-019's rule that a name never changes
-  meaning and a rename adds a name. On the wire, an added event field lands in place while ScriptWire is at 0, and is a new ScriptWire version from
-  version 1, per ADR-13 P1 and C1. Amended 2026-11-27; see Decision Log.
+  meaning and a rename adds a name. On the wire, an added event field lands in place while ScriptWire is at 0. After
+  uniterm's maintainers declare ScriptWire stable, the same change takes a new version, per ADR-13 P1 and C1. Amended
+  2026-11-27; see Decision Log.
 - **An older build stops honoring approvals of the new kind** — likelihood: high on a development machine, low
   elsewhere, impact: low. A build with UTERM-067's reader that does not know the kind keeps those approvals unread, and
   every other approval keeps working. Accepted: it fails closed, and the approvals apply again on the new build. See
@@ -729,6 +730,11 @@ Amended 2026-11-20; see Decision Log.
   - Amended the published-contract risk. It said "an added event field is a new ScriptWire version, per ADR-13 P1."
   - Amended the M1 check on an older command. It said the two refuse each other "at the hello, or at the command's
     begin once UTERM-056 has landed."
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. The permission entry's example read
+  `{:kind :controller-commands :version 1 ...}`. A descriptor names a permission by kind alone, so the version is gone.
+  The risk "A new ScriptWire version, permission kind, Janet functions, and event shape are published contracts" now
+  reads "New ScriptWire messages, ..." and says an added event field lands in place at 0 and takes a new version only
+  after the declaration. "Version skew" already said ScriptWire stays at 0.
 
 ## References
 

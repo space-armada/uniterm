@@ -2,7 +2,7 @@
 
 **Status:** accepted
 **Created:** 2026-11-22
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -311,8 +311,10 @@ Leaves undone: a program cannot save tabs unattended, such as on a schedule. A p
 learns the path can read the saved URLs of a pane it did not open. That happens only after the user saves in the panel,
 and is accepted.
 
-Skew: a newer program on an older uniterm gets the older build's answer for an unknown command or schema version, a
-clear error under ADR-13. No permission kind crosses the descriptor or the policy file, so neither changes.
+Skew: the browser's command schema is at 0.0 and does not bump, per UTERM-063. `save-tabs` lands in place. A newer
+program on an older uniterm is refused by name for a command that build does not know. An older program never meets a
+changed meaning, since a changed meaning takes a new name. No permission kind crosses the descriptor or the policy
+file, so neither changes. Amended 2026-11-27; see Decision Log.
 
 Rationale: this is the user's own operation, under ADR-15. A path argument would need the first path-write power, and
 a folder-scoped write could replace any file in that folder without the Replace the user's save shows. A tab-list read
@@ -441,9 +443,9 @@ None.
   it. M2 builds `uniterm open` of tab files on it, and M3 builds the script open and save. If ADR-15 changes before
   either starts, those decisions are reviewed again before it is scheduled.
 - **`save-tabs` becomes a published controller command** — likelihood: high, impact: low.
-  Mitigation: it travels in the browser's versioned command schema, so a later change bumps the version and an older
-  or newer peer gets a clear error under ADR-13. Its reply holds only a handle, and `wait-save` returns only a path, a
-  cancel, or a write error, which leaves little to change.
+  Mitigation: it travels in the browser's command schema, which stays at 0.0 under UTERM-063. A later change that alters
+  a meaning takes a new command name, and the old name is refused by name. Its reply holds only a handle, and
+  `wait-save` returns only a path, a cancel, or a write error, which leaves little to change.
 - **M3 waits on a long chain** — likelihood: high, impact: low.
   Accepted: M3 starts after UTERM-018 M5, which waits on UTERM-004 M6, UTERM-005 M8, and UTERM-015 M4. M1 and M2 do
   not wait on it, so saving and opening ship first.
@@ -560,8 +562,7 @@ Starts after UTERM-018 M5, which builds the script file open.
 - A script open with no room beside its source pane fails before any sheet shows
 - A file whose selected entry has no `url` still needs browser navigation to open from a script
 - Revoking pane control or browser navigation stops further calls
-- An older uniterm answers the new command with a clear error, an unsupported schema version or an unknown command,
-  per ADR-13
+- An older uniterm answers the new command with a clear error that names the unknown command, per UTERM-063
 
 ## Decision Log
 
@@ -671,6 +672,12 @@ Starts after UTERM-018 M5, which builds the script file open.
   match other ADR-11 handles. A revocation during the write lets it finish and fails the wait as ended. M3 gained
   checks for each outcome, the interruptions, discard, and the cap.
 - 2026-11-26: Its row moved after UTERM-018 M3-M5, which it depends on, when UTERM-018's row split around UTERM-062.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. The "save-tabs" skew passage said a newer program
+  "gets the older build's answer for an unknown command or schema version, a clear error under ADR-13". The risk said "a
+  later change bumps the version and an older or newer peer gets a clear error under ADR-13". The M3 check said "an
+  unsupported schema version or an unknown command". They now say the browser schema stays at 0.0, a changed meaning
+  takes a new command name, and an unknown command is refused by name. The tab-set file's own version is not an
+  external version and is unchanged.
 
 ## References
 

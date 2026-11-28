@@ -181,10 +181,12 @@ power to read a path for a controller is defined once, outside this proposal.
   directory scope, checked against the real path of the opened descriptor, so a symlink or a rename cannot widen it.
   Errors for paths outside the scope do not tell "missing", "not an image", and "denied" apart.
 - That power is defined in UTERM-015, so UTERM-005, UTERM-007, and UTERM-009 share one definition.
-- Schema compatibility: the schema version is a major and a minor, carried in UTERM-004's hello. A new command, or a
-  new optional event field that drivers ignore, bumps the minor. A driver that needs a newer command requires that minor
-  in the hello, so an older viewer is refused before any effect instead of failing midway. A change in meaning, or a
-  removed command, bumps the major, and the handshake refuses the mismatch.
+- Schema compatibility: the schema is at 0.0 under UTERM-063 and does not bump. A new command, or a new optional event
+  field, lands in place. A change in meaning, or a removed command, takes a new name, and the old name is retired and
+  refused by name before any effect. A driver built against an older schema is refused, never reinterpreted. From schema
+  1.0, declared by uniterm's maintainers, a new command or optional event field bumps the minor, and a change in meaning
+  or a removed command bumps the major. M4 was built when the schema read 1.0. UTERM-063 M1 reset it to 0.0. Amended
+  2026-11-27; see Decision Log.
 - M4 builds it after UTERM-004's M2 and M3, UTERM-003's M2, and UTERM-015's M4, which builds the power. Amended
   2026-11-03; see Decision Log.
 
@@ -327,8 +329,8 @@ None.
   user can step while it runs.
 - **The description and the control schema are stored data and a published contract** — every later build reads the
   payload, and deployed drivers outlive builds. The design defuses both one-way doors. The payload carries its own
-  version per ADR-06, and an unreadable description is kept. The schema's major and minor versions let either side
-  refuse before any effect.
+  version per ADR-06, and an unreadable description is kept. The schema stays at 0.0, so a stale driver is refused by
+  name before any effect. Amended 2026-11-27; see Decision Log.
 
 ## Milestones
 
@@ -880,6 +882,13 @@ tabs. Also waits on UTERM-063 M2, which builds the guards against stale drivers.
   name. Amended M5. Its note said before: "Waits on UTERM-065, which defines the driver path-read power, and on
   UTERM-062 M4, which gives the image viewer tabs." The "Control levels" schema-compatibility bullet describes the rule
   from schema 1.0, and M4's As built keeps its wording as history.
+- 2026-11-27: Brought in line with UTERM-063 at the user's direction. The "Control levels" schema bullet said: "the
+  schema version is a major and a minor, carried in UTERM-004's hello. A new command, or a new optional event field that
+  drivers ignore, bumps the minor... A change in meaning, or a removed command, bumps the major, and the handshake
+  refuses the mismatch." It now says the schema is at 0.0 and does not bump, a changed meaning takes a new name, and the
+  1.0 rule applies only after a declaration. The one-way-door risk said "The schema's major and minor versions let
+  either side refuse before any effect". It now says a stale driver is refused by name. M4's checks and As built are
+  history of the work as built at schema 1.0, and are unchanged. M5 already said its changes land in place.
 
 ## References
 
