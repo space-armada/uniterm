@@ -863,6 +863,45 @@ final class TerminalSessionIntegrationTests: XCTestCase {
     XCTAssertLessThan(elapsed, .seconds(3), "close() blocked the main thread for \(elapsed)")
   }
 
+  /// Guards the main thread against a hung close when the whole session is stopped, as
+  /// `kill -STOP -<group>` leaves it. libghostty hangs `login(1)` up and loops until it is gone,
+  /// and a stopped `login` never acts on the hangup. Closing must continue the group first. A
+  /// rescue continues the group after 8 seconds so that a regression cannot hang the suite.
+  ///
+  /// Stopping only the shell does not hang the close, since `login` is not stopped. This test cannot
+  /// prove the app's own close path beyond the session.
+  func testCloseReturnsWhenTheWholeSessionIsStopped() async throws {
+    let before = Set(children(of: getpid()))
+    let session = try startShell()
+    try await waitUntil("an idle prompt") { !session.isRunningSomething }
+
+    let child = try XCTUnwrap(
+      Set(children(of: getpid())).subtracting(before).first, "the session's child was not found")
+
+    try run("sleep 1000", in: session)
+    try await waitUntil("sleep to run") { session.isRunningSomething }
+    try await Task.sleep(for: .milliseconds(300))
+
+    let members = recordTree(of: child)
+    defer { endTree(members) }
+
+    for member in members {
+      ProcessSender.signal(SIGSTOP, member.record, expecting: member.path)
+    }
+
+    let rescue = DispatchWorkItem { @Sendable in
+      for member in members { ProcessSender.signal(SIGCONT, member.record, expecting: member.path) }
+    }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 8, execute: rescue)
+
+    let started = ContinuousClock.now
+    session.close()
+    rescue.cancel()
+    let elapsed = ContinuousClock.now - started
+
+    XCTAssertLessThan(elapsed, .seconds(3), "close() blocked the main thread for \(elapsed)")
+  }
+
   /// Catches a spawned shell that cannot use the home folder, as a sandbox would force. The shell
   /// writes a file under `$HOME`, reads it back, and the file is removed.
   func testShellCanReadAndWriteHome() async throws {

@@ -1,6 +1,7 @@
 import AppKit
 internal import GhosttyKit
 import OSLog
+import ProcessInspection
 import UniformTypeIdentifiers
 
 /// One libghostty surface hosted in an NSView.
@@ -32,6 +33,10 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
   /// A counter that increments each time a session starts in this view. It identifies the session
   /// instance for authority checks.
   private var sessionGeneration: UInt64 = 0
+
+  /// The child libghostty spawned and when it started, in microseconds. Closing the surface needs
+  /// them to continue the child's group first.
+  private var child: (pid: pid_t, startedMicroseconds: Int)?
 
   private(set) var clipboardPolicy: TerminalClipboardPolicy
 
@@ -257,6 +262,14 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
     self.surface = nil
     onEvent = nil
 
+    // Freeing the surface hangs the child up and waits until the child is gone. A stopped child
+    // cannot act on the hangup until it continues, so the free would block the main thread. A
+    // continue to a running group does nothing.
+    if let child {
+      _ = ProcessInspection.signalGroup(
+        SIGCONT, leader: child.pid, startedMicroseconds: child.startedMicroseconds)
+    }
+
     ghostty_surface_free(surface)
     Unmanaged.passUnretained(self).release()
   }
@@ -302,6 +315,10 @@ final class GhosttySurfaceView: NSView, TerminalSession, TerminalMenuActions, NS
       // exists. A child that has already exited reports no start time, and gets no identity, so
       // nothing can bind to it.
       guard let started = TerminalProcessIdentity.startTime(of: pid_t(pid)) else { return }
+
+      if let microseconds = ProcessInspection.startTimeMicroseconds(of: pid_t(pid)) {
+        child = (pid_t(pid), microseconds)
+      }
 
       onEvent?(
         .processStarted(
