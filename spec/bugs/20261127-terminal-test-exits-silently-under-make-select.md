@@ -1,7 +1,8 @@
 # A terminal test ends the test process with no result under `make test-package-select`
 
 **Status:** open
-**Validation:** confirmed on 2026-11-27 by repro. The cause is not confirmed.
+**Estimate:** medium; one non-trivial decision, shared with the terminal-engine environment bug. The engine either keeps editing the process environment or passes one to each child.
+**Triaged:** 2026-11-27 (still reproduces; cause narrowed to the scrub; fix waits on a trace and that decision)
 
 ## Observed
 
@@ -22,11 +23,19 @@ passes in a full `make test-package` run. The failure also reproduces with `HEAD
 
 ## Cause
 
-Not confirmed. The test sets `MAKEFLAGS`, runs `InheritedEnvironment.scrubProcess()`, and points
-`GHOSTTY_RESOURCES_DIR` at a missing path. The suspicion is an inherited make jobserver, whose descriptors the scrub
-or the shell start then disturbs. No trace was taken.
+Not confirmed. The make-jobserver suspicion is wrong. A triage run on 2026-11-27 ran `swift test --filter` on the test
+alone, with the environment changed one way at a time.
+
+- A clean environment passes.
+- `MAKEFLAGS=-j` ends the process with no result.
+- `UNITERM_PROBE=1` alone ends it the same way. No make run sets that variable.
+
+So the process ends whenever the environment holds a variable that `InheritedEnvironment.scrubProcess()` unsets. A run
+that unsets nothing passes. The suspect is the real `unsetenv` inside the test process, which other threads may read.
+No trace was taken. The sibling bug `20261127-terminal-engine-changes-the-apps-own-environment` blames the same
+process-wide environment edits.
 
 ## Fix
 
-Run the test under the failing environment with a debugger or `lldb`, to see what ends the process. Then fix the scrub
-or the test's setup. The full suite passes today, so CI is not affected.
+Run the test with `UNITERM_PROBE=1` set, under `lldb`, to see what ends the process. Then fix the scrub or the test's
+setup, together with the sibling bug's design call. The full suite passes today, so CI is not affected.
