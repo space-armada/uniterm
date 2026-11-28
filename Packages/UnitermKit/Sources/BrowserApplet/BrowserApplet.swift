@@ -650,7 +650,12 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   /// Selects a tab. The keyboard follows when the pane held it, and when the tab has nothing to
   /// show, since then the address bar is the tab's only use.
   public func selectTab(at index: Int) {
-    guard !closed, tabs.indices.contains(index), index != selectedIndex else { return }
+    guard !closed, tabs.indices.contains(index) else { return }
+
+    guard index != selectedIndex else {
+      content.tabBar.revealSelected()
+      return
+    }
 
     let hadFocus = hasFocus
     selectedIndex = index

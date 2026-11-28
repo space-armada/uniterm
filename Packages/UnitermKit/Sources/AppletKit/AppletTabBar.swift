@@ -275,6 +275,14 @@ public final class AppletTabBar: NSView {
     needsLayout = true
   }
 
+  /// Scrolls the selected tab into view at the next layout, though nothing about it changed. An
+  /// applet calls this when the user selects the tab that is already selected, since that is the
+  /// way back to a tab the user scrolled out of view.
+  public func revealSelected() {
+    revealPending = true
+    needsLayout = true
+  }
+
   /// How far the tabs are scrolled in from the leading edge.
   var scrollOffset: CGFloat { scrollView.contentView.bounds.minX }
 
@@ -337,7 +345,7 @@ public final class AppletTabBar: NSView {
 
     if revealPending || resized {
       revealPending = false
-      revealSelected()
+      scrollSelectedIntoView()
     }
 
     setScrollOffset(scrollOffset)
@@ -346,7 +354,7 @@ public final class AppletTabBar: NSView {
 
   /// Scrolls the selected tab fully into view, clear of the fade at an edge that has more tabs
   /// past it.
-  private func revealSelected() {
+  private func scrollSelectedIntoView() {
     guard items.indices.contains(selectedIndex) else { return }
 
     let item = items[selectedIndex].frame

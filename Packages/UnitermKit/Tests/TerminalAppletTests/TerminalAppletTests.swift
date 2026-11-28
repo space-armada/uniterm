@@ -613,6 +613,38 @@ final class TerminalAppletTests: XCTestCase {
     XCTAssertGreaterThan(bar.convert(button.frame, to: applet.view).maxX, end)
   }
 
+  /// Catches a reselect that leaves the selected tab out of view. The user scrolls the selected tab
+  /// off the bar, then selects it again from the keyboard or the palette. The tab is already
+  /// selected, yet it comes back into view.
+  func testReselectingTheSelectedTabScrollsItBackIntoView() throws {
+    let (applet, _, _, _) = makeApplet()
+    applet.view.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
+
+    for _ in 0..<9 { applet.openTab() }
+
+    applet.view.layoutSubtreeIfNeeded()
+
+    let bar = try tabBar(of: applet)
+    let last = applet.tabCount - 1
+
+    XCTAssertEqual(applet.selectedTabIndex, last)
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertFalse(TabBarProbe.isFullyInView(bar, tab: last))
+
+    applet.selectTab(at: last)
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertTrue(applet.selectTab(id: applet.publishedTabs.selected))
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last), "the palette's reselect")
+  }
+
   /// Catches a tab bar that shows for a single tab, or that stays after the second tab closes.
   func testTheTabBarShowsOnlyWhileThereIsMoreThanOneTab() async throws {
     let (applet, _, _, _) = makeApplet()

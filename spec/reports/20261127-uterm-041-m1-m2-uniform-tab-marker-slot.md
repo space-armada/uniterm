@@ -202,9 +202,50 @@ Reviewer findings, all fixed:
   - the one-form questions pane with no bar and no blank strip
 - The full `make test-app` is still to run, at the row review.
 
-## Found during the run, for the row review
+## Row review
 
-- Reselecting the already-selected tab from the keyboard, after the user scrolled it out of view, does not bring it
-  back. `BrowserApplet.selectTab(at:)` returns early when the index is unchanged, and the bar reveals only on a
-  selection or count change. M1's check says the selected tab is fully in view after the user selects it from the
-  keyboard. The row review fixes it.
+The run paused after M2 at the user's request, and resumed on the user's word. Another session had committed
+"Remove the website data tests' stores once WebKit lets go of them" on the tip in the meantime. The review left it out.
+
+ADR impact over the row: no conflict, deviation, or supersession. ADR-14 P2, P7, P8, P11, and P12 are consistent.
+So are ADR-02, ADR-07, ADR-08, and ADR-13, and the proposed ADR-15 and ADR-17. No uncovered decision passes the bar.
+
+Reviewer findings and their dispositions:
+1. Reselecting the already-selected tab, after the user scrolled it out of view, did not reveal it. This held in the
+   browser, terminal, and questions applets, from the keyboard and the palette. M1's check calls for it, and the
+   reviewer confirmed it. Fixed: the bar has `revealSelected()`, and each applet's `selectTab(at:)` calls it on the
+   already-selected path. Failing-before evidence: the terminal and questions reselect tests each failed twice on the
+   unfixed code. The browser test was not run unfixed. The overflow UI test now also scrolls the selected last tab
+   away and reselects it with Cmd-9.
+2. "Keeping the tab bar clear of the control badge" still said the bug waits. Fixed: the decision is amended in place,
+   with a correction-of-fact entry.
+3. "How the host hands the chip down" is the user's decision, and the code also carries exec drivers' names in the
+   same call. The user's text is unchanged. A `**Pending override:**` line records the run's best guess for the user.
+4. A pane-level test asserted only its own fake's override. Fixed: the protocol default is tested through
+   `QuestionsApplet`, which does not override it.
+5. "The marker does not change while a command waits for a power the user must grant" had no test. Added one with a
+   pending clipboard-read request. It passed on the first run, since the code already behaved this way.
+6. VoiceOver checks remain unit-level only. As built leaves hearing them to the user.
+7. Duplicate test helpers were moved into `ScriptPeerSupport.swift`. Tab bar geometry for the applet tests is in
+   `AppletTestSupport/TabBarProbe.swift`.
+8. A doc comment sat on the wrong function, and the questions tab list was built in three places. Both are fixed.
+
+Implementer best guesses: `TabBarProbe` uses `@testable import AppletKit` inside the existing test-support target.
+The alternative was making the bar's geometry public.
+
+### Checks
+
+- `make fmt`, `make lint`, `make check`, and `make build` all passed.
+- `caffeinate -dimsu make test-package` passed (exit 0). That includes the new test
+  `testAnUnrelatedRepublishLeavesAUserScrollAlone`.
+- Full `caffeinate -dimsu make test-app`, built from the row's commits: 223 tests, 0 failures, in 1108 s.
+- `MarkerUITests` and `TabsUITests` after the fixes:
+  - 21:02: one failure, from the new reselect step aiming a wheel at a tab that had scrolled off screen. Fixed in the
+    test.
+  - 21:08: `testAnOverflowedTabBarScrollsByTrackpadAndShiftAndKeepsTheSelectedTabInView` failed at its unchanged
+    Shift-wheel step: "a wheel with Shift held moved nothing". The activity log shows a 4.4 s pointer settle before
+    that wheel. Only the three user-reselect paths reach `revealSelected()`. A package test shows that republishing,
+    refreshing, retheming, and authority pushes leave a user scroll alone.
+  - 21:20: the same test passed with `UNITERM_WHEEL_TRACE=1`, including the reselect step.
+  - The 21:08 failure stays unresolved. Its cause is not known, and the passing run does not prove a fix. It passed
+    in the 20:17 and 21:02 runs and in the full suite.

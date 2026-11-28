@@ -61,12 +61,6 @@ final class ControllingChipTests: XCTestCase {
     peers = []
   }
 
-  private func settle(_ condition: () -> Bool) async {
-    for _ in 0..<400 where !condition() {
-      try? await Task.sleep(for: .milliseconds(10))
-    }
-  }
-
   private func makeRig(tabCount: Int = 2) throws -> Rig {
     let fixture = ScriptingFixture()
     addTeardownBlock { @MainActor in fixture.cleanUp() }
@@ -110,14 +104,10 @@ final class ControllingChipTests: XCTestCase {
   }
 
   private func connect(_ rig: Rig, name: String) async throws -> FramedSocket {
-    let peer = try UnixSocket.connect(path: rig.address)
+    let peer = try await ScriptPeer.hello(to: rig.address)
 
     peers.append(peer)
 
-    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
-    _ = try await Task.detached {
-      try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
-    }.value
     try peer.send(ScriptHelperMessage.begin(name: name).frame())
 
     return peer
@@ -138,7 +128,7 @@ final class ControllingChipTests: XCTestCase {
 
     _ = try await connect(rig, name: "second")
 
-    await settle { !rig.chipNames(onTab: 1).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 1).isEmpty }
 
     XCTAssertEqual(rig.chipNames(onTab: 1), [name("second")])
     XCTAssertEqual(rig.chipNames(onTab: 0), [])
@@ -158,7 +148,7 @@ final class ControllingChipTests: XCTestCase {
 
     _ = try await connect(rig, name: "solo")
 
-    await settle { !rig.chipNames(onTab: 0).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 0).isEmpty }
 
     let markers = try XCTUnwrap(rig.controller.paneArea.paneView(for: rig.pane)?.paneMarkers)
 
@@ -176,7 +166,7 @@ final class ControllingChipTests: XCTestCase {
 
     _ = try await connect(rig, name: "first")
 
-    await settle { !rig.chipNames(onTab: 1).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 1).isEmpty }
 
     XCTAssertEqual(rig.chipNames(onTab: 1), [name("first")])
 
@@ -192,7 +182,7 @@ final class ControllingChipTests: XCTestCase {
 
     _ = try await connect(rig, name: "again")
 
-    await settle { !rig.chipNames(onTab: 1).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 1).isEmpty }
 
     XCTAssertEqual(rig.chipNames(onTab: 1), [name("again")])
     XCTAssertEqual(rig.chipNames(onTab: 0), [])
@@ -222,7 +212,7 @@ final class ControllingChipTests: XCTestCase {
     rig.startSession(in: rig.tabs[1])
     _ = try await connect(rig, name: "sameturn")
 
-    await settle { reports.contains { $0.acting } }
+    await ScriptPeer.settle { reports.contains { $0.acting } }
 
     let acting = reports.filter(\.acting)
 
@@ -249,7 +239,7 @@ final class ControllingChipTests: XCTestCase {
 
     let peer = try await connect(rig, name: "lapse")
 
-    await settle { !rig.chipNames(onTab: 1).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 1).isEmpty }
 
     let id = try XCTUnwrap(rig.firstController)
 
@@ -309,7 +299,7 @@ final class ControllingChipTests: XCTestCase {
     rig.startSession(in: rig.tabs[1])
     _ = try await connect(rig, name: "groupless")
 
-    await settle { !rig.chipNames(onTab: 1).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 1).isEmpty }
 
     rig.controller.disconnect(rig.pane)
 
@@ -330,7 +320,7 @@ final class ControllingChipTests: XCTestCase {
 
     _ = try await connect(rig, name: "revoked")
 
-    await settle { !rig.chipNames(onTab: 1).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 1).isEmpty }
 
     let id = try XCTUnwrap(rig.firstController)
 
@@ -349,7 +339,7 @@ final class ControllingChipTests: XCTestCase {
     rig.startSession(in: rig.tabs[1])
     _ = try await connect(rig, name: "owner")
 
-    await settle { !rig.chipNames(onTab: 1).isEmpty }
+    await ScriptPeer.settle { !rig.chipNames(onTab: 1).isEmpty }
 
     let id = try XCTUnwrap(
       rig.host.controllers(actingFrom: rig.controller.scriptWindowID, pane: rig.pane).first)
@@ -434,17 +424,13 @@ final class ControllingChipTests: XCTestCase {
     TestSessionRoot.set(on: channel)
 
     let token = try XCTUnwrap(Self.decodeHex(channel.launch.token))
-    let peer = try UnixSocket.connect(path: rig.address)
+    let peer = try await ScriptPeer.hello(to: rig.address)
 
     peers.append(peer)
 
-    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
-    _ = try await Task.detached {
-      try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
-    }.value
     try peer.send(ScriptHelperMessage.attach(token: token).frame())
 
-    await settle {
+    await ScriptPeer.settle {
       !rig.host.controllers(actingFrom: rig.controller.scriptWindowID, pane: rig.pane).isEmpty
     }
 

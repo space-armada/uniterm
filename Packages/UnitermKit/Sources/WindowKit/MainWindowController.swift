@@ -586,8 +586,7 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     drawPaneMarkers(of: applet, in: pane)
   }
 
-  /// Draws the markers of the applet's one tab beside the pane's badge, while the pane has no tab
-  /// bar. It reads only the published tabs, so it never feeds back into the control marks.
+  /// Redraws the pane markers of the pane that holds the applet.
   private func refreshPaneMarkers(of applet: any Applet) {
     guard let pane = paneArea.tree.paneIDs.first(where: { paneArea.applet(for: $0) === applet })
     else { return }
@@ -595,6 +594,8 @@ public final class MainWindowController: NSWindowController, NSWindowDelegate {
     drawPaneMarkers(of: applet, in: pane)
   }
 
+  /// Draws the markers of the applet's one tab beside the pane's badge, while the pane has no tab
+  /// bar. It reads only the published tabs, so it never feeds back into the control marks.
   func drawPaneMarkers(of applet: any Applet, in pane: NodeID) {
     paneArea.paneView(for: pane)?.paneMarkers = Self.paneLevelMarkers(
       of: applet.publishedTabs, driverNames: driverNames(for: pane))

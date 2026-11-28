@@ -595,7 +595,12 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
   public var tabsStartInDirectory: Bool { true }
 
   public func selectTab(at index: Int) {
-    guard tabs.indices.contains(index), index != selectedIndex else { return }
+    guard tabs.indices.contains(index) else { return }
+
+    guard index != selectedIndex else {
+      tabBar.revealSelected()
+      return
+    }
 
     let hadFocus = hasFocus
     selectedIndex = index

@@ -1,6 +1,7 @@
 import AppKit
 import AppletKit
 import PaneModel
+import QuestionsApplet
 import XCTest
 
 @testable import WindowKit
@@ -103,6 +104,37 @@ final class PaneAuthorityTests: XCTestCase {
     XCTAssertEqual(markers(controller, member), [.authority])
   }
 
+  /// Catches a marker that follows a power question the user has yet to answer. The owner's
+  /// request for a power waits in the Pending Requests rows. The owners the pane carries and the
+  /// marker it draws stay as they were while it waits, and after the user denies it. Only
+  /// authorization decides them.
+  func testAPendingPowerRequestDoesNotChangeTheOwnersOrTheMarker() async throws {
+    let fixture = makeFixture()
+    let (controller, pane) = try fixture.openWindow()
+    let member = try await fixture.openOwned(beside: pane)
+    let applet = try fake(controller, member)
+    let requests = fixture.windows.permissionRequests
+
+    XCTAssertEqual(applet.authority.owners, [connection])
+    XCTAssertEqual(markers(controller, member), [.authority])
+
+    _ = requests.ask(
+      .init(requester: .connection(1), power: "clipboard-read"), subject: "build.janet",
+      title: "Read the clipboard", detail: "", sessionTitle: "Allow for This Run",
+      answer: { _ in })
+    controller.refreshControlMarks()
+
+    XCTAssertEqual(requests.rows.count, 1, "the request did not wait")
+    XCTAssertEqual(applet.authority.owners, [connection], "a waiting request changed the owners")
+    XCTAssertEqual(markers(controller, member), [.authority], "a waiting request moved the marker")
+
+    requests.decide(try XCTUnwrap(requests.rows.first?.id), .deny)
+    controller.refreshControlMarks()
+
+    XCTAssertEqual(applet.authority.owners, [connection], "a denial changed the owners")
+    XCTAssertEqual(markers(controller, member), [.authority], "a denial moved the marker")
+  }
+
   /// Catches a pane-level marker that moves when the asking badge comes and goes. With no control
   /// badge showing, the marker takes the badge's corner, and the asking badge sits leading of it.
   /// Showing the control badge moves the marker one slot leading, and nothing else moves it.
@@ -198,9 +230,15 @@ final class PaneAuthorityTests: XCTestCase {
 
     XCTAssertEqual(applet.performedMarkerActions, [])
 
+  }
+
+  /// Catches a default that performs an action nobody implements. An applet that offers no marker
+  /// action refuses every request for one, whatever the tab, kind, or action.
+  func testAnAppletWithNoMarkerActionsRefusesEveryRequest() {
+    let applet: any Applet = QuestionsApplet()
     let tab = applet.publishedTabs.first.id
 
     XCTAssertFalse(applet.performMarkerAction(.rebuildTab, kind: .runEnded, on: tab))
-    XCTAssertEqual(applet.performedMarkerActions, [.rebuildTab])
+    XCTAssertFalse(applet.performMarkerAction(.rebuildTab, kind: .authority, on: .make()))
   }
 }

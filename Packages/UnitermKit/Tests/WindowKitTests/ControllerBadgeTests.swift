@@ -15,12 +15,6 @@ import XCTest
 /// and go with no change to the pane tree. It cannot prove what the menu looks like on screen.
 @MainActor
 final class ControllerBadgeTests: XCTestCase {
-  private func settle(_ condition: () -> Bool) async {
-    for _ in 0..<400 where !condition() {
-      try? await Task.sleep(for: .milliseconds(10))
-    }
-  }
-
   /// Catches a badge whose Revoke Controller stays off, and that names no one, while a program
   /// acts from the pane. A connection that binds through ancestry changes nothing in the tree, so
   /// only the host's report can refresh the badge. When the connection closes, the badge drops it.
@@ -51,16 +45,12 @@ final class ControllerBadgeTests: XCTestCase {
 
     XCTAssertEqual(view.controlMark?.revokeAvailable, false)
 
-    let peer = try UnixSocket.connect(path: host.instanceAddress)
+    let peer = try await ScriptPeer.hello(to: host.instanceAddress)
     defer { peer.shutdownAndClose() }
 
-    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
-    _ = try await Task.detached {
-      try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
-    }.value
     try peer.send(ScriptHelperMessage.begin(name: "badge-test").frame())
 
-    await settle { view.controlMark?.revokeAvailable == true }
+    await ScriptPeer.settle { view.controlMark?.revokeAvailable == true }
 
     let mark = try XCTUnwrap(view.controlMark)
 
@@ -75,7 +65,7 @@ final class ControllerBadgeTests: XCTestCase {
 
     peer.shutdownAndClose()
 
-    await settle { view.controlMark?.revokeAvailable == false }
+    await ScriptPeer.settle { view.controlMark?.revokeAvailable == false }
 
     XCTAssertEqual(view.controlMark?.controllers, [])
     XCTAssertEqual(view.controlMark?.revokeAvailable, false)
@@ -113,16 +103,12 @@ final class ControllerBadgeTests: XCTestCase {
 
     XCTAssertEqual(applet.authority.owners, [], "a pane no controller acts from was marked")
 
-    let peer = try UnixSocket.connect(path: host.instanceAddress)
+    let peer = try await ScriptPeer.hello(to: host.instanceAddress)
     defer { peer.shutdownAndClose() }
 
-    try peer.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
-    _ = try await Task.detached {
-      try peer.readFrame(limit: ScriptAppMessage.bodyLimit(type:))
-    }.value
     try peer.send(ScriptHelperMessage.begin(name: "marker-test").frame())
 
-    await settle { !applet.authority.owners.isEmpty }
+    await ScriptPeer.settle { !applet.authority.owners.isEmpty }
 
     let ids = host.controllers(actingFrom: controller.scriptWindowID, pane: pane)
 
@@ -141,11 +127,11 @@ final class ControllerBadgeTests: XCTestCase {
 
     controller.enableRemoteControl(pane)
 
-    await settle { !applet.authority.owners.isEmpty }
+    await ScriptPeer.settle { !applet.authority.owners.isEmpty }
 
     peer.shutdownAndClose()
 
-    await settle { applet.authority.owners.isEmpty }
+    await ScriptPeer.settle { applet.authority.owners.isEmpty }
 
     XCTAssertEqual(applet.authority.owners, [])
   }

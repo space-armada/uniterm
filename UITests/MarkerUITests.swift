@@ -296,7 +296,8 @@ final class MarkerUITests: UnitermUITestCase {
   /// a bar that gives no sign of more tabs. A browser pane restored with 14 tabs cannot show them
   /// all. The last tab is out of reach at first. A sideways swipe and a wheel with Shift each move
   /// the tabs, and selecting the last tab by key brings it fully into view, clear of the new-tab
-  /// button. The captures show the edge cue at each end.
+  /// button. A swipe that moves the selected last tab out of view, then its own key again, brings it
+  /// back. The captures show the edge cue at each end.
   func testAnOverflowedTabBarScrollsByTrackpadAndShiftAndKeepsTheSelectedTabInView() throws {
     let titles = (0..<14).map { #"{"url":"about:blank","title":"Tab \#($0)"}"# }
       .joined(separator: ",")
@@ -364,6 +365,23 @@ final class MarkerUITests: UnitermUITestCase {
     XCTAssertLessThanOrEqual(
       tab(13).frame.maxX, newTab.frame.minX + 1, "the selected tab runs under the new-tab button")
     XCTAssertGreaterThanOrEqual(tab(13).frame.minX, window.frame.minX)
+
+    func scrolledAway(by deltaX: CGFloat) -> Bool {
+      sendWheel(deltaX: deltaX, deltaY: 0, at: tab(13), in: window)
+
+      return pollUntil(timeout: 3) { !tab(13).isHittable }
+    }
+
+    XCTAssertTrue(
+      scrolledAway(by: 600) || scrolledAway(by: -600),
+      "a sideways swipe did not move the selected last tab out of view")
+
+    app.typeKey("9", modifierFlags: .command)
+
+    XCTAssertTrue(
+      waitUntilHittable(tab(13)), "selecting the already selected tab left it out of view")
+    XCTAssertLessThanOrEqual(
+      tab(13).frame.maxX, newTab.frame.minX + 1, "the reselected tab runs under the new-tab button")
 
     keepElementScreenshot(
       window, named: "Overflowed tab bar with the last tab selected, fade on the left")

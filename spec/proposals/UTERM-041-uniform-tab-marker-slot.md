@@ -219,7 +219,8 @@ terminal did not, and the bug is now fixed. See `bugs/20261121-terminal-tab-bar-
 candidates were no addition, the terminal forwarding the reach, the shared bar taking the reach, and moving the
 new-tab button to the leading side.
 
-Decision: no addition. This proposal leaves the bar as it is, and the bug waits. (autonomous)
+Decision: no addition. This proposal leaves the bar as it is. The bug was fixed on 2026-11-22 by the shared bar's
+`trailingReserve`, outside this proposal. Amended 2026-11-27; see Decision Log. (autonomous)
 
 - The fault does not reach the marker slot. The bar's tabs show in a viewport that ends at the bar's `trailingReserve`
   and at the new-tab button, so no tab or marker passes under the badge. A scrolling tab bar keeps that rule, and the
@@ -346,6 +347,10 @@ same call carry it? Amended 2026-11-27; see Decision Log.
 Decision: the same call carries, beside the owner set, the tabs that hold a controller, with each controller's name as
 the host supplies it. The applet publishes a chip on those tabs. Chosen by the user on 2026-11-21, converged in 1
 pass. (addition)
+
+**Pending override:** the same call also carries the names of the exec drivers attached to the pane, so a driver's
+pane-level chip arrives in the same update. The user's 2026-11-26 choice puts a driver's chip at the pane level, and
+one update per control change keeps the markers from disagreeing. Recommended by the M2 run (autonomous).
 
 Rationale: one update per control change keeps the two markers from disagreeing for a frame.
 
@@ -570,6 +575,13 @@ None.
   and two questions tests still assumed a bar for one form. The captures show the marked and unmarked browser tabs,
   the text viewer's marker beside the badge, the overflowed bar's fades with the selected tab in view, and the slashed
   gears in a tab bar and in the badge's corner.
+- Selecting the tab that is already selected scrolls it back into view. The bar scrolls to the selected tab only when
+  the selection or the tab count changes, and each applet's `selectTab(at:)` returned early on a tab already selected.
+  A user who scrolled the selected tab away and pressed its Cmd-number, or chose it from the palette, saw nothing
+  happen. The bar now has `revealSelected()`, and the browser, terminal, and questions applets call it on that path. An
+  update that changes nothing still leaves the user's scroll alone. A terminal and a questions applet test failed on
+  the unfixed code, each at the reselect and at the palette's `selectTab(id:)`. A bar test and a browser test cover the
+  same contract. The overflow UI test scrolls the selected last tab away and reselects it with its Cmd-number.
 - The decisions and text this work changed are amended in place. See the Decision Log entries of 2026-11-27.
 
 ### M2: The controlling chip
@@ -843,6 +855,15 @@ None.
   hands the chip down" said: "the host knows the tab once each session root records its tab". The window records
   the tab, and the scripting host holds only the root. Both sentences now say so. The decisions the user chose
   stand. (autonomous)
+- 2026-11-27: Correction of fact, from the row review. "Keeping the tab bar clear of the control badge" decided: "no
+  addition. This proposal leaves the bar as it is, and the bug waits." The earlier correction of fact fixed its
+  bullets and left this sentence. The bug was fixed on 2026-11-22 by the shared bar's `trailingReserve`, so the
+  sentence now says so. The choice of no addition stands. (autonomous)
+- 2026-11-27: How the host hands the chip down: the call also carries the names of the exec drivers attached to the
+  pane. The user's decision names the controlling tabs and their names, and says nothing of drivers. The user's
+  2026-11-26 choice puts a driver's chip at the pane level, and a separate update would let the two chips disagree
+  for a frame. The decision's text is the user's and stands. A `**Pending override:**` line records the call as
+  built, for the user's answer. (autonomous, override pending)
 
 ## References
 

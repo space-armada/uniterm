@@ -115,6 +115,25 @@ final class AppletTabBarTests: XCTestCase {
     assertInView(bar, tab: 8)
   }
 
+  /// Catches a bar that cannot be asked to show its selected tab again. The user scrolls the
+  /// selected tab out of view, and the bar then scrolls it back only when asked, since an update
+  /// that changes nothing leaves the user's scroll alone.
+  func testRevealingTheSelectedTabBringsItBackAfterAScroll() {
+    let list = tabs(8)
+    let bar = makeBar(width: 500, tabs: list, selected: 5)
+
+    bar.scroll(by: -10_000)
+
+    bar.update(tabs: list, selected: 5, canOpenTab: true)
+    bar.layoutSubtreeIfNeeded()
+    XCTAssertGreaterThan(
+      bar.frame(ofTab: 5).maxX, bar.viewport.maxX, "an update alone keeps the scroll")
+
+    bar.revealSelected()
+    bar.layoutSubtreeIfNeeded()
+    assertInView(bar, tab: 5)
+  }
+
   /// Catches a bar that a shift-held wheel cannot scroll. A wheel has no sideways part, so Shift
   /// with an upward wheel turn moves the tabs back toward the start, and a downward turn moves them
   /// on. The same wheel without Shift moves nothing.

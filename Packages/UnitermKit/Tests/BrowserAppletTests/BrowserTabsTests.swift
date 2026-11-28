@@ -1,5 +1,6 @@
 import AppKit
 import AppletKit
+import AppletTestSupport
 import BrowserModel
 import BrowserTestSupport
 import StatusKit
@@ -54,6 +55,73 @@ final class BrowserTabsTests: XCTestCase {
 
     XCTAssertEqual(harness.applet.publishedTabs.selected, id)
     XCTAssertEqual(harness.applet.publishedTabs.all.count, 2)
+  }
+
+  /// Catches a reselect that leaves the selected tab out of view. The user scrolls the selected tab
+  /// off the bar, then selects it again from the keyboard or the palette. The tab is already
+  /// selected, yet it comes back into view.
+  func testReselectingTheSelectedTabScrollsItBackIntoView() async throws {
+    let harness = try await harness()
+    defer { harness.stop() }
+
+    let content = harness.applet.content
+    content.frame = NSRect(x: 0, y: 0, width: 500, height: 400)
+
+    for _ in 0..<9 { harness.applet.openTab() }
+
+    content.layoutSubtreeIfNeeded()
+
+    let bar = content.tabBar
+    let last = harness.applet.tabCount - 1
+
+    XCTAssertEqual(harness.applet.selectedTabIndex, last)
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertFalse(TabBarProbe.isFullyInView(bar, tab: last))
+
+    harness.applet.selectTab(at: last)
+    content.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertTrue(harness.applet.selectTab(id: harness.applet.publishedTabs.selected))
+    content.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last), "the palette's reselect")
+  }
+
+  /// Catches a bar that pulls itself back to the selected tab on a change the user did not make. The
+  /// user scrolls the tabs away from the selected one. A republish, a refresh, an appearance change,
+  /// a badge report that changes nothing, and an authority update leave the scroll where it is.
+  func testAnUnrelatedRepublishLeavesAUserScrollAlone() async throws {
+    let harness = try await harness()
+    defer { harness.stop() }
+
+    let content = harness.applet.content
+    content.frame = NSRect(x: 0, y: 0, width: 500, height: 400)
+
+    for _ in 0..<9 { harness.applet.openTab() }
+
+    harness.applet.selectTab(at: 0)
+    content.layoutSubtreeIfNeeded()
+
+    let bar = content.tabBar
+
+    TabBarProbe.scroll(bar, by: 10_000)
+
+    let away = TabBarProbe.offset(of: bar)
+
+    XCTAssertGreaterThan(away, 0)
+
+    harness.applet.refresh()
+    harness.applet.apply(.latte)
+    harness.applet.hostBadgeReachDidChange(0)
+    harness.applet.authorityDidChange(PaneAuthority(owners: [AppletCaller(grant: "connection 1")]))
+    harness.applet.refresh()
+
+    XCTAssertEqual(TabBarProbe.offset(of: bar), away)
   }
 
   /// Catches a tab bar that shows for one tab, or that leaves a gap above the toolbar while hidden.
