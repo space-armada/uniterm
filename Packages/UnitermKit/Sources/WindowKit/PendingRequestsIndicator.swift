@@ -57,6 +57,11 @@ public final class PendingRequestsIndicator {
     }
   }
 
+  /// The bar has one line, so a program is named by its file name. The panel shows the full path.
+  static func sentence(for request: ScriptHost.PendingRequest) -> String {
+    "\(request.shortProgramLabel), PID \(request.pid), asks for a pane."
+  }
+
   /// The panel's waiting rows, in the panel's order, each with the words its row shows.
   func waitingItems() -> [Item] {
     let host = scriptHost()
@@ -73,13 +78,8 @@ public final class PendingRequestsIndicator {
         sentence: "\(review.name) declares nothing and waits for review.")
     }
 
-    // The bar has one line, so a program is named by its file name. The panel shows the full path.
     let requests = (host?.allPendingRequests() ?? []).map { request in
-      let program = request.executablePath.map { ($0 as NSString).lastPathComponent }
-
-      return Item(
-        key: .request(request.id),
-        sentence: "\(program ?? request.name), PID \(request.pid), asks for a pane.")
+      Item(key: .request(request.id), sentence: Self.sentence(for: request))
     }
 
     let launches = windows.launchAuthority.requests.map { request in

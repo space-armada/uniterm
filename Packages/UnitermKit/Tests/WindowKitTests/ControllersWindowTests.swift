@@ -25,7 +25,7 @@ final class ControllersWindowTests: XCTestCase {
 
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: sockets),
-      issueProducer: { _ in nil },
+      issueProducer: { _ in .noWindow },
       controllers: ControllerSettings(
         runsRoot: folder.appendingPathComponent("runs"),
         helper: BundleHelperIdentity(helperURL: folder.appendingPathComponent("none")),

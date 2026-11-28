@@ -6,6 +6,17 @@ public enum StatusProducerKind: Sendable {
   case script
 }
 
+/// The answer to a request for a producer identity. A refusal says which of its two causes held.
+public enum ProducerRequest {
+  case issued(StatusProducer)
+
+  /// No window is open to issue an identity.
+  case noWindow
+
+  /// The center already issued as many identities as its policy allows.
+  case limitReached
+}
+
 /// How a host-observed driver failure ranks. The kind carries the level, so a driver never picks
 /// one by matching its own text.
 public enum DriverFailureKind: Sendable {

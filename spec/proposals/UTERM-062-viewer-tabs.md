@@ -54,6 +54,8 @@
   declaration.
 - UTERM-006 — M5, exec driver reads, assumes one source per image pane.
 - UTERM-061 — the viewers' tab commands join the titles shared across applet types.
+- UTERM-070 — its aside loads for the user's open end at M2 to M5. Its aside loads for `send`, `show`, and
+  `show-markdown` carry into named tabs. M2 replaces its paired leases.
 
 ## Summary
 
@@ -93,6 +95,10 @@ Decision: every open the user makes into a viewer pane adds a tab and selects it
 - Cmd-T opens the file panel, and the chosen file opens in a new tab.
 - A drop adds a tab for each dropped file. A drop of several files is no longer refused.
 - A routed open that lands on the pane adds a tab, once UTERM-018 routes opens to existing panes.
+- A tab whose file fails to load shows its failure in that tab. No check runs before the tab opens, so every failure
+  behaves one way.
+
+Amended 2026-11-27; see Decision Log.
 
 Rationale: the user chose it on 2026-11-26 over keeping replacement for some paths. What a program's open does is
 settled separately. See "What a program's open does".
@@ -428,6 +434,8 @@ None. Every question is settled.
 
 **Status:** NOT STARTED
 
+Amended 2026-11-27; see Decision Log.
+
 - Read scope is checked per tab for titles, content, and pending waits. A program scoped to one folder never reads the
   title of a tab whose file is elsewhere. The pane-level title and directory follow the selected tab's check
 - A pending wait checks the source of the tab its handle belongs to, not the selected tab
@@ -454,7 +462,9 @@ None. Every question is settled.
   own pane keys on its run, so a revoked driver whose commands still run keeps its bound. The user's own opens are
   never limited
 - Sent files are kept per tab, and a file is released when its tab closes, so a second send never deletes a file an
-  open tab reads
+  open tab reads. A tab's earlier sent file stays on disk while the tab can still go back to it, and closing the tab
+  removes every sent file it held, by UTERM-070's rule
+- A viewer that has no tabs yet still keeps its file when a chosen open fails its load, as UTERM-070 builds
 - A program's tab open on a viewer pane is refused through its own hook, with a message that names `open`, or `send`
   for the data viewer
 - A pane's placeholder tab exists only while it holds no file. The first open removes it and adds a tab with a new ID
@@ -463,6 +473,8 @@ None. Every question is settled.
 ### M2: Data viewer tabs
 
 **Status:** NOT STARTED
+
+Amended 2026-11-27; see Decision Log.
 
 - A data viewer pane holds several files as tabs, draws the shared tab bar, and hides it with one tab
 - The pane-local Open…, Cmd-T, and a drop each add a tab and select it. The "Drop one file at a time" refusal is gone,
@@ -478,6 +490,10 @@ None. Every question is settled.
   refused and running loads stop in every tab, and loads go on normally once it reports normal
 - Loading several dropped files never blocks the main thread
 - Each tab keeps its own find, filter, and popovers
+- The pane-local Open and a drop add a tab, and this viewer's aside load and supersede rule for the user's open from
+  UTERM-070 are removed
+- `send` into a named tab loads aside, and a failed load keeps that tab's content, as UTERM-070 builds
+- The budget for each file replaces UTERM-070's paired leases
 - Relaunch restores every tab and the selected tab. A one-tab pane saves at today's payload version, and a payload at
   the newer version holds only the tab array
 - The memory-pressure guard holds as a state. Its first check measures, by dropping 20 large files, whether the system
@@ -502,6 +518,9 @@ Amended 2026-11-27; see Decision Log.
 - Each tab keeps its own web view, and a web content process that ends reports to its own tab
 - A hidden tab's alerts go out at once and name its file. A hidden tab holds its file-watch changes through the text
   viewer's existing held change, and applies them when selected
+- The pane-local Open and a drop add a tab, and this viewer's aside load and supersede rule for the user's open from
+  UTERM-070 are removed
+- `send` and `show-markdown` into a named tab load aside, and a failure keeps that tab's content
 - Relaunch restores every tab and the selected tab. The written payload version is the highest any tab needs
 
 ### M4: Image viewer tabs
@@ -524,11 +543,16 @@ Amended 2026-11-27; see Decision Log.
 - Selecting a tab whose helper source was dropped opens it again without a visible error
 - A decode helper crash shows a failure in the tab whose request was in flight, which can be a hidden tab's prefetch.
   The other tabs decode again on their next request
+- The pane-local Open and a drop add a tab, and this viewer's aside load and supersede rule for the user's open from
+  UTERM-070 are removed
+- `send` and `show` into a named tab load aside, and a failure keeps that tab's content
 - Relaunch restores every tab and the selected tab
 
 ### M5: Map viewer tabs
 
 **Status:** NOT STARTED
+
+Amended 2026-11-27; see Decision Log.
 
 - A map viewer pane holds several map files as tabs, with the same open, select, close, and reopen behavior as M2
 - Each tab keeps its own region, style, and pins, including what UTERM-040 leaves of program pins
@@ -539,6 +563,9 @@ Amended 2026-11-27; see Decision Log.
 - Each tab keeps its own map view and undo history, so Undo in one tab never undoes another tab's edit
 - A hidden tab's alerts go out at once and name its file
 - A map tab closed with Don't Save and reopened behaves as a closed pane's undo does today
+- The pane-local Open and a drop add a tab, and this viewer's aside load and supersede rule for the user's open from
+  UTERM-070 are removed
+- `send` into a named tab loads aside, and a failed load keeps that tab's content, as UTERM-070 builds
 - Relaunch restores every tab and the selected tab, and restoring runs no program, per ADR-03
 
 ### M6: The user's check
@@ -661,6 +688,15 @@ Amended 2026-11-27; see Decision Log.
     and selected, not detach alone".
 - 2026-11-27: Amended the UTERM-040 Impacts line for UTERM-040's amendment under UTERM-063. It said UTERM-040 "moves
   program pins into the document under schema 2.0". The map's schema stays 0.0, and the change lands in place.
+- 2026-11-27: Amended for UTERM-070, with the user's approval at UTERM-070's review gate. The text had no such rule.
+  - "Every user open adds a tab" gained: a tab whose file fails to load shows its failure in that tab, with no check
+    before the tab opens.
+  - M1 gained a check that a viewer with no tabs yet keeps its file when a chosen open fails its load. Its sent files
+    kept per tab now follow UTERM-070's rule for sent files.
+  - M2 to M5 each remove that viewer's aside load and supersede rule for the user's open. Each keeps the aside load for
+    a program's replace into a named tab: `send` in all four, `show-markdown` in M3, and `show` in M4.
+  - M2's budget for each file replaces UTERM-070's paired leases.
+  - Added the UTERM-070 Impacts line.
 
 ## References
 

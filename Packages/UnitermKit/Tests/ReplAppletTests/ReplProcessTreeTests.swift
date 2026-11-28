@@ -77,7 +77,7 @@ final class ReplProcessTreeTests: XCTestCase {
     directory = try Self.makeSocketDirectory()
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { _ in nil })
+      issueProducer: { _ in .noWindow })
     host.start()
 
     let root = URL(fileURLWithPath: #filePath)

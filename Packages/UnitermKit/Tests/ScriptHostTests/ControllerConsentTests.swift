@@ -58,7 +58,7 @@ final class ControllerConsentTests: XCTestCase {
     // that held the command's identity would refuse it for the identity it sends.
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: windows,
+      issueProducer: { center.requestProducer(kind: .script, name: $0) }, windows: windows,
       controllers: ControllerSettings(
         runsRoot: work.appendingPathComponent("runs"),
         helper: BundleHelperIdentity(helperURL: try HardenedHelper.url()), trustDirectory: trust),

@@ -31,7 +31,7 @@ final class ScriptHostAPITests: XCTestCase {
     let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     host = ScriptHost(
-      listener: listener, issueProducer: { center.issueProducer(kind: .script, name: $0) },
+      listener: listener, issueProducer: { center.requestProducer(kind: .script, name: $0) },
       windows: windows, sentContent: try ScriptSentContent(root: sentRoot))
     host.start()
 
@@ -298,7 +298,7 @@ final class ScriptHostAPITests: XCTestCase {
     let other = try ScriptListener.startForTests(
       directory: directory.appendingPathComponent("bare", isDirectory: true))
     let bare = ScriptHost(
-      listener: other, issueProducer: { center.issueProducer(kind: .script, name: $0) })
+      listener: other, issueProducer: { center.requestProducer(kind: .script, name: $0) })
 
     bare.start()
     recordTestProcessAsSessionRoot(bare)

@@ -251,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let host = ScriptHost(
         listener: listener,
         issueProducer: { [weak windows] name in
-          windows?.issueProducer(kind: .script, name: name)
+          windows?.requestProducer(kind: .script, name: name) ?? .noWindow
         },
         windows: WindowScripting(windows: windows),
         sentContent: makeSentContent(),

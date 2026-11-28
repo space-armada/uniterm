@@ -32,7 +32,8 @@ final class QuestionsWireWindowTests: XCTestCase {
 
     host = ScriptHost(
       listener: try ScriptListener.startWithoutCommandIdentityForTests(directory: directory),
-      issueProducer: { center.issueProducer(kind: .script, name: $0) }, windows: fixture.scripting)
+      issueProducer: { center.requestProducer(kind: .script, name: $0) }, windows: fixture.scripting
+    )
     host.start()
   }
 

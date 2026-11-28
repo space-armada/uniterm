@@ -11,7 +11,7 @@
 | [UTERM-007](UTERM-007-text-viewer-applet.md) | Viewer for Markdown, RTF, Word, and PDF | implemented |
 | [UTERM-008](UTERM-008-map-viewer-applet.md) | MapKit applet with custom pins | implemented |
 | [UTERM-009](UTERM-009-data-viewer-applet.md) | Table viewer for CSV, JSON, and spreadsheets | implemented |
-| [UTERM-010](UTERM-010-canvas-applet.md) | Canvas applet that programs draw on | draft |
+| [UTERM-010](UTERM-010-canvas-applet.md) | Canvas applet that programs draw on | accepted |
 | [UTERM-011](UTERM-011-widget-bar.md) | Widget bar region with small widgets | deferred |
 | [UTERM-012](UTERM-012-shell-blocks.md) | Collapsible command blocks in the terminal | deferred |
 | [UTERM-013](UTERM-013-shortcut-ownership-and-reopen.md) | Window versus applet shortcuts, and Cmd-Shift-T reopen | implemented |
@@ -48,7 +48,7 @@
 | [UTERM-044](UTERM-044-shard-the-ci-ui-tests.md) | Shard CI's UI tests across macOS runners | implemented |
 | [UTERM-045](UTERM-045-settle-ui-test-input.md) | Settle input before UI tests send it | accepted |
 | [UTERM-046](UTERM-046-deterministic-package-test-flakes.md) | Make the logged package-test flakes deterministic | implemented |
-| [UTERM-047](UTERM-047-rate-limit-status-per-source.md) | Rate-limit status posts per source, with a fair bar and session-keyed sources | draft |
+| [UTERM-047](UTERM-047-rate-limit-status-per-source.md) | Rate-limit status posts per source, with a fair bar and session-keyed sources | accepted |
 | [UTERM-048](UTERM-048-pane-inspector.md) | A floating Pane Inspector that shows a pane's and its tabs' state, hidden state included | accepted |
 | [UTERM-049](UTERM-049-save-and-open-browser-tab-sets.md) | Save a browser pane's tabs as uniterm JSON, uri-list, or bookmark HTML, and open them back | accepted |
 | [UTERM-050](UTERM-050-current-directory-never-blocks-the-main-thread.md) | An applet's current directory never checks the file system on the main thread | accepted |
@@ -71,7 +71,7 @@
 | [UTERM-067](UTERM-067-stores-keep-what-they-cannot-read.md) | Every store keeps entries it cannot read, starting with the controller trust stores | implemented |
 | [UTERM-068](UTERM-068-browser-content-blocking.md) | Native browser ad blocking with custom rules, a starter list, and subscriptions | accepted |
 | [UTERM-069](UTERM-069-external-programs-run-as-controllers.md) | A program uniterm cannot trace to a tab runs as a controller with an external source, replacing Grant Access | accepted |
-| [UTERM-070](UTERM-070-a-viewer-keeps-its-file-when-the-new-one-fails-to-load.md) | A viewer pane keeps its old file when the new one passes the open check and fails its load | draft |
+| [UTERM-070](UTERM-070-a-viewer-keeps-its-file-when-the-new-one-fails-to-load.md) | A viewer pane keeps its old file when the new one passes the open check and fails its load | accepted |
 | [UTERM-071](UTERM-071-the-layout-file-keeps-windows-and-nodes-it-cannot-read.md) | The layout file keeps the windows and nodes it cannot read, and a part a build does not hold survives a save | draft |
 | [UTERM-072](UTERM-072-the-hsts-store-keeps-entries-it-cannot-read.md) | The browser's HSTS file keeps the entries it cannot read, and one bad entry no longer empties the list | draft |
 | [UTERM-073](UTERM-073-open-with-shows-the-choices-it-cannot-read.md) | The Open With chooser shows a saved choice it cannot read, and offers to clear it | draft |
@@ -141,7 +141,7 @@ UTERM-066 ← UTERM-004, UTERM-063
 UTERM-067 ← UTERM-004
 UTERM-068 ← UTERM-005, UTERM-053
 UTERM-069 ← UTERM-004, UTERM-015, UTERM-021, UTERM-054, UTERM-063, UTERM-067
-UTERM-070 ← UTERM-015, UTERM-062
+UTERM-070 ← UTERM-015
 UTERM-071 ← UTERM-067
 UTERM-072 ← UTERM-005, UTERM-067
 UTERM-073 ← UTERM-015, UTERM-067

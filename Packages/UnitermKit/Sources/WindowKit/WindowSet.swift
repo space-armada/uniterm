@@ -616,8 +616,10 @@ public final class WindowSet {
 
   /// Issues a non-pane producer an identity that no other producer shares. The identity belongs to
   /// the active window's center, so it is not valid in another window.
-  public func issueProducer(kind: StatusProducerKind, name: String) -> StatusProducer? {
-    activeController?.statusCenter.issueProducer(kind: kind, name: name)
+  public func requestProducer(kind: StatusProducerKind, name: String) -> ProducerRequest {
+    guard let center = activeController?.statusCenter else { return .noWindow }
+
+    return center.requestProducer(kind: kind, name: name)
   }
 
   private func windowDidClose(_ controller: MainWindowController) {

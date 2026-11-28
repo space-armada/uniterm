@@ -26,7 +26,7 @@ final class ScriptRunCommandTests: XCTestCase {
     let listener = try ScriptListener.startWithoutCommandIdentityForTests(directory: directory)
 
     host = ScriptHost(
-      listener: listener, issueProducer: { center.issueProducer(kind: .script, name: $0) })
+      listener: listener, issueProducer: { center.requestProducer(kind: .script, name: $0) })
     host.start()
 
     recordTestProcessAsSessionRoot(host)
