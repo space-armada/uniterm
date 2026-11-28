@@ -19,7 +19,7 @@
 | [20261117-read-scope-compared-as-written-hides-real-paths](20261117-read-scope-compared-as-written-hides-real-paths.md) | A read scope written through a link hides every path from its own controller | fixed |
 | [20261121-edited-map-past-size-bound-saves-but-cannot-reopen](20261121-edited-map-past-size-bound-saves-but-cannot-reopen.md) | An edited map past 32 MiB saves, but cannot be reopened | open |
 | [20261121-terminal-tab-bar-ignores-control-badge](20261121-terminal-tab-bar-ignores-control-badge.md) | The terminal's tab bar ignores the control badge | fixed |
-| [20261121-tab-bar-overflow-hides-tabs](20261121-tab-bar-overflow-hides-tabs.md) | Tabs past the tab bar's trailing edge cannot be seen or clicked | open |
+| [20261121-tab-bar-overflow-hides-tabs](20261121-tab-bar-overflow-hides-tabs.md) | Tabs past the tab bar's trailing edge cannot be seen or clicked | fixed |
 | [20261121-revoked-controller-stays-on-badge](20261121-revoked-controller-stays-on-badge.md) | A revoked controller that keeps its connection open stays listed on the badge | fixed |
 | [20261121-owner-end-withdraws-other-owners-launches](20261121-owner-end-withdraws-other-owners-launches.md) | An owner's end withdraws every launch waiting in its panes, whoever staged it | open |
 | [20261121-held-requests-grow-without-bound](20261121-held-requests-grow-without-bound.md) | Calls held during a peer's full check grow without bound | not-reproducible |
@@ -52,7 +52,7 @@
 | [20261122-browser-close-encodes-every-tab-history-on-main-thread](20261122-browser-close-encodes-every-tab-history-on-main-thread.md) | Closing a browser pane encodes every tab's history on the main thread | fixed |
 | [20261122-map-describe-encodes-document-at-every-save](20261122-map-describe-encodes-document-at-every-save.md) | A map pane encodes its undo part at every save and change check | proposed |
 | [20261122-terminal-describe-encodes-every-tab-at-each-change](20261122-terminal-describe-encodes-every-tab-at-each-change.md) | The terminal encodes every tab and closed tab on the main thread at each change | proposed |
-| [20261122-questions-bar-disagrees-with-the-shared-hide-rule](20261122-questions-bar-disagrees-with-the-shared-hide-rule.md) | The questions applet's tab bar disagrees with UTERM-041's shared hide rule | proposed |
+| [20261122-questions-bar-disagrees-with-the-shared-hide-rule](20261122-questions-bar-disagrees-with-the-shared-hide-rule.md) | The questions applet's tab bar disagrees with UTERM-041's shared hide rule | fixed |
 | [20261122-exec-browser-read-result-burst-ends-driver](20261122-exec-browser-read-result-burst-ends-driver.md) | A driver that sends its browser reads in a burst is ended | fixed |
 | [20261123-map-saved-through-a-symlink-stays-dirty](20261123-map-saved-through-a-symlink-stays-dirty.md) | A map saved through a symlink stays unsaved | fixed |
 | [20261123-map-file-change-reads-file-on-main-thread](20261123-map-file-change-reads-file-on-main-thread.md) | A map's file-change check reads the whole file on the main thread | fixed |

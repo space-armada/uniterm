@@ -45,7 +45,7 @@ class FakeApplet: Applet {
   }
 
   /// Each tab's ID and title, in order. A test sets `tabCount` or `tabTitles` and the tabs follow.
-  private var tabIDs: [AppletTabID] = [.make()]
+  private(set) var tabIDs: [AppletTabID] = [.make()]
   var tabTitles: [String] = []
   var tabDetails: [Int: [String]] = [:]
 
@@ -65,7 +65,14 @@ class FakeApplet: Applet {
       let title =
         index < tabTitles.count
         ? tabTitles[index] : (index == 0 ? self.title : "\(self.title) \(index + 1)")
-      return AppletTab(id: id, title: title, details: tabDetails[index] ?? [])
+      var tab = authority.applyingChip(
+        to: AppletTab(id: id, title: title, details: tabDetails[index] ?? []))
+
+      guard tabIDs.count == 1 else { return tab }
+
+      for marker in extraMarkers { tab.markers.insert(marker) }
+
+      return authority.applyingOneTabMarker(to: tab)
     }
 
     return AppletTabList(
@@ -189,6 +196,40 @@ class FakeApplet: Applet {
     started = true
     startOrigin = origin
     controlAtStart = controls.last ?? .disconnected
+  }
+
+  /// Markers the fake's one tab carries besides the authority marker, as a test publishes them.
+  var extraMarkers: [AppletMarker] = [] {
+    didSet { host?.appletTabsDidChange(self) }
+  }
+
+  /// Every marker action the host asked the fake to perform, oldest first.
+  var performedMarkerActions: [AppletMarkerAction] = []
+
+  func performMarkerAction(
+    _ action: AppletMarkerAction, kind: AppletMarkerKind, on tab: AppletTabID
+  ) -> Bool {
+    performedMarkerActions.append(action)
+
+    return false
+  }
+
+  /// Every badge reach the host reported, oldest first.
+  var badgeReaches: [CGFloat] = []
+
+  func hostBadgeReachDidChange(_ width: CGFloat) {
+    badgeReaches.append(width)
+  }
+
+  /// The grants the host last said can act on the pane. A one-tab fake marks its tab by them, as a
+  /// viewer does.
+  var authority = PaneAuthority.none
+
+  func authorityDidChange(_ authority: PaneAuthority) {
+    guard authority != self.authority else { return }
+
+    self.authority = authority
+    host?.appletTabsDidChange(self)
   }
 
   /// Every control the host pushed, oldest first, and the one the applet had when it started.

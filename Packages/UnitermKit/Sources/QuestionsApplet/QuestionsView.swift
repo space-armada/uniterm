@@ -2,11 +2,13 @@ import AppKit
 import AppletKit
 import Theme
 
-/// The pane's view: the tab bar, always shown, above the selected tab's form. With no tab, the
-/// pane says why it is empty. It never sits blank.
+/// The pane's view: the tab bar above the selected tab's form, while two or more questions are
+/// open. With one question the form takes the whole pane. With none, the pane says why it is
+/// empty. It never sits blank.
 @MainActor
 final class QuestionsView: NSView {
   let tabBar = AppletTabBar()
+  private var tabBarHeight: NSLayoutConstraint?
 
   private let emptyTitle = NSTextField(wrappingLabelWithString: "No questions are open")
   private let emptyDetail = NSTextField(
@@ -46,11 +48,14 @@ final class QuestionsView: NSView {
     emptyState.translatesAutoresizingMaskIntoConstraints = false
     addSubview(emptyState)
 
+    let barHeight = tabBar.heightAnchor.constraint(equalToConstant: 0)
+    tabBarHeight = barHeight
+
     NSLayoutConstraint.activate([
+      barHeight,
       tabBar.topAnchor.constraint(equalTo: topAnchor),
       tabBar.leadingAnchor.constraint(equalTo: leadingAnchor),
       tabBar.trailingAnchor.constraint(equalTo: trailingAnchor),
-      tabBar.heightAnchor.constraint(equalToConstant: AppletTabBar.height),
       emptyState.centerXAnchor.constraint(equalTo: centerXAnchor),
       emptyState.centerYAnchor.constraint(equalTo: centerYAnchor),
       emptyState.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
@@ -70,9 +75,12 @@ final class QuestionsView: NSView {
     fatalError("init(coder:) is not supported")
   }
 
-  /// Shows the tab titles, and the tab's form below them. A nil form shows the empty state.
-  func show(titles: [String], selected: Int, panel newPanel: NSView?) {
-    tabBar.update(titles: titles, selected: selected, canOpenTab: false)
+  /// Shows the tabs, and the selected tab's form below them. The bar takes no room while the
+  /// shared rule hides it. A nil form shows the empty state.
+  func show(tabs: [AppletTab], selected: Int, panel newPanel: NSView?) {
+    tabBar.update(tabs: tabs, selected: selected, canOpenTab: false)
+    tabBarHeight?.constant =
+      AppletTabList.barShows(forTabCount: tabs.count) ? AppletTabBar.height : 0
 
     if panel !== newPanel {
       panel?.removeFromSuperview()

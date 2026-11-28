@@ -48,7 +48,7 @@ extension UnitermUITestCase {
   /// `UNITERM_WHEEL_TRACE=1` in the runner's environment logs the pointer, the visible part, and
   /// the time each phase took. See `WheelTrace`.
   func sendWheel(
-    deltaY: CGFloat, at target: XCUIElement, in window: XCUIElement,
+    deltaX: CGFloat = 0, deltaY: CGFloat, at target: XCUIElement, in window: XCUIElement,
     timeout: TimeInterval = 2, context: @autoclosure () -> String = ""
   ) {
     WheelTrace.mark("aim start")
@@ -108,7 +108,7 @@ extension UnitermUITestCase {
     let trace = WheelTrace.begin(deltaY: deltaY, point: point, visible: first)
     let wheelPoint = coordinate(at: point)
 
-    wheelPoint.scroll(byDeltaX: 0, deltaY: deltaY)
+    wheelPoint.scroll(byDeltaX: deltaX, deltaY: deltaY)
     trace?.end()
   }
 }

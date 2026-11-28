@@ -86,6 +86,10 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   /// control moves to a new generation and when a grant ends.
   var tabOwners: [AppletTabID: AppletCaller] = [:]
 
+  /// The grants that can act on the pane now, as the host last told. A tab carries the authority
+  /// marker when its owner is among them.
+  var authority = PaneAuthority.none
+
   /// The generation of the control the pane last heard about.
   var controlGeneration: UInt64?
 
@@ -112,6 +116,7 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
     var records: [BrowserDescription.Tab]
     var tabIDs: [AppletTabID]
     var titles: [String]
+    var markers: [AppletMarkerSet]
     var selected: Int
     var marked: [AppletTabID]
     var dialogs: Int
@@ -645,7 +650,12 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   /// Selects a tab. The keyboard follows when the pane held it, and when the tab has nothing to
   /// show, since then the address bar is the tab's only use.
   public func selectTab(at index: Int) {
-    guard !closed, tabs.indices.contains(index), index != selectedIndex else { return }
+    guard !closed, tabs.indices.contains(index) else { return }
+
+    guard index != selectedIndex else {
+      content.tabBar.revealSelected()
+      return
+    }
 
     let hadFocus = hasFocus
     selectedIndex = index
@@ -1383,9 +1393,18 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
   }
 
   private static func published(
-    _ tabs: [BrowserTab], titles: [String], selected: Int
+    _ tabs: [BrowserTab], titles: [String], selected: Int, authority: PaneAuthority = .none,
+    owners: [AppletTabID: AppletCaller] = [:]
   ) -> AppletTabList {
-    let all = zip(tabs, titles).map { AppletTab(id: $0.id, title: $1) }
+    let all = zip(tabs, titles).map { tab, title in
+      var published = AppletTab(id: tab.id, title: title)
+
+      if let marker = authority.marker(forTabOwnedBy: owners[tab.id]) {
+        published.markers.insert(marker)
+      }
+
+      return published
+    }
 
     return AppletTabList(
       first: all[0], rest: Array(all.dropFirst()), selected: tabs[selected].id)
@@ -1427,12 +1446,14 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
         ? [AppletSegment(symbolName: "arrow.triangle.2.circlepath", text: "Loading")] : [])
       + (downloadSegment().map { [$0] } ?? [])
 
-    publishedTabs = Self.published(tabs, titles: titles, selected: selectedIndex)
-    content.show(tabTitles: titles, selected: selectedIndex)
+    publishedTabs = Self.published(
+      tabs, titles: titles, selected: selectedIndex, authority: authority, owners: tabOwners)
+    content.show(tabs: publishedTabs.all, selected: selectedIndex)
 
     let shown = Shown(
       title: title, segments: segments, records: tabs.map(\.record), tabIDs: tabs.map(\.id),
-      titles: titles, selected: selectedIndex, marked: tabs.filter(\.hasUnsentInput).map(\.id),
+      titles: titles, markers: publishedTabs.all.map(\.markers), selected: selectedIndex,
+      marked: tabs.filter(\.hasUnsentInput).map(\.id),
       dialogs: dialogs.pending.count)
 
     guard shown != lastShown else { return }
@@ -1440,6 +1461,7 @@ public final class BrowserApplet: Applet, TabOpening, CallerOwning, BrowserTabDe
     let tabsChanged =
       lastShown.map {
         $0.titles != shown.titles || $0.tabIDs != shown.tabIDs || $0.selected != shown.selected
+          || $0.markers != shown.markers
       } ?? true
 
     lastShown = shown

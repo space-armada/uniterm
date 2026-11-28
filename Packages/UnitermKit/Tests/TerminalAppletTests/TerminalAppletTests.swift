@@ -613,6 +613,38 @@ final class TerminalAppletTests: XCTestCase {
     XCTAssertGreaterThan(bar.convert(button.frame, to: applet.view).maxX, end)
   }
 
+  /// Catches a reselect that leaves the selected tab out of view. The user scrolls the selected tab
+  /// off the bar, then selects it again from the keyboard or the palette. The tab is already
+  /// selected, yet it comes back into view.
+  func testReselectingTheSelectedTabScrollsItBackIntoView() throws {
+    let (applet, _, _, _) = makeApplet()
+    applet.view.frame = NSRect(x: 0, y: 0, width: 500, height: 300)
+
+    for _ in 0..<9 { applet.openTab() }
+
+    applet.view.layoutSubtreeIfNeeded()
+
+    let bar = try tabBar(of: applet)
+    let last = applet.tabCount - 1
+
+    XCTAssertEqual(applet.selectedTabIndex, last)
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertFalse(TabBarProbe.isFullyInView(bar, tab: last))
+
+    applet.selectTab(at: last)
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertTrue(applet.selectTab(id: applet.publishedTabs.selected))
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last), "the palette's reselect")
+  }
+
   /// Catches a tab bar that shows for a single tab, or that stays after the second tab closes.
   func testTheTabBarShowsOnlyWhileThereIsMoreThanOneTab() async throws {
     let (applet, _, _, _) = makeApplet()
@@ -625,6 +657,50 @@ final class TerminalAppletTests: XCTestCase {
     let closed = await applet.closeCurrentTab()
     XCTAssertEqual(closed, .closed)
     XCTAssertTrue(bar.isHidden)
+  }
+
+  /// Catches a terminal tab marked as controlled. A terminal owns its input and takes neither
+  /// commands nor sent content, so even a grant the host accepted marks no tab.
+  func testATerminalTabNeverCarriesTheAuthorityMarker() throws {
+    let (applet, _, _, _) = makeApplet()
+
+    applet.openTab()
+    applet.authorityDidChange(PaneAuthority(owners: [AppletCaller(grant: "connection 1")]))
+
+    XCTAssertTrue(applet.publishedTabs.all.allSatisfy { $0.markers.isEmpty })
+
+    let bar = try tabBar(of: applet)
+
+    XCTAssertTrue(bar.subviews.allSatisfy { !($0 is AppletMarkerView) })
+  }
+
+  /// Catches a chip that lands on every tab, on the wrong one, or not in the bar. The host names the
+  /// second tab, so only that tab publishes the chip, and the bar draws it there. A terminal still
+  /// takes no authority marker. Dropping the tab from the host's value clears the chip, and the
+  /// host hears of each change.
+  func testTheTerminalPublishesTheChipOnTheTabTheHostNames() throws {
+    let (applet, _, host, _) = makeApplet()
+
+    applet.openTab()
+
+    let tabs = applet.publishedTabs.all
+    let before = host.tabChanges
+
+    applet.authorityDidChange(PaneAuthority(controlling: [tabs[1].id: ["watch (PID 5)"]]))
+
+    XCTAssertEqual(applet.publishedTabs.all[0].markers.isEmpty, true)
+    XCTAssertEqual(applet.publishedTabs.all[1].markers[.chip]?.controllers, ["watch (PID 5)"])
+    XCTAssertNil(applet.publishedTabs.all[1].markers[.authority])
+    XCTAssertGreaterThan(host.tabChanges, before)
+
+    let bar = try tabBar(of: applet)
+
+    XCTAssertEqual(bar.descendants(ofType: AppletMarkerView.self).map(\.kind), [.chip])
+
+    applet.authorityDidChange(.none)
+
+    XCTAssertTrue(applet.publishedTabs.all.allSatisfy { $0.markers.isEmpty })
+    XCTAssertTrue(bar.descendants(ofType: AppletMarkerView.self).isEmpty)
   }
 
   /// Catches a bar close that resolves its index only when the close runs. A tab closes before the
@@ -1106,5 +1182,12 @@ final class TerminalAppletTests: XCTestCase {
 
     XCTAssertNotEqual(restored.publishedTabs.first.id, old)
     XCTAssertFalse(restored.selectTab(id: old))
+  }
+}
+
+extension NSView {
+  fileprivate func descendants<T: NSView>(ofType type: T.Type) -> [T] {
+    subviews.flatMap { ($0 as? T).map { [$0] } ?? [] }
+      + subviews.flatMap { $0.descendants(ofType: type) }
   }
 }

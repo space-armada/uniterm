@@ -72,6 +72,151 @@ extension MainWindowController {
     return found
   }
 
+  /// True when the pane is a member of a group `owner` owns. Nesting grants nothing: the group
+  /// must hold the pane as its own member. A group's source is not a member.
+  func isMember(_ pane: NodeID, ofGroupOwnedBy owner: GroupOwner) -> Bool {
+    paneArea.tree.enclosingGroups(of: pane).contains {
+      $0.owner == owner && $0.members.contains(pane)
+    }
+  }
+
+  /// True when a command from a connection, acting from `callerPane`, is accepted on the pane now.
+  /// The pane is remote-controlled, and it is the caller's own pane or a member of a group the
+  /// connection owns. The command path and the authority marker both ask this.
+  func connectionMayAddress(_ pane: NodeID, from callerPane: NodeID?, as owner: GroupOwner) -> Bool
+  {
+    guard control(of: pane).access == .remoteControlled else { return false }
+
+    return pane == callerPane || isMember(pane, ofGroupOwnedBy: owner)
+  }
+
+  /// Why an exec driver's run may not act beyond its own pane, or nil when it may. The run must
+  /// still drive its pane, and the user must not have revoked it.
+  enum DriverStanding {
+    case ended
+    case revoked
+  }
+
+  func driverStanding(of owner: GroupOwner) -> DriverStanding? {
+    guard
+      let (home, attachment) = execAttachments.first(where: { $0.value.owner == owner }),
+      contains(pane: home)
+    else { return .ended }
+
+    return attachment.revoked ? .revoked : nil
+  }
+
+  /// Why a driver's command to a pane is refused once its standing allows it, or nil when the pane
+  /// takes it: a member of a group the run owns, and remote-controlled.
+  enum DriverMemberRefusal {
+    case notMember
+    case disconnected
+  }
+
+  func driverMemberRefusal(_ pane: NodeID, as owner: GroupOwner) -> DriverMemberRefusal? {
+    guard contains(pane: pane), isMember(pane, ofGroupOwnedBy: owner) else { return .notMember }
+
+    return control(of: pane).access == .remoteControlled ? nil : .disconnected
+  }
+
+  /// True when a command from the exec driver owning `owner` is accepted on the pane now, beyond
+  /// the driver's own pane. The command path asks the two steps itself, to word each refusal. The
+  /// marker asks them through this.
+  func driverMayAddress(_ pane: NodeID, as owner: GroupOwner) -> Bool {
+    driverStanding(of: owner) == nil && driverMemberRefusal(pane, as: owner) == nil
+  }
+
+  /// What the applet is told about its pane: who can act on its tabs, and which tabs a controller
+  /// acts for. One value carries both, so a control change never shows one current and the other
+  /// stale.
+  func paneAuthority(for pane: NodeID, applet placed: (any Applet)? = nil) -> PaneAuthority {
+    PaneAuthority(
+      owners: grantedOwners(for: pane, applet: placed), controlling: controllingTabs(in: pane),
+      drivers: driverNames(for: pane))
+  }
+
+  /// Who can act on the pane's tabs now, for the applet to mark them by. Each granted owner is
+  /// asked the command path's own questions, so the marker never states authority a command would
+  /// refuse. The pane's access mode, a controller's pending request, and a window question never
+  /// enter it. An applet that takes neither commands nor sent content gets no owners. A driver's
+  /// own pane gets none for the driver, since it commands the pane through its attached channel.
+  private func grantedOwners(for pane: NodeID, applet placed: (any Applet)?) -> Set<AppletCaller> {
+    guard control(of: pane).access == .remoteControlled,
+      let applet = placed ?? paneArea.applet(for: pane), Self.takesCommandsOrContent(applet)
+    else { return [] }
+
+    var owners = Set<GroupOwner>()
+
+    for group in paneArea.tree.enclosingGroups(of: pane) {
+      guard let owner = group.owner, group.members.contains(pane) else { continue }
+
+      switch owner.kind {
+      case .connection:
+        if connectionMayAddress(pane, from: nil, as: owner) { owners.insert(owner) }
+
+      case .driver:
+        if driverMayAddress(pane, as: owner) { owners.insert(owner) }
+      }
+    }
+
+    if let controllerAuthority {
+      for id in controllerAuthority.controllers(actingFrom: scriptWindowID, pane: pane) {
+        let owner = GroupOwner(connection: id)
+
+        if connectionMayAddress(pane, from: pane, as: owner) { owners.insert(owner) }
+      }
+    }
+
+    return Set(owners.map { AppletCaller(grant: $0.description) })
+  }
+
+  /// True when the owner holds a group in this window.
+  private func ownsGroup(_ owner: GroupOwner) -> Bool {
+    paneArea.tree.groups.contains { $0.owner == owner }
+  }
+
+  /// The tabs of the pane that a controller acts for, with the names of those controllers. A
+  /// connection counts while its binding would be accepted on its next call, and it passes the
+  /// checks its commands pass: its own pane is remote-controlled, or it owns a group. The tab is
+  /// the one its session root runs in.
+  func controllingTabs(in pane: NodeID) -> [AppletTabID: [String]] {
+    guard let controllerAuthority else { return [:] }
+
+    var names: [AppletTabID: [String]] = [:]
+
+    for id in controllerAuthority.controllers(actingFrom: scriptWindowID, pane: pane).sorted() {
+      guard let root = controllerAuthority.controllerSessionRoot(id),
+        let tab = sessionTabs[root]?.tab
+      else { continue }
+
+      let owner = GroupOwner(connection: id)
+
+      guard control(of: pane).access == .remoteControlled || ownsGroup(owner) else { continue }
+
+      names[tab, default: []].append(controllerName(owner))
+    }
+
+    return names
+  }
+
+  /// The names of the exec driver attached to the pane, while it is attached, not revoked, and
+  /// owns a group.
+  func driverNames(for pane: NodeID) -> [String] {
+    guard let attachment = execAttachments[pane], let owner = attachment.owner,
+      !attachment.revoked, ownsGroup(owner)
+    else { return [] }
+
+    return [controllerName(owner)]
+  }
+
+  /// True when the applet accepts a controller's command or content for its tab. It handles
+  /// applet commands, or it replaces its source and does not own its input, the test `send` runs.
+  static func takesCommandsOrContent(_ applet: any Applet) -> Bool {
+    if applet is any AppletCommandHandling { return true }
+
+    return applet is any SourceReplacing && !(applet is any InputOwning)
+  }
+
   /// The live owner of the innermost group the pane is a member of, when there is one.
   func owner(of pane: NodeID) -> GroupOwner? {
     paneArea.tree.enclosingGroups(of: pane).last { $0.members.contains(pane) }?.owner
@@ -219,6 +364,11 @@ extension MainWindowController {
     for pane in paneArea.tree.paneIDs {
       paneArea.paneView(for: pane)?.controlMark = controlMark(for: pane)
       paneArea.paneView(for: pane)?.askingMark = askingMark(for: pane)
+
+      if let applet = paneArea.applet(for: pane) {
+        applet.authorityDidChange(paneAuthority(for: pane, applet: applet))
+        drawPaneMarkers(of: applet, in: pane)
+      }
     }
 
     onSuspensionChange?()

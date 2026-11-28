@@ -275,18 +275,21 @@ extension MainWindowController {
         && contains(pane: pane)
     }
 
-    let beyond: @MainActor () -> ScriptCallError? = { [weak attachment] in
-      guard let attachment, drives(), attachment.owner == owner else {
-        return .refused("the driver no longer drives this pane")
-      }
+    let beyond: @MainActor () -> ScriptCallError? = { [weak self] in
+      guard let self else { return .refused("the driver no longer drives this pane") }
 
-      guard !attachment.revoked else {
+      switch driverStanding(of: owner) {
+      case .ended:
+        return .refused("the driver no longer drives this pane")
+
+      case .revoked:
         return .refused(
           "You revoked this driver's control of other panes. It keeps its own pane, and needs a "
             + "new run to act beyond it.")
-      }
 
-      return nil
+      case nil:
+        return nil
+      }
     }
 
     let channel = ExecDriverChannel(
@@ -456,16 +459,17 @@ extension MainWindowController {
           return Self.driverFailure(refusal)
         }
 
-        guard contains(pane: member), owns(member, owner) else {
+        switch driverMemberRefusal(member, as: owner) {
+        case .notMember:
           return AppletCommandError(.notFound, "the pane is not open in that window")
-        }
 
-        guard control(of: member).access == .remoteControlled else {
+        case .disconnected:
           return AppletCommandError(
             .refused, "The pane is disconnected. The user must enable remote control on it.")
-        }
 
-        return nil
+        case nil:
+          return nil
+        }
       }
 
       guard authority() == nil, let applet = paneArea.applet(for: member) else {
@@ -744,11 +748,8 @@ extension MainWindowController {
     return nil
   }
 
-  /// True when the pane is a member of a group `owner` owns. Nesting grants nothing.
   private func owns(_ pane: NodeID, _ owner: GroupOwner) -> Bool {
-    paneArea.tree.enclosingGroups(of: pane).contains {
-      $0.owner == owner && $0.members.contains(pane)
-    }
+    isMember(pane, ofGroupOwnedBy: owner)
   }
 
   private static func driverFailure(_ error: any Error) -> AppletCommandError {

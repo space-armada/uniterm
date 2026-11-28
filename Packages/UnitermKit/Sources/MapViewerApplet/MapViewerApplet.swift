@@ -34,6 +34,10 @@ public final class MapViewerApplet: Applet, SourceReplacing {
   public private(set) var title = MapViewerApplet.untitled
   public private(set) var segments: [AppletSegment] = []
   public private(set) var publishedTabs: AppletTabList
+
+  /// The grants that can act on the pane now. The one tab carries the authority marker while any
+  /// can.
+  private var authority = PaneAuthority.none
   public let openPicker: OpenPicker
   public let sourceSwap = SourceSwap()
 
@@ -663,6 +667,15 @@ public final class MapViewerApplet: Applet, SourceReplacing {
     content.mapView.delegate = nil
   }
 
+  public func authorityDidChange(_ authority: PaneAuthority) {
+    guard authority != self.authority else { return }
+
+    self.authority = authority
+    publishedTabs = AppletTabList(
+      first: authority.applyingOneTabMarker(to: publishedTabs.first))
+    host?.appletTabsDidChange(self)
+  }
+
   public func focus() {
     content.window?.makeFirstResponder(content.mapView)
   }
@@ -756,8 +769,9 @@ public final class MapViewerApplet: Applet, SourceReplacing {
     content.setAccessibilityValue(accessibilitySummary())
 
     let newTitle = displayName + (isDirty ? " \u{2014} Edited" : "")
-    let tab = AppletTab(
-      id: publishedTabs.first.id, title: newTitle, details: places.name.map { [$0] } ?? [])
+    let tab = authority.applyingOneTabMarker(
+      to: AppletTab(
+        id: publishedTabs.first.id, title: newTitle, details: places.name.map { [$0] } ?? []))
 
     title = newTitle
 

@@ -299,7 +299,10 @@ public final class QuestionsApplet: Applet {
 
     let id = book.entries[index].id
 
-    guard id != book.selected else { return }
+    guard id != book.selected else {
+      content.tabBar.revealSelected()
+      return
+    }
 
     let hadFocus = hasFocus
 
@@ -378,11 +381,14 @@ public final class QuestionsApplet: Applet {
     book.remove(id)
   }
 
+  private var bookTabs: [AppletTab] {
+    book.entries.map { AppletTab(id: $0.id, title: tabs[$0.id]?.requester.name ?? "") }
+  }
+
   private func showSelected() {
     let tab = book.selected.flatMap { tabs[$0] }
-    let titles = book.entries.map { tabs[$0.id]?.requester.name ?? "" }
 
-    content.show(titles: titles, selected: book.selectedIndex ?? 0, panel: tab?.panel)
+    content.show(tabs: bookTabs, selected: book.selectedIndex ?? 0, panel: tab?.panel)
   }
 
   // MARK: Lifecycle
@@ -403,7 +409,7 @@ public final class QuestionsApplet: Applet {
 
     for entry in book.entries { book.remove(entry.id) }
 
-    content.show(titles: [], selected: 0, panel: nil)
+    content.show(tabs: [], selected: 0, panel: nil)
 
     tabs = [:]
     content.tabBar.onSelect = nil
@@ -461,14 +467,14 @@ public final class QuestionsApplet: Applet {
     if book.isEmpty {
       publishedTabs = AppletTabList(first: AppletTab(id: emptyTabID, title: Self.untitled))
     } else {
-      let all = book.entries.map { AppletTab(id: $0.id, title: tabs[$0.id]?.requester.name ?? "") }
+      let all = bookTabs
 
       publishedTabs = AppletTabList(
         first: all[0], rest: Array(all.dropFirst()), selected: book.selected)
     }
 
     content.show(
-      titles: names, selected: book.selectedIndex ?? 0,
+      tabs: bookTabs, selected: book.selectedIndex ?? 0,
       panel: book.selected.flatMap { tabs[$0]?.panel })
 
     let shown = Shown(

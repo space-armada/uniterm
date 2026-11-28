@@ -114,6 +114,76 @@ final class QuestionsAppletTests: XCTestCase {
     XCTAssertEqual(restored.tabCount, 0)
   }
 
+  /// Catches a bar that shows for one question, or leaves a blank strip where it was. With no
+  /// question or one, the bar is hidden and takes no height, and the form starts at the pane's top
+  /// edge. Two questions show the bar with both tabs, and closing one hides it again.
+  func testTheBarShowsOnlyForTwoOrMoreQuestionsAndLeavesNoStripBelowTwo() throws {
+    let (applet, _) = makeApplet()
+    let window = hold(applet)
+    defer { window.close() }
+
+    let bar = applet.content.tabBar
+
+    XCTAssertTrue(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, 0)
+    XCTAssertEqual(applet.publishedTabs.all.count, 1, "an empty book still publishes one tab")
+
+    _ = applet.open(simple, for: requester("a")) { _ in }
+    applet.view.layoutSubtreeIfNeeded()
+
+    let form = try XCTUnwrap(panel(in: applet))
+
+    XCTAssertTrue(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, 0)
+    XCTAssertEqual(applet.view.convert(form.frame, from: form.superview).minY, 0, accuracy: 0.5)
+
+    _ = applet.open(simple, for: requester("b")) { _ in }
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertFalse(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, AppletTabBar.height)
+    XCTAssertEqual(applet.publishedTabs.all.count, 2)
+
+    applet.closeTab(at: 0)
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(bar.isHidden)
+    XCTAssertEqual(bar.frame.height, 0)
+  }
+
+  /// Catches a reselect that leaves the selected question's tab out of view. The user scrolls the
+  /// selected tab off the bar, then selects it again from the keyboard or the palette. The tab is
+  /// already selected, yet it comes back into view.
+  func testReselectingTheSelectedTabScrollsItBackIntoView() throws {
+    let (applet, _) = makeApplet(cap: 14)
+    let window = hold(applet)
+    defer { window.close() }
+
+    for index in 0..<14 { _ = applet.open(simple, for: requester("k\(index)")) { _ in } }
+
+    applet.view.layoutSubtreeIfNeeded()
+
+    let bar = try XCTUnwrap(TabBarProbe.bar(in: applet.view))
+    let last = applet.tabCount - 1
+
+    XCTAssertEqual(applet.selectedTabIndex, last)
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertFalse(TabBarProbe.isFullyInView(bar, tab: last))
+
+    applet.selectTab(at: last)
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last))
+
+    TabBarProbe.scroll(bar, by: -10_000)
+    XCTAssertTrue(applet.selectTab(id: applet.publishedTabs.selected))
+    applet.view.layoutSubtreeIfNeeded()
+
+    XCTAssertTrue(TabBarProbe.isFullyInView(bar, tab: last), "the palette's reselect")
+  }
+
   /// Catches a description that carries form content or a requester, which "The Questions pane"
   /// forbids, and a restore that accepts another applet's description.
   func testTheDescriptionHoldsNothingAndRefusesOtherTypes() throws {

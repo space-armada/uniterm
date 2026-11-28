@@ -866,6 +866,24 @@ public final class ScriptHost {
     controllers { $0.window == window }.subtracting(revokedControllers)
   }
 
+  /// The session root the connection acts for, when its binding would be accepted on its next call.
+  /// It asks the questions `authorize` asks, and changes nothing. A lapse is found, and the binding
+  /// taken away, by the connection's next call. A connection the user revoked, or whose peer is no
+  /// longer the process it admitted, has none.
+  public func controllerSessionRoot(_ id: UInt64) -> ProcessIdentity? {
+    guard !revokedControllers.contains(id), let connection = findConnection(id),
+      !connection.isClosed, let binding = connection.binding,
+      connection.validateBinding(registry: sessionRoots)
+    else { return nil }
+
+    guard grants[id] == nil else { return binding.root }
+
+    let peer = ProcessIdentity(pid: connection.peer.pid, started: connection.peerStartTime)
+
+    return ProcessAncestry.findRoot(for: peer, in: sessionRoots) == binding.root
+      ? binding.root : nil
+  }
+
   private func controllers(where matches: (ScriptCaller) -> Bool) -> Set<UInt64> {
     var found = Set<UInt64>()
 

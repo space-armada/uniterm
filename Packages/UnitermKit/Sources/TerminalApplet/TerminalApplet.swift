@@ -166,6 +166,10 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
   /// it implies, from its creation on.
   private var control = PaneControl.disconnected
 
+  /// What the host last said about who acts for the pane. A terminal takes neither commands nor
+  /// sent content, so only the tabs a controller acts for matter here.
+  private var authority = PaneAuthority.none
+
   private var clipboardPolicy: TerminalClipboardPolicy {
     TerminalClipboardPolicy(controlled: control.isControlled, generation: control.generation)
   }
@@ -348,9 +352,10 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
   /// reported, even one from another machine, since it is only text to search.
   public var publishedTabs: AppletTabList {
     let published = tabs.map { tab in
-      AppletTab(
-        id: tab.id, title: tab.title,
-        details: tab.workingDirectory.map { [$0] } ?? [])
+      authority.applyingChip(
+        to: AppletTab(
+          id: tab.id, title: tab.title,
+          details: tab.workingDirectory.map { [$0] } ?? []))
     }
 
     guard let first = published.first else {
@@ -456,6 +461,14 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
     for tab in tabs {
       tab.session?.setClipboardPolicy(clipboardPolicy)
     }
+  }
+
+  public func authorityDidChange(_ authority: PaneAuthority) {
+    guard authority != self.authority else { return }
+
+    self.authority = authority
+    tabBar.update(tabs: publishedTabs.all, selected: selectedIndex, canOpenTab: canOpenTab)
+    host?.appletTabsDidChange(self)
   }
 
   /// True while the selected tab shows its command and waits for the user to run it.
@@ -582,7 +595,12 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
   public var tabsStartInDirectory: Bool { true }
 
   public func selectTab(at index: Int) {
-    guard tabs.indices.contains(index), index != selectedIndex else { return }
+    guard tabs.indices.contains(index) else { return }
+
+    guard index != selectedIndex else {
+      tabBar.revealSelected()
+      return
+    }
 
     let hadFocus = hasFocus
     selectedIndex = index
@@ -807,9 +825,7 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
     shownTab = selected
     shownView = selected?.session?.view
 
-    tabBar.update(
-      titles: tabs.map { $0.title }, selected: selectedIndex, canOpenTab: canOpenTab)
-    tabBar.isHidden = tabs.count < 2
+    tabBar.update(tabs: publishedTabs.all, selected: selectedIndex, canOpenTab: canOpenTab)
 
     runPrompt.command = commandLine ?? ""
     runPrompt.isHidden = !isAwaitingRun
@@ -839,8 +855,7 @@ public final class TerminalApplet: Applet, TabOpening, InputOwning {
     case .titleChanged(let value):
       let cleaned = Self.sanitized(value, limit: 80)
       tab.title = cleaned.isEmpty ? Self.defaultTitle : cleaned
-      tabBar.update(
-        titles: tabs.map { $0.title }, selected: selectedIndex, canOpenTab: canOpenTab)
+      tabBar.update(tabs: publishedTabs.all, selected: selectedIndex, canOpenTab: canOpenTab)
 
       if isSelected { host?.appletDidChange(self) }
 

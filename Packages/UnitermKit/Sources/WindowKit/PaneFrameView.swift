@@ -161,6 +161,18 @@ final class PaneFrameView: NSView {
   /// It sits beside the control badge and never takes a click.
   let askingBadge = NSImageView()
 
+  /// The markers of the pane's one tab, drawn leading of the control badge. They show only while
+  /// the pane has no tab bar, so the host sets none otherwise.
+  var paneMarkers: [AppletMarker] = [] {
+    didSet {
+      guard paneMarkers != oldValue else { return }
+
+      syncMarkerViews()
+    }
+  }
+
+  private var markerViews: [AppletMarkerView] = []
+
   var askingMark: PaneAskingMark? {
     didSet {
       if askingMark != oldValue { refreshAskingBadge() }
@@ -321,7 +333,8 @@ final class PaneFrameView: NSView {
   }
 
   private func reportBadgeReach() {
-    let leading = [controlBadge, askingBadge].filter { !$0.isHidden }.map(\.frame.minX).min()
+    let leading = ([controlBadge, askingBadge] + markerViews).filter { !$0.isHidden }
+      .map(\.frame.minX).min()
 
     let reach =
       leading.map {
@@ -379,16 +392,54 @@ final class PaneFrameView: NSView {
       width: badgeSize, height: badgeSize)
   }
 
-  /// The asking badge sits left of the control badge when that one shows, and takes its place when
-  /// it does not.
+  /// The control badge sits in the corner. The pane's markers sit leading of it, or take the corner
+  /// when it is hidden, so they move only when the badge's visibility changes. The asking badge
+  /// sits leading of both, and takes the corner when neither shows.
   private func layoutBadges() {
-    controlBadge.frame = Self.badgeFrame(in: bounds)
+    let corner = Self.badgeFrame(in: bounds)
+    let gap: CGFloat = 4
 
-    var asking = Self.badgeFrame(in: bounds)
+    controlBadge.frame = corner
 
-    if !controlBadge.isHidden { asking.origin.x -= Self.badgeSize + 4 }
+    var edge = controlBadge.isHidden ? corner.maxX : corner.minX - gap
+
+    for view in markerViews.reversed() {
+      view.frame = NSRect(
+        x: edge - Self.badgeSize, y: corner.minY, width: Self.badgeSize, height: Self.badgeSize)
+      edge = view.frame.minX - gap
+    }
+
+    var asking = corner
+
+    if !controlBadge.isHidden || !markerViews.isEmpty { asking.origin.x = edge - Self.badgeSize }
 
     askingBadge.frame = asking
+  }
+
+  private func syncMarkerViews() {
+    while markerViews.count > paneMarkers.count {
+      markerViews.removeLast().removeFromSuperview()
+    }
+
+    while markerViews.count < paneMarkers.count {
+      let view = AppletMarkerView(paneMarkers[markerViews.count], palette: palette)
+
+      view.forwardsClicks = false
+      view.wantsLayer = true
+      view.layer?.cornerRadius = 4
+      addSubview(view)
+      markerViews.append(view)
+    }
+
+    for (view, marker) in zip(markerViews, paneMarkers) {
+      view.configure(marker)
+      view.apply(palette)
+      view.layer?.backgroundColor = palette[.surface0].cgColor
+      view.setAccessibilityIdentifier("pane-marker-\(marker.kind.rawValue)-\(paneID)")
+    }
+
+    layoutBadges()
+    reportBadgeReach()
   }
 
   private func refreshAskingBadge() {
@@ -510,6 +561,7 @@ final class PaneFrameView: NSView {
     refresh()
     refreshBadge()
     refreshAskingBadge()
+    syncMarkerViews()
     refreshExecStrip()
   }
 

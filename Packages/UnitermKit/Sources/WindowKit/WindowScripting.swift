@@ -645,11 +645,7 @@ public final class WindowScripting: ScriptWindowAPI {
   private func owns(_ pane: NodeID, _ caller: ScriptCaller, in controller: MainWindowController)
     -> Bool
   {
-    let owner = GroupOwner(connection: caller.connection)
-
-    return controller.paneArea.tree.enclosingGroups(of: pane).contains {
-      $0.owner == owner && $0.members.contains(pane)
-    }
+    controller.isMember(pane, ofGroupOwnedBy: GroupOwner(connection: caller.connection))
   }
 
   /// The caller may address the pane: it is remote-controlled, and it is the caller's own pane or
@@ -657,9 +653,8 @@ public final class WindowScripting: ScriptWindowAPI {
   private func isAuthorized(
     _ pane: NodeID, for caller: ScriptCaller, in controller: MainWindowController
   ) -> Bool {
-    guard controller.control(of: pane).access == .remoteControlled else { return false }
-
-    return pane == caller.pane || owns(pane, caller, in: controller)
+    controller.connectionMayAddress(
+      pane, from: caller.pane, as: GroupOwner(connection: caller.connection))
   }
 
   /// A caller whose pane is disconnected keeps the groups it already owns. With none, it may do

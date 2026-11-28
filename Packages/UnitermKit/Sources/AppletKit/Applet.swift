@@ -297,6 +297,19 @@ public protocol Applet: AnyObject {
   /// from the applet's trailing edge the badge reaches, gap included. Zero when no badge shows. An
   /// applet with a bar along its top edge keeps its trailing controls clear of that width.
   func hostBadgeReachDidChange(_ width: CGFloat)
+
+  /// Tells the applet which grants can act on its pane now. The host calls it as the applet takes
+  /// a pane, and on every control change, before the applet's tabs next publish. An applet that
+  /// marks its tabs publishes the markers in `publishedTabs` and tells the host with
+  /// `appletTabsDidChange`.
+  func authorityDidChange(_ authority: PaneAuthority)
+
+  /// Performs a marker's action on one of the applet's tabs. Returns false when the applet has no
+  /// such tab, or the tab's marker does not offer the action now.
+  func performMarkerAction(
+    _ action: AppletMarkerAction, kind: AppletMarkerKind, on tab: AppletTabID
+  )
+    -> Bool
 }
 
 extension Applet {
@@ -305,6 +318,12 @@ extension Applet {
   public func controlDidChange(_ control: PaneControl) {}
 
   public func hostBadgeReachDidChange(_ width: CGFloat) {}
+
+  public func authorityDidChange(_ authority: PaneAuthority) {}
+
+  public func performMarkerAction(
+    _ action: AppletMarkerAction, kind: AppletMarkerKind, on tab: AppletTabID
+  ) -> Bool { false }
 
   public func closeCurrentTab() async -> TabCloseResult { .nothingToClose }
 

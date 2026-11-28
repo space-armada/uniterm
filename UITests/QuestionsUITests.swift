@@ -155,20 +155,22 @@ final class QuestionsUITests: UnitermUITestCase {
 
   // MARK: The pane and its chrome
 
-  /// Catches a pane with no tab bar for one form, a tab the script could name, and chrome that is
-  /// missing the requester. The bar shows for one form, the tab names the requester, and the header
-  /// says who asks and from where. The question numbers, the notice, and the buttons are there.
-  func testOneFormShowsATabBarTheRequesterHeaderAndItsNumberedQuestions() throws {
+  /// Catches a bar that shows for one form, a blank strip where it was, and chrome that is missing
+  /// the requester. One form shows no tab bar, and the header says who asks and from where. The
+  /// question numbers, the notice, and the buttons are there. A second form brings the bar, and
+  /// the form moves down by exactly the bar's height, so none of that height was left behind.
+  func testOneFormShowsNoTabBarAndNoBlankStripTheRequesterHeaderAndItsNumberedQuestions() throws {
     let app = launchQuestions()
     let request = try ask(deploy, name: "Deploy script")
 
     XCTAssertEqual(opening(of: request), "opened")
 
-    let tab = element("tab-0", in: app)
+    let header = element("questions-requester-name", in: app)
 
-    XCTAssertTrue(tab.appears(timeout: 10), "a single form showed no tab bar")
-    XCTAssertEqual(tab.label, "Deploy script")
-    XCTAssertEqual(element("tab-1", in: app).exists, false)
+    XCTAssertTrue(header.appears(timeout: 10), "the form never opened")
+    XCTAssertFalse(element("tab-0", in: app).exists, "a single form showed the tab bar")
+
+    let alone = header.frame.minY
 
     XCTAssertEqual(
       element("questions-requester-name", in: app).value as? String, "Deploy script")
@@ -187,6 +189,14 @@ final class QuestionsUITests: UnitermUITestCase {
     XCTAssertTrue(element("form-block-0", in: app).exists, "the notice is missing")
     XCTAssertTrue(element("form-button-deploy", in: app).exists)
     XCTAssertTrue(element("form-button-cancel", in: app).exists)
+
+    try ask(branch, requester: "other", name: "Second script", pane: nil)
+
+    XCTAssertTrue(element("tab-1", in: app).appears(timeout: 10), "two forms showed no bar")
+    XCTAssertEqual(element("tab-0", in: app).label, "Deploy script")
+    XCTAssertEqual(
+      element("questions-requester-name", in: app).frame.minY - alone, 28, accuracy: 1,
+      "the bar's height is not what separates one form from two")
   }
 
   /// Catches the pane in light with unreadable chrome. The screenshots are for the user's look at
@@ -781,24 +791,26 @@ final class QuestionsUITests: UnitermUITestCase {
       "the pane's tab key did nothing, so the keyboard left the tab")
   }
 
-  /// Catches a close that asks first, a close that tells the script nothing, and a last tab whose
-  /// close leaves an empty pane. The close button dismisses the form with no sheet, and the pane
-  /// closes with its last tab.
-  func testClosingTheLastTabDismissesTheFormAndClosesThePane() throws {
+  /// Catches a close that asks first, a close that tells the script nothing, and a last form whose
+  /// close leaves an empty pane. A pane with one form has no tab bar, so Cmd-W is the user's close.
+  /// It dismisses the form with no sheet, and the pane closes with it.
+  func testCmdWOnTheOnlyFormDismissesItAndClosesThePane() throws {
     let app = launchQuestions()
     let request = try ask(branch)
 
     let pane = element("questions-applet", in: app)
 
     XCTAssertTrue(pane.appears(timeout: 10))
+    XCTAssertTrue(element("question-name", in: app).appears(timeout: 10))
+    XCTAssertFalse(element("tab-close-0", in: app).exists, "a single form showed a tab close")
 
-    element("tab-close-0", in: app).click()
+    app.typeKey("w", modifierFlags: .command)
 
     let result = outcome(of: request)
 
     XCTAssertEqual(result?["outcome"] as? String, "dismissed")
-    XCTAssertFalse(mainWindow(in: app).sheets.firstMatch.exists, "closing the tab asked first")
-    XCTAssertTrue(pane.disappears(timeout: 10), "the pane stayed after its last tab closed")
+    XCTAssertFalse(mainWindow(in: app).sheets.firstMatch.exists, "closing the form asked first")
+    XCTAssertTrue(pane.disappears(timeout: 10), "the pane stayed after its only form closed")
   }
 
   /// Catches a tab whose requester ended that stays, and a close of one of two tabs that closes
@@ -816,7 +828,10 @@ final class QuestionsUITests: UnitermUITestCase {
 
     XCTAssertEqual(outcome(of: first)?["outcome"] as? String, "ended")
     XCTAssertTrue(element("tab-1", in: app).disappears(timeout: 10))
-    XCTAssertEqual(element("tab-0", in: app).label, "Second script")
+    XCTAssertTrue(
+      element("tab-0", in: app).disappears(timeout: 10), "one form left, and the bar stayed")
+    XCTAssertEqual(
+      element("questions-requester-name", in: app).value as? String, "Second script")
     XCTAssertTrue(element("questions-applet", in: app).exists)
   }
 

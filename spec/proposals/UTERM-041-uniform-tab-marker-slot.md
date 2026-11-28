@@ -1,8 +1,8 @@
 # UTERM-041: A Uniform Marker Slot for Every Tab
 
-**Status:** accepted
+**Status:** implemented
 **Created:** 2026-11-21
-**Updated:** 2026-11-26
+**Updated:** 2026-11-27
 
 ## Dependencies
 
@@ -50,8 +50,9 @@ control badge (`WindowKit/PaneFrameView.swift`) is a 20-point antenna in the pan
 window.
 
 The badge also covers the tab bar's trailing end. The browser already makes room for it. `BrowserApplet+Remote.swift`
-sets `content.badgeReach`, and `BrowserView.swift` sets `tabBarTrailing.constant = -badgeReach`. The terminal ignores
-`hostBadgeReachDidChange`. See "Keeping the tab bar clear of the control badge" and the linked bug.
+sets `content.badgeReach`, and `BrowserView.swift` sets `tabBarTrailing.constant = -badgeReach`. The terminal forwards
+the reach to the shared bar's `trailingReserve`. See "Keeping the tab bar clear of the control badge" and the linked
+bug.
 
 ## Design Decisions (Settled)
 
@@ -147,8 +148,11 @@ says what it means. (autonomous) Amended 2026-11-21; see Decision Log.
 - The host draws the pane-level marker. A new `Applet` call asks the applet to perform a marker's action on one of its
   tabs. The host and the applets ship in one binary, so the call has no version skew. Amended 2026-11-21; see Decision
   Log.
-- When no badge shows, the pane-level markers take the badge's corner. Only the run-end marker can show without a
-  badge, after the user disconnects the pane and dissolves its group.
+- When no badge shows, the pane-level markers take the badge's corner. The asking badge sits leading of the markers,
+  so the markers keep the control badge's side and move only when that badge appears or goes. Amended 2026-11-27; see
+  Decision Log.
+- Only the run-end marker can show without a badge, such as on a disconnected pane that sits in no group and has no
+  controller acting from it. No user action dissolves a group. It dissolves when its last member leaves.
 
 Rationale: a run-end tab can be spared for a post-result page that holds no unsent input. A click that rebuilt at once
 would then destroy that page with no question, since a rebuild never resends a form. A menu puts a deliberate choice
@@ -162,12 +166,14 @@ every tab of a remote-controlled pane. The two differ when remote control is ena
 `controllers(of:)` is empty then (`MainWindowController+Control.swift`, about line 50). The candidates were to follow a
 live controller's grant, or to follow the pane's access mode.
 
-Decision: the authority marker uses the same check the command path uses, run for each granted owner. A tab carries
-it when a command from a granted owner, addressed to that tab, would be accepted now. The pane must be
-remote-controlled. A connection must act from the pane, or own a group that holds the pane as a member (`isAuthorized`,
-`WindowScripting.swift`, about line 635). An exec driver counts beyond its own pane: it must own a group that holds the
-pane, and the user must not have revoked it (`MainWindowController+Exec.swift`, about lines 278 and 445). In a browser,
-the owner must also own the tab. (autonomous) Amended 2026-11-21; see Decision Log.
+Decision: the authority marker uses the same check the command path uses, run for each granted owner. A tab carries it
+when a command from a granted owner, addressed to that tab, would be accepted now. The pane must be remote-controlled.
+A connection must act from the pane, or own a group that holds the pane as a member (`isAuthorized`,
+`WindowScripting.swift`, about line 653, which now asks `connectionMayAddress` in
+`MainWindowController+Control.swift`). An exec driver counts beyond its own pane: it must own a group that holds the
+pane, and the user must not have revoked it (`MainWindowController+Exec.swift`, about lines 278 and 449, with
+`driverMayAddress` asking the same questions for the marker). In a browser, the owner must also own the tab.
+(autonomous) Amended 2026-11-21; see Decision Log.
 
 - A driver's own pane carries no authority marker. The driver commands it through its attached channel, which is not
   a grant, and it keeps that channel after the user revokes it. The pane's exec strip and the badge's "Driver:" line
@@ -188,7 +194,7 @@ Converged in 1 pass.
 
 ### What "can act on" covers
 
-Original question: `listPanes` (`WindowScripting.swift`, about line 93) returns every tab's title in an authorized
+Original question: `listPanes` (`WindowScripting.swift`, about line 115) returns every tab's title in an authorized
 pane, the user's own tabs included. So the marker cannot mean "everything the program can reach". The candidates were
 to define the marker as "the applet's tab commands accept this tab", or to narrow `listPanes` to the tabs the grant
 covers.
@@ -207,18 +213,20 @@ outside programs call to fix a definition. Converged in 1 pass.
 
 ### Keeping the tab bar clear of the control badge
 
-Original question: this is a scope addition. It fixes a layout fault that this proposal does not create. The badge sits
-in the pane's top-right corner, over the new-tab button when a tab bar shows. The browser keeps clear of it. The
-terminal does not. See `bugs/20261121-terminal-tab-bar-ignores-control-badge.md`. The candidates were no addition, the
-terminal forwarding the reach, the shared bar taking the reach, and moving the new-tab button to the leading side.
+Original question: this is a scope addition. It fixes a layout fault that this proposal does not create. The badge
+sits in the pane's top-right corner, over the new-tab button when a tab bar shows. The browser keeps clear of it. The
+terminal did not, and the bug is now fixed. See `bugs/20261121-terminal-tab-bar-ignores-control-badge.md`. The
+candidates were no addition, the terminal forwarding the reach, the shared bar taking the reach, and moving the
+new-tab button to the leading side.
 
-Decision: no addition. This proposal leaves the bar as it is, and the bug waits. (autonomous)
+Decision: no addition. This proposal leaves the bar as it is. The bug was fixed on 2026-11-22 by the shared bar's
+`trailingReserve`, outside this proposal. Amended 2026-11-27; see Decision Log. (autonomous)
 
-- The fault does not reach the marker slot. The bar lays the last tab out to end 30 points short of the bar's trailing
-  edge (`AppletTabBar.swift`, about line 183), and the badge covers only the new-tab button there. Once the bar
-  scrolls, per "Markers outside the tab bar", a terminal tab can pass under the badge while the bar scrolls. Terminal
-  tabs carry no markers, and the selected tab scrolls fully into view, so the slot is not covered at rest.
-- When the bug is fixed, the shared tab bar taking the reach is the fix that serves every applet with a bar.
+- The fault does not reach the marker slot. The bar's tabs show in a viewport that ends at the bar's `trailingReserve`
+  and at the new-tab button, so no tab or marker passes under the badge. A scrolling tab bar keeps that rule, and the
+  selected tab scrolls fully into view, so the slot is not covered at rest.
+- The shared tab bar takes the reach as `trailingReserve`, which serves every applet with a bar. The terminal and the
+  browser both forward it.
 
 Rationale: the proposal neither creates nor worsens the fault, and the bug file keeps it on record. Converged in 1
 pass.
@@ -231,15 +239,15 @@ just the browser, through `adoptFirstTab` and `grantDidEnd` in `TabOpening.swift
 viewer, image viewer, map, or REPL cannot know a live grant. The candidates were the host computing every tab's
 marker, `PaneControl` gaining live-controller state, and keying the marker to access mode.
 
-Decision: the host computes, for each pane, the set of granted owners whose commands it would accept there, per "Access
-mode or live controller". It also applies its own check of whether the pane's applet takes commands or sent content,
-the same test `send` runs (`WindowScripting.swift`, about line 282). The set is empty for an applet that takes
-neither, such as a terminal. One new `Applet` call hands the set down. A `CallerOwning` applet marks a tab when the
-tab's owner is in the set. Any other applet marks its tabs when the set is not empty, through a shared AppletKit
-helper. The applet then publishes the markers in its tabs, per decision 1. (autonomous)
+Decision: the host computes, for each pane, the set of granted owners whose commands it would accept there, per
+"Access mode or live controller". It also applies its own check of whether the pane's applet takes commands or sent
+content, the same test `send` runs (`sendTarget` in `WindowScripting.swift`, about line 304). The set is empty for an
+applet that takes neither, such as a terminal. One new `Applet` call hands the set down. A `CallerOwning` applet marks
+a tab when the tab's owner is in the set. Any other applet marks its tabs when the set is not empty, through a shared
+AppletKit helper. The applet then publishes the markers in its tabs, per decision 1. (autonomous)
 
 - The host pushes the set from the place that already recomputes the badge on every control change
-  (`refreshControlMarks`, `MainWindowController+Control.swift`, about line 216).
+  (`refreshControlMarks`, `MainWindowController+Control.swift`, about line 291).
 - The set does not ride on `PaneControl`. The browser ignores a `controlDidChange` whose generation is unchanged, and
   a controller connecting does not change the generation.
 - The host and the applets ship in one binary, so the call has no version skew.
@@ -267,9 +275,10 @@ only the top marker would hide the authority marker, or bury an actionable one i
 ### How the host knows the tab bar is hidden
 
 Original question: decision 3 needs the host to know when a pane's tab bar is hidden. Every applet already follows one
-rule. The terminal hides its bar below two tabs (`TerminalApplet.swift`, about line 729), the browser does the same
-(`BrowserView.swift`, about lines 232-235). The questions applet shows the shared bar at a fixed height, always, with
-one tab per pending question (`QuestionsView.swift`, about line 53). Every other applet publishes exactly one tab and
+rule. Before M1, the terminal hid its bar below two tabs (`TerminalApplet.swift`, in the update of its bar), and the
+browser did the same (`BrowserView.swift`, in `show(tabTitles:selected:)`). The questions applet showed the shared bar
+at a fixed height, always, with one tab per pending question (`QuestionsView.swift`, its height constraint). Every
+other applet publishes exactly one tab and
 has no bar. The candidates were a written contract that one published tab means no bar, and the applet reporting bar
 visibility.
 
@@ -295,14 +304,16 @@ the controller runs in, drawn as the chip per "The markers' look".
 
 Decision: the chip marks the controller's tab. It goes on the tab whose session the controller is bound to. That holds
 for a controller started in the tab and for one granted the pane explicitly. Each is bound to one session root and
-ends when that session ends (`ScriptHost.swift`, about line 1017). An exec driver is bound to its pane, not a tab, so
+ends when that session ends (`ScriptHost.swift`, `recordSessionRoot` and `removeSessionRoot`, about lines
+1070 and 1084). An exec driver is bound to its pane, not a tab, so
 its chip shows at the pane level, beside the control badge, whether or not the pane shows a tab bar. Amended
 2026-11-26; see Decision Log.
 Chosen by the user on 2026-11-21, at the review gate, over the review's "no addition". (addition)
 
-- This brings in recording each session root's tab, which `App/AppDelegate.swift` (about line 250) drops today, and
-  a per-tab entry in what the host hands each applet. See "When the chip shows" and "Who computes the authority
-  marker".
+- This brings in recording each session root's tab, and a per-tab entry in what the host hands each applet. The
+  window records the tab as the session reports its start, since `App/AppDelegate.swift` (about line 275) passes none
+  to the scripting host. See "When the chip shows" and "Who computes the authority marker". Amended 2026-11-27; see
+  Decision Log.
 - A chip at the pane level, whatever the tabs, would not say which tab of a multi-tab terminal holds the controller.
   It would also put a pane-level mark beside a visible tab bar, against decision 3.
 
@@ -330,12 +341,13 @@ every connected script would put one on every REPL pane with its helper attached
 ### How the host hands the chip down
 
 Original question: the settled "Who computes the authority marker" has one new call hand each applet its pane's
-granted owners. The chip is per tab, and the host knows the tab once each session root records its tab. Does the same
-call carry it?
+granted owners. The chip is per tab, and the window knows the tab once it records each session root's tab. Does the
+same call carry it? Amended 2026-11-27; see Decision Log.
 
 Decision: the same call carries, beside the owner set, the tabs that hold a controller, with each controller's name as
-the host supplies it. The applet publishes a chip on those tabs. Chosen by the user on 2026-11-21, converged in 1
-pass. (addition)
+the host supplies it, and the names of the exec drivers attached to the pane. The applet publishes a chip on those
+tabs, and a driver's chip shows at the pane level. Chosen by the user on 2026-11-21, converged in 1 pass. The drivers'
+names were added by the user on 2026-11-27; see Decision Log. (addition)
 
 Rationale: one update per control change keeps the two markers from disagreeing for a frame.
 
@@ -359,8 +371,8 @@ revoking one controller from pane chrome, and an action path from the applet bac
 
 ### How an explicit grant picks its tab
 
-Original question: an explicit grant binds to the pane's newest live session (`ScriptHost.swift`, about line 1043),
-not to a tab the user picks. The chip makes that binding visible. Should it change?
+Original question: an explicit grant binds to the pane's newest live session (`sessionRoot` in `ScriptHost.swift`,
+about line 1120), not to a tab the user picks. The chip makes that binding visible. Should it change?
 
 Decision: no change. The grant binds to the pane's newest running session, and the chip shows on that tab. Closing that
 tab ends the grant. Chosen by the user on 2026-11-21.
@@ -370,12 +382,12 @@ area and is outside this proposal.
 
 ### Whether the pane-level marker shows when it repeats the badge
 
-Original question: the badge shows when the pane is not disconnected, an exec driver is attached, an owner or an
-unowned group is set, a controller is connected, or a control intent is saved (`PaneFrameView.swift`, about lines
-43-45). The authority marker follows a grant, so the two do not always appear together. Decision 3's rationale said the
-marker shows "its content is the controller's", while decision 2 says the marker "follows the grant, never the
-content". The candidates were showing the pane-level marker only when it adds information, always, or folding it into
-the badge.
+Original question: the badge shows when the pane is not disconnected, an exec driver's run has started (`driver !=
+.none`), an owner or an unowned group is set, a controller is connected, or a control intent is saved
+(`PaneFrameView.swift`, about lines 65-68). The authority marker follows a grant, so the two do not always appear
+together. Decision 3's rationale said the marker shows "its content is the controller's", while decision 2 says the
+marker "follows the grant, never the content". The candidates were showing the pane-level marker only when it adds
+information, always, or folding it into the badge.
 
 Decision: the pane-level marker shows whenever the pane's one tab carries a marker, as decision 3 says. Decision 3's
 rationale now says the marker shows that a live program can act on the pane's one tab. (autonomous)
@@ -400,7 +412,7 @@ element, which the untrusted title cannot reach. Converged in 1 pass.
 
 ### Markers outside the tab bar
 
-Original question: the palette lists published tabs (`MainWindowController+Palette.swift`, about line 138). The
+Original question: the palette lists published tabs (`MainWindowController+Palette.swift`, about lines 145 and 165). The
 candidates were showing markers in palette rows, and leaving them out and saying so.
 
 Decision: markers show only in the tab bar and at the pane level. The palette shows none. So that every tab's
@@ -466,7 +478,7 @@ None.
 
 ### M1: The marker slot and the authority marker
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - A published tab carries a list of markers, and a tab without markers draws as today
 - The shared tab bar draws a tab's markers in a fixed slot, and its title truncates to make room
@@ -495,11 +507,12 @@ None.
   input
 - The marker does not change while a window question is open, or while a command waits for a power the user must
   grant. Only authorization decides it
-- A marker change publishes the tabs and sends `appletTabsDidChange`. The browser's `refresh()` compares titles, IDs,
-  and selection only (`BrowserApplet.swift`, about line 1457), so it must compare markers too
+- A marker change publishes the tabs and sends `appletTabsDidChange`. The browser's `refresh()` compared titles, IDs,
+  and selection only (`BrowserApplet.swift`, about line 1456), so it must compare markers too
 - Every `tabOwners` change updates the marker on the same turn. That covers open, adopt, grant end, control change,
   and tab close
-- The host redraws the pane-level marker from `appletTabsDidChange`, which today only refreshes the palette
+- The host redraws the pane-level marker from `appletTabsDidChange`, which before M1 only recorded the focused tab
+  and refreshed the palette
 - `AppletTabBar.update` takes published tabs, and the bar hides itself below two tabs through the one AppletKit
   predicate the host also reads. The browser's bar height follows the same predicate
 - A questions pane with one pending question shows no tab bar and no blank strip where it was. An empty questions pane
@@ -525,9 +538,52 @@ None.
 - A UI test captures a browser pane with a marked and an unmarked tab, and a single-tab pane with its marker beside
   the badge
 
+**As built:**
+
+- The command path and the marker now share one check. `isMember` and `connectionMayAddress` in the window's control
+  code answer whether a connection's command would be accepted on a pane. For an exec driver, `driverStanding` (run
+  ended, run revoked) and `driverMemberRefusal` (not a member, pane disconnected) answer the two steps. The driver's
+  per-command check words each refusal from them, and `driverMayAddress` joins them for the marker. A package test
+  runs a live run, a disconnected member, a revoked run, an ended run, and a member the run no longer owns through a
+  real driver command, and the marker's owner set agrees with the command each time. The owner set holds
+  `AppletCaller(grant:)` values, the same key the browser's `tabOwners` use, for connections and for drivers.
+- The first fix of [the tab bar overflow bug](../bugs/20261121-tab-bar-overflow-hides-tabs.md) and of [the questions
+  bar bug](../bugs/20261122-questions-bar-disagrees-with-the-shared-hide-rule.md) landed here. The terminal's badge
+  bug was already fixed. The overflow regression test, 8 tabs in a 500-point bar, was written after the scrolling bar.
+  A copy of the old bar, renamed and run through the same 8 tabs in 500 points, then failed as the bug says: the 7th
+  and 8th tabs ended at 576 and 658 points, past the bar's edge. The copy was deleted after the run.
+- The bar's wheel handling needed a scroll view subclass. A wheel turned with Shift held has no sideways part, so the
+  subclass scrolls the tabs by its up and down part. A sideways trackpad swipe uses AppKit's own scrolling.
+- A tab that carries both kinds at the 80-point narrowest width keeps both markers whole and gives up its whole title.
+  One marker leaves about 24 points for the title.
+- Nothing publishes the run-end kind yet, so its UI captures use a debug-only fixture applet, `fixture-marked`. It
+  joins the existing fixture registry, which a debug build loads only when `UNITERM_TEST_APPLETS` is 1, so no release
+  build carries it. A planted layout restores it as one tab at the pane level, in the badge's corner with no badge
+  showing, or as a two-tab bar whose second tab carries the kind. UTERM-019 M3 replaces the fixture with the real
+  publisher.
+- A controller acting from a pane, with no group, marks that pane. A test against a real scripting host proves it,
+  and proves that disconnecting the pane or closing the connection clears the mark.
+- The data viewer takes the shared helper though no control mode reaches it, so its marker stays off until one does.
+- Left to the user: hearing each marker's meaning and reaching the markers and the close button with VoiceOver, with
+  the sibling-element fallback if nesting fails, and confirming each symbol resolves on macOS 26.0. The package tests
+  ran on a newer system and cannot prove 26.0. The slash's look beside Apple's own symbols is also the user's to judge.
+- `MarkerUITests` and `QuestionsUITests` pass. Their first run, after M1 was committed, failed on test faults: a
+  controller started in a backgrounded shell lost its ancestry, the overflow test reselected the tab already selected,
+  and two questions tests still assumed a bar for one form. The captures show the marked and unmarked browser tabs,
+  the text viewer's marker beside the badge, the overflowed bar's fades with the selected tab in view, and the slashed
+  gears in a tab bar and in the badge's corner.
+- Selecting the tab that is already selected scrolls it back into view. The bar scrolls to the selected tab only when
+  the selection or the tab count changes, and each applet's `selectTab(at:)` returned early on a tab already selected.
+  A user who scrolled the selected tab away and pressed its Cmd-number, or chose it from the palette, saw nothing
+  happen. The bar now has `revealSelected()`, and the browser, terminal, and questions applets call it on that path. An
+  update that changes nothing still leaves the user's scroll alone. A terminal and a questions applet test failed on
+  the unfixed code, each at the reselect and at the palette's `selectTab(id:)`. A bar test and a browser test cover the
+  same contract. The overflow UI test scrolls the selected last tab away and reselects it with its Cmd-number.
+- The decisions and text this work changed are amended in place. See the Decision Log entries of 2026-11-27.
+
 ### M2: The controlling chip
 
-**Status:** NOT STARTED
+**Status:** DONE
 
 - Each session root records the tab it runs in, and forgets it when the session ends
 - A controller started in a terminal tab shows the chip on that tab, and an explicit grant's chip shows on its root's
@@ -555,6 +611,45 @@ None.
   other stale
 - A one-tab pane shows its chip at the pane level, beside the badge
 - A UI test captures a two-tab terminal whose second tab runs a controller, with the chip on that tab only
+
+**As built:**
+
+- The window keeps each session root's tab, not the scripting host. The host cannot name a tab, since it does not
+  depend on AppletKit. The window records the tab as the session reports its start, and drops it before the end is
+  reported to the host. The refresh that the end causes never sees a tab whose session has ended. The app's session
+  reporting still passes no tab to the host.
+- The chip's checks read a new query on the host that asks `authorize`'s questions and changes nothing. It names the
+  session root a connection acts for, or nothing when the user revoked it, its peer changed, its root is gone, or its
+  ancestry no longer leads to its root. A lapse changes nothing on screen by itself. A window test with a real host
+  shows the chip stay until the connection's next call. That call is refused and unbinds it, and the refresh inside it
+  takes the chip away, so the chip is gone when the refusal is read. A refresh for another cause between the lapse and
+  the call would drop it earlier. A host test proves the query leaves a lapsed connection bound.
+- The host's one call carries three things: the granted owners, the tabs a controller acts for with the names the badge
+  shows, and the names of the pane's exec drivers. A driver's chip is bound to the pane. A one-tab applet publishes it
+  through the shared helper, and the host also draws it at the pane level whatever the tabs, so a pane with a bar, or
+  an applet that does not use the helper, still shows it. The names never show twice.
+- A pane that closes drops the window's session records for it, in case an applet never reported a session's end. A
+  window's records go with the window's controller.
+- Closing a pane now refreshes every pane's marks. A group dissolves when its last member closes, and the chip of a
+  controller or driver that owned only that group goes on that turn. A controller's "owns a group" counts groups in its
+  own window.
+- The chip appears inside the host's report of the bind. A test hooks the host's report after the window's own
+  refresh, and every report that sees the connection acting also sees the chip. The test cannot say when the socket
+  delivered the bind.
+- A driven pane carries the chip and the authority marker in kind order, and the reach sent to the applet covers the
+  leading edge of both. A fake applet that publishes through the shared helper proves the reach. A real map pane
+  proves the markers. The map does not use the reach.
+- The chip's accessibility element carries the controller names as its value, and its label is the kind's. The package
+  tests prove both. They cannot prove how VoiceOver speaks them.
+- Left to the user: hearing the controller names with VoiceOver, and confirming `cpu` resolves on macOS 26.0. The
+  package tests, including the check that the chip stays whole at 12 points in an 80-point tab, ran on a newer
+  system.
+- The UI test `testAControllerStartedInTheSecondTerminalTabMarksThatTabOnly` ran once, in a run that also reached M1's
+  UI tests. The held controller was refused as running in no pane. The test had put the script in the background of
+  a shell that then exited, so the script passed to launchd and lost its ancestry. The held-controller tests now run
+  the script in the foreground of the pane's shell, and the test passes. Its capture shows the chip on the second
+  tab only.
+- The citations this milestone checked are corrected in place. See the Decision Log entry of 2026-11-27.
 
 ## Decision Log
 
@@ -710,6 +805,67 @@ None.
 - 2026-11-26: A driver's chip shows at the pane level, beside the control badge, also when UTERM-062 gives its pane a
   tab bar. The user chose this over a chip on every tab and a chip on the selected tab. A driver is bound to the pane,
   and the chip then never moves as tabs open, close, or change selection.
+- 2026-11-27: Pane-level order (autonomous, a best guess of the M1 run). The pane-level markers sit directly leading
+  of the control badge and take its corner when it is hidden. The asking badge sits leading of them. Placing the
+  asking badge between the markers and the badge would move the markers when a question comes and goes, against "move
+  only when the badge's visibility changes". "Interactive markers" gained a bullet saying so. If the user wants the
+  asking badge next to the control badge, the markers move one slot leading of it.
+- 2026-11-27: Correction of fact, from M1's implementation. Each fragment below is quoted as it stood.
+  - Motivation said: "The terminal ignores `hostBadgeReachDidChange`." The terminal forwards the reach to the shared
+    bar's `trailingReserve`, and the bug was fixed on 2026-11-22.
+  - "Keeping the tab bar clear of the control badge" said: "The terminal does not." and "The bar lays the last tab out
+    to end 30 points short of the bar's trailing edge (`AppletTabBar.swift`, about line 183), and the badge covers only
+    the new-tab button there. Once the bar scrolls, per "Markers outside the tab bar", a terminal tab can pass under
+    the badge while the bar scrolls. Terminal tabs carry no markers, and the selected tab scrolls fully into view, so
+    the slot is not covered at rest." and "When the bug is fixed, the shared tab bar taking the reach is the fix that
+    serves every applet with a bar." The bug was fixed and the shared bar takes the reach, so the bullets now say so.
+  - "Interactive markers" said: "after the user disconnects the pane and dissolves its group." No user action
+    dissolves a group. It dissolves when its last member leaves.
+  - "Whether the pane-level marker shows when it repeats the badge" said: "an exec driver is attached" and
+    "`PaneFrameView.swift`, about lines 43-45". The badge shows once a driver's run has started (`driver != .none`),
+    not when a driver is merely attached. The lines are 65-68.
+  - M1 said: "The host redraws the pane-level marker from `appletTabsDidChange`, which today only refreshes the
+    palette". The call also records the focused tab as recent.
+  - Stale line citations are updated: "WindowScripting.swift`, about line 635" is about line 653, now behind
+    `connectionMayAddress`. "`MainWindowController+Exec.swift`, about lines 278 and 445" is about lines 278 and 449.
+    `listPanes` "about line 93" is about line 115. "`WindowScripting.swift`, about line 282" is `sendTarget`, about
+    line 304. "`MainWindowController+Control.swift`, about line 216" is about line 291.
+    "`MainWindowController+Palette.swift`, about line 138" is about lines 145 and 165. "`ScriptHost.swift`, about line
+    1043" is `sessionRoot`, about line 1101. "`BrowserApplet.swift`, about line 1457" is about line 1456. "How the
+    host knows the tab bar is hidden" cited "`TerminalApplet.swift`, about line 729", "`BrowserView.swift`, about
+    lines 232-235", and "`QuestionsView.swift`, about line 53". It now names those places as they stood before M1,
+    since M1 removed them. The citations inside "Marking the pane doing the controlling" (about lines 1017 and 250), a
+    decision the user chose, are left as the user chose them. Line 1017 and the `AppDelegate.swift` record are for M2
+    to verify.
+- 2026-11-27: Correction of fact, from M2's implementation. "Marking the pane doing the controlling" said:
+  "(`ScriptHost.swift`, about line 1017)". The session root's lifecycle is `recordSessionRoot` and
+  `removeSessionRoot`, about lines 1070 and 1084. Its bullet said "`App/AppDelegate.swift` (about line 250)". The
+  record is dropped at about line 275, and still is. "How an explicit grant picks its tab" said "about line 1101".
+  `sessionRoot` is at about line 1120 after M2. Only the citation numbers changed in the text the user chose. The
+  decisions themselves stand.
+- 2026-11-27: M2 records each session root's tab in the window, beside the session start report, and not in the
+  scripting host. The host does not depend on AppletKit, so it cannot name a tab. "How the host hands the chip down"
+  says the call carries the controlling tabs and names, and it does. Its value also carries the pane's driver names,
+  which follows the 2026-11-26 entry that a driver's chip shows at the pane level. (autonomous)
+- 2026-11-27: Correction of fact, from M2's review. "Marking the pane doing the controlling" said: "This brings in
+  recording each session root's tab, which `App/AppDelegate.swift` (about line 275) drops today". "How the host
+  hands the chip down" said: "the host knows the tab once each session root records its tab". The window records
+  the tab, and the scripting host holds only the root. Both sentences now say so. The decisions the user chose
+  stand. (autonomous)
+- 2026-11-27: Correction of fact, from the row review. "Keeping the tab bar clear of the control badge" decided: "no
+  addition. This proposal leaves the bar as it is, and the bug waits." The earlier correction of fact fixed its
+  bullets and left this sentence. The bug was fixed on 2026-11-22 by the shared bar's `trailingReserve`, so the
+  sentence now says so. The choice of no addition stands. (autonomous)
+- 2026-11-27: How the host hands the chip down: the call also carries the names of the exec drivers attached to the
+  pane. The user's decision names the controlling tabs and their names, and says nothing of drivers. The user's
+  2026-11-26 choice puts a driver's chip at the pane level, and a separate update would let the two chips disagree
+  for a frame. The decision's text is the user's and stands. A `**Pending override:**` line records the call as
+  built, for the user's answer. (autonomous, override pending)
+- 2026-11-27: The user chose to add the drivers' names to "How the host hands the chip down", as the more robust
+  option. The decision said: "the same call carries, beside the owner set, the tabs that hold a controller, with each
+  controller's name as the host supplies it. The applet publishes a chip on those tabs." It now also carries the names
+  of the exec drivers attached to the pane, so every marker changes in one update. The pending override is resolved
+  and removed.
 
 ## References
 

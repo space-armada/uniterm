@@ -316,6 +316,55 @@ final class ScriptBindingTests: XCTestCase {
     XCTAssertTrue(host.controllers(actingFrom: 1, pane: pane).isEmpty)
   }
 
+  /// Catches a chip query that mutates, or one that keeps a root after the binding has lapsed. The
+  /// connection binds to its parent's root. Recording the test process as a nearer root leads the
+  /// peer's ancestry elsewhere, so the query names no root. It leaves the connection bound, since
+  /// only the connection's next call takes a binding away. That next call is then refused.
+  func testAnAncestryLapseEndsTheQueryButOnlyTheNextCallUnbinds() async throws {
+    TestSessionRoot.remove(from: host)
+
+    let parentPid = getppid()
+    let parent = ProcessIdentity(
+      pid: parentPid, started: try XCTUnwrap(ProcessInspection.startTime(of: parentPid)))
+
+    host.recordSessionRoot(
+      parent, sessionGeneration: 1, window: 1, pane: NodeID(rawValue: 1))
+
+    let relay = try SocketRelay(path: host.instanceAddress)
+
+    defer { relay.stop() }
+
+    _ = try await relay.connected()
+
+    try await relay.send(ScriptHelperMessage.hello(version: ScriptProtocol.version).frame())
+    _ = try await relay.read()
+    try await relay.send(ScriptHelperMessage.begin(name: "lapse").frame())
+    try await relay.send(ScriptHelperMessage.request(id: 1, call: .listWindows).frame())
+
+    guard case .reply(1, .ok) = try await relay.read() else {
+      return XCTFail("the bound relay's first call was not answered")
+    }
+
+    let id = try XCTUnwrap(host.controllers(actingFrom: 1, pane: NodeID(rawValue: 1)).first)
+
+    XCTAssertEqual(host.controllerSessionRoot(id), parent)
+
+    TestSessionRoot.record(in: host, window: 1, pane: NodeID(rawValue: 2))
+
+    XCTAssertNil(host.controllerSessionRoot(id), "a lapsed binding still named its root")
+    XCTAssertEqual(
+      host.controllers(actingFrom: 1, pane: NodeID(rawValue: 1)), [id],
+      "asking unbound the connection")
+
+    try await relay.send(ScriptHelperMessage.request(id: 2, call: .listWindows).frame())
+
+    guard case .reply(2, .failure(.refused, _)) = try await relay.read() else {
+      return XCTFail("the next call after the lapse was answered")
+    }
+
+    XCTAssertEqual(host.controllers(actingFrom: 1, pane: NodeID(rawValue: 1)), [])
+  }
+
   /// Catches a socket handed to a forked child while the process that connected still runs. The
   /// child's call, written on the inherited socket, is refused, and the connection's authority
   /// ends.

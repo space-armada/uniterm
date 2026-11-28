@@ -1,6 +1,7 @@
 # The questions applet's tab bar disagrees with UTERM-041's shared hide rule
 
-**Status:** proposed. The fix is a check of [UTERM-041](../proposals/UTERM-041-uniform-tab-marker-slot.md) M1.
+**Status:** fixed 2026-11-27
+**Fixed:** 2026-11-27, by [UTERM-041](../proposals/UTERM-041-uniform-tab-marker-slot.md) M1. The questions bar hides below two tabs, with no blank strip.
 **Estimate:** small; one design decision, settled by the user on 2026-11-23. The questions applet follows the shared
 hide rule. Under that rule an empty book's one placeholder tab shows no bar, so the second decision falls away.
 

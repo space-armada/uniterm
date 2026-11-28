@@ -1,4 +1,5 @@
 import AppKit
+import AppletKit
 import XCTest
 
 @testable import BrowserApplet
@@ -23,7 +24,8 @@ final class BrowserToolbarLayoutTests: XCTestCase {
     window.isReleasedWhenClosed = false
     window.contentView = view
     view.show(page: page)
-    view.show(tabTitles: Array(repeating: "Tab", count: tabs), selected: 0)
+    view.show(
+      tabs: (0..<tabs).map { _ in AppletTab(id: .make(), title: "Tab") }, selected: 0)
     view.layoutSubtreeIfNeeded()
 
     return (window, view, page)
