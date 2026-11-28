@@ -16,9 +16,12 @@ The run's base is "8< --- snip ---", the head after the branch was rebased onto 
 
 | Row | Milestone | Run status | Note |
 |-----|-----------|------------|------|
-| UTERM-043 M1 | Suspend and resume | DONE | Row review under way |
+| UTERM-043 M1 | Suspend and resume | DONE | Row reviewed |
 | UTERM-041 M1 | Tabs carry markers | QUEUED | |
 | UTERM-041 M2 | The controller chip | QUEUED | |
+
+The model decided to pause after UTERM-043 M1 in order to compact and reinitialize state. UTERM-041 M1-M2 is not started.
+The final review and the full `make test-app` have not run.
 
 Held, and taking no slot: UTERM-060 M5, UTERM-060 M7, and UTERM-045 M4. Each waits on CI.
 
@@ -136,3 +139,35 @@ its own stopping. No ADR is proposed.
 - One aborted test left a stopped `login` process behind. The coordinator ended it.
 
 Left to a person: how the badge menu and the slot's menu look.
+
+### Row review
+
+A second reviewer read the row's commits, with the changes made after the first review. It found no serious problem.
+Its fixes are in "Offer Resume for an outside stop that follows a quick suspend and resume":
+
+- A suspend and a resume sent before the stop was seen left a later outside stop with no Resume. The test for it
+  failed before the fix, with "Resume was not offered for a stop from outside".
+- A resumed pane reported focus even when focus had not changed.
+- A comment said the REPL helper leads its own session. It does not.
+- `ReplProcessTreeTests` restores only `GHOSTTY_RESOURCES_DIR`, the one variable the engine sets.
+
+Bugs filed from the row:
+
+- `spec/bugs/20261127-closing-a-terminal-whose-shell-is-stopped-may-hang-the-app.md`, not confirmed in the app.
+- `spec/bugs/20261127-terminal-engine-changes-the-apps-own-environment.md`.
+
+Checks after the row review's fixes:
+
+- `make fmt-check lint check`: passed.
+- `caffeinate -dimsu make test-package`: 3420 tests, 10 skipped, 3 failures. All 3 are
+  `ProcessReaperTests.testTheReaperLogsThePidPathAndFailuresButNotAGoneHelper`, which passes alone. `log show` for the
+  run has the `xctest` process's line "QUARANTINED DUE TO HIGH LOGGING VOLUME" at 18:15:46, before that test ran. The
+  cause is now recorded in `spec/bugs/20261127-reaper-log-test-reads-no-entries-in-some-full-runs.md`. The implementer's
+  full run had the same 3 failures. The run before these fixes passed. Suspend and resume adds tests and log lines, so
+  it may make the quarantine more likely. That is not measured.
+- `make test-package-select` with `TerminalSessionIntegrationTests` ended the process with no result in
+  `testShellSeesTheScrubbedEnvironmentAndUnitermsIdentity`. That is the open bug
+  `spec/bugs/20261127-terminal-test-exits-silently-under-make-select.md`. The test passed in the full run.
+- `ReplUITests` and `ExecPaneUITests`: passed.
+
+The user was not asked about the changed UI check. It is listed under "Best guesses" above for the user to see.
