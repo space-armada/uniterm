@@ -11,7 +11,7 @@
 | [UTERM-007](UTERM-007-text-viewer-applet.md) | Viewer for Markdown, RTF, Word, and PDF | implemented |
 | [UTERM-008](UTERM-008-map-viewer-applet.md) | MapKit applet with custom pins | implemented |
 | [UTERM-009](UTERM-009-data-viewer-applet.md) | Table viewer for CSV, JSON, and spreadsheets | implemented |
-| [UTERM-010](UTERM-010-canvas-applet.md) | Canvas applet that programs draw on | draft |
+| [UTERM-010](UTERM-010-canvas-applet.md) | Canvas applet that programs draw on | accepted |
 | [UTERM-011](UTERM-011-widget-bar.md) | Widget bar region with small widgets | deferred |
 | [UTERM-012](UTERM-012-shell-blocks.md) | Collapsible command blocks in the terminal | deferred |
 | [UTERM-013](UTERM-013-shortcut-ownership-and-reopen.md) | Window versus applet shortcuts, and Cmd-Shift-T reopen | implemented |
