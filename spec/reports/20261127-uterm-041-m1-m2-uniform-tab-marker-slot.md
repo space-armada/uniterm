@@ -260,3 +260,29 @@ The alternative was making the bar's geometry public.
   recommendation.
 - UTERM-041 is `implemented` in the proposal and in the index. Its row moved from `queue.md` to the end of
   `history.md`. `proposals.py check` printed `[]`.
+
+## Final review of the run
+
+The final review covered the run's range, and it doubled as the ADR review. The range adds and edits no ADR. ADR
+impact on the last two commits: no conflict, deviation, or supersession. ADR-08 and ADR-17 are consistent, and so is
+the proposed ADR-15. `freeze` reports no UTERM-041 hunk. The hunks on UTERM-001, UTERM-002, UTERM-004, and UTERM-009
+come from other sessions' work. The run did not touch them and leaves them for the user.
+
+Findings, both fixed:
+1. `TabBarProbe` used `@testable import AppletKit` in a regular target, so a release build of the package would fail.
+   The tab bar now exposes its scroll offset, a tab's frame, its viewport, and a scroll by a delta as public members,
+   and the probe uses a plain import. `swift build -c release --target AppletTestSupport` succeeded.
+2. A stray blank line in `PaneAuthorityTests` is removed.
+
+Checks on the final tree: `make fmt`, `make lint`, `make check`, `make build`, `caffeinate -dimsu make test-package`,
+and the UI target build all passed.
+
+### Left open
+
+- The 21:08 failure of `MarkerUITests.testAnOverflowedTabBarScrollsByTrackpadAndShiftAndKeepsTheSelectedTabInView`,
+  at its Shift-wheel step, is unresolved. See "Row review".
+- Checks left to the user:
+  - hearing the markers and the chip's names with VoiceOver
+  - `gearshape.2.fill` and `cpu` resolving on macOS 26.0
+  - how the drawn slash looks beside Apple's own slashed symbols
+- No ADR candidates. Both candidates raised were already declined in the proposal's Decision Log on 2026-11-21.

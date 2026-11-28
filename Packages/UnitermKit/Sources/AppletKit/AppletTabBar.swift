@@ -284,15 +284,15 @@ public final class AppletTabBar: NSView {
   }
 
   /// How far the tabs are scrolled in from the leading edge.
-  var scrollOffset: CGFloat { scrollView.contentView.bounds.minX }
+  public var scrollOffset: CGFloat { scrollView.contentView.bounds.minX }
 
   /// The frame of a tab, in the bar's own coordinates, with the scroll applied.
-  func frame(ofTab index: Int) -> NSRect {
+  public func frame(ofTab index: Int) -> NSRect {
     convert(items[index].frame, from: strip)
   }
 
   /// The visible part of the bar, in its own coordinates. Tabs and their markers show only here.
-  var viewport: NSRect { scrollView.frame }
+  public var viewport: NSRect { scrollView.frame }
 
   var frameOfNewButton: NSRect { newButton.frame }
 
@@ -304,7 +304,7 @@ public final class AppletTabBar: NSView {
   var isTrailingFadeShowing: Bool { !trailingFade.isHidden }
 
   /// Scrolls the tabs sideways by this much, as a wheel or a trackpad does.
-  func scroll(by delta: CGFloat) {
+  public func scroll(by delta: CGFloat) {
     setScrollOffset(scrollOffset + delta)
   }
 

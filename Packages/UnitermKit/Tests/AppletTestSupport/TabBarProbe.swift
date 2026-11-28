@@ -1,6 +1,5 @@
 import AppKit
-
-@testable import AppletKit
+import AppletKit
 
 /// Reads and moves a shared tab bar from an applet's own tests. The bar keeps its scroll and its
 /// geometry internal, and each applet's tests need the same two facts: where a tab sits against

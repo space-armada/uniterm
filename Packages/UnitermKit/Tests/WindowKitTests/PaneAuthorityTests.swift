@@ -229,7 +229,6 @@ final class PaneAuthorityTests: XCTestCase {
     marker.mouseDown(with: click)
 
     XCTAssertEqual(applet.performedMarkerActions, [])
-
   }
 
   /// Catches a default that performs an action nobody implements. An applet that offers no marker
