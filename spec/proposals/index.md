@@ -75,6 +75,7 @@
 | [UTERM-071](UTERM-071-the-layout-file-keeps-windows-and-nodes-it-cannot-read.md) | The layout file keeps the windows and nodes it cannot read, and a part a build does not hold survives a save | draft |
 | [UTERM-072](UTERM-072-the-hsts-store-keeps-entries-it-cannot-read.md) | The browser's HSTS file keeps the entries it cannot read, and one bad entry no longer empties the list | draft |
 | [UTERM-073](UTERM-073-open-with-shows-the-choices-it-cannot-read.md) | The Open With chooser shows a saved choice it cannot read, and offers to clear it | draft |
+| [UTERM-074](UTERM-074-the-terminal-engine-leaves-the-apps-environment-alone.md) | The terminal engine passes each child its environment and leaves the app's own alone | draft |
 
 ## Dependency Graph
 
@@ -144,6 +145,7 @@ UTERM-070 ← UTERM-015, UTERM-062
 UTERM-071 ← UTERM-067
 UTERM-072 ← UTERM-005, UTERM-067
 UTERM-073 ← UTERM-015, UTERM-067
+UTERM-074 ← UTERM-023, UTERM-046
 ```
 
 ## Not Yet Filed

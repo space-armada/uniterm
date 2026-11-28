@@ -1,6 +1,9 @@
 # The terminal engine changes the app's own environment
 
-**Status:** open
+**Status:** proposed
+**Estimate:** medium; one non-trivial decision. The engine either passes an environment to each child, or keeps editing the process and isolates the tests.
+**Proposal:** UTERM-074 (`spec/proposals/UTERM-074-the-terminal-engine-leaves-the-apps-environment-alone.md`)
+**Triaged:** 2026-11-27 (still present in the code; filed as a proposal)
 **Validation:** confirmed by reading the code; the test failures it is blamed for were not reproduced on purpose
 
 ## Observed
